@@ -1,0 +1,42 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/identifier",
+    "crates/wit",
+    "crates/wpt",
+    "crates/httpsig",
+    "crates/mtls",
+    "crates/issuer",
+    "crates/cli",
+]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2021"
+rust-version = "1.85"
+license = "Apache-2.0"
+repository = "https://github.com/kanywst/wimsey"
+homepage = "https://github.com/kanywst/wimsey"
+authors = ["The wimsey authors"]
+keywords = ["wimse", "workload-identity", "spiffe", "wit", "jose"]
+categories = ["authentication", "cryptography"]
+
+[workspace.dependencies]
+wimsey-identifier = { path = "crates/identifier", version = "0.0.0" }
+ed25519-dalek = "2"
+base64 = "0.22"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+module_name_repetitions = "allow"
+
+[profile.release]
+strip = true

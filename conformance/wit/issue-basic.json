@@ -1,0 +1,22 @@
+{
+  "description": "WIT issuance with EdDSA (Ed25519), draft-ietf-wimse-workload-creds-01",
+  "alg": "EdDSA",
+  "issuer_signing_key_seed_b64u": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+  "kid": "issuer-key-1",
+  "verify_now": 1700000000,
+  "claims": {
+    "iss": "https://issuer.example",
+    "sub": "spiffe://example.org/workload/api",
+    "iat": 1700000000,
+    "exp": 1700003600,
+    "jti": "a1b2c3",
+    "cnf": {
+      "jwk": {
+        "kty": "OKP",
+        "crv": "Ed25519",
+        "x": "6kpsY-KcUgq-9VB7Ey7F-ZVHdq6-vnuSQh7qaRRG0iw"
+      }
+    }
+  },
+  "token": "eyJ0eXAiOiJ3aXQrand0IiwiYWxnIjoiRWREU0EiLCJraWQiOiJpc3N1ZXIta2V5LTEifQ.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvYXBpIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDM2MDAsImp0aSI6ImExYjJjMyIsImNuZiI6eyJqd2siOnsia3R5IjoiT0tQIiwiY3J2IjoiRWQyNTUxOSIsIngiOiI2a3BzWS1LY1VncS05VkI3RXk3Ri1aVkhkcTYtdm51U1FoN3FhUlJHMGl3In19fQ.cZdOOzjoMG85kBab1w8ZnJwVDFmwZE_SbeSIhsuyDG0pWDR8VBme2Mqf5H4CNCF4fMt3AsPviKRiLwzcsPbNBQ"
+}

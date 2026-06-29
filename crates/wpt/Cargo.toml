@@ -1,0 +1,15 @@
+[package]
+name = "wimsey-wpt"
+description = "WIMSE Workload Proof Token (WPT), a DPoP-style proof of possession."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[lints]
+workspace = true
