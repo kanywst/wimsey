@@ -396,6 +396,16 @@ dependencies = [
 [[package]]
 name = "wimsey-wpt"
 version = "0.0.0"
+dependencies = [
+ "base64",
+ "ed25519-dalek",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror",
+ "wimsey-identifier",
+ "wimsey-wit",
+]
 
 [[package]]
 name = "zeroize"

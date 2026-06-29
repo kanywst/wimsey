@@ -33,6 +33,7 @@ jobs:
       - name: conformance vectors are fresh
         run: |
           cargo run -q -p wimsey-wit --example dump_vector > conformance/wit/issue-basic.json
+          cargo run -q -p wimsey-wpt --example dump_vector > conformance/wpt/proof-basic.json
           git diff --exit-code conformance/
 
   deny:
