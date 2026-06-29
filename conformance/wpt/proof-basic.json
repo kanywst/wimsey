@@ -1,0 +1,16 @@
+{
+  "description": "WPT bound to a WIT, EdDSA (Ed25519), draft-ietf-wimse-wpt-01",
+  "alg": "EdDSA",
+  "pop_signing_key_seed_b64u": "CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk",
+  "issuer_verifying_key_b64u": "iojj3XQJ8ZX9UtstPLpdcspnCb8dlBIb83SIAbQPb1w",
+  "verify_now": 1700000000,
+  "audience": "https://workload.example.com/path",
+  "wit": "eyJ0eXAiOiJ3aXQrand0IiwiYWxnIjoiRWREU0EiLCJraWQiOiJpc3N1ZXIta2V5LTEifQ.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvYXBpIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDM2MDAsImp0aSI6ImExYjJjMyIsImNuZiI6eyJqd2siOnsia3R5IjoiT0tQIiwiY3J2IjoiRWQyNTUxOSIsIngiOiJfUmNrT0ZxZ3gxdGstM2pOWUMtaDJaSDk2X2RyRThXTzF3THF5RFhwOWhnIn19fQ.VSUTP7VJTKt7hWfJfxe9humGbZcgzsvpJo2rysWE9x71UQjo1bp_1ObsziGoE4yDY5egRskzbQwG-fAD6ncOCQ",
+  "claims": {
+    "aud": "https://workload.example.com/path",
+    "exp": 1700000300,
+    "jti": "0123456789abcdef",
+    "wth": "TRzlmgZv5aMYE0q73gJ9q-__veS02QqWOYm7SO_6AbM"
+  },
+  "proof": "eyJ0eXAiOiJ3cHQrand0IiwiYWxnIjoiRWREU0EifQ.eyJhdWQiOiJodHRwczovL3dvcmtsb2FkLmV4YW1wbGUuY29tL3BhdGgiLCJleHAiOjE3MDAwMDAzMDAsImp0aSI6IjAxMjM0NTY3ODlhYmNkZWYiLCJ3dGgiOiJUUnpsbWdadjVhTVlFMHE3M2dKOXEtX192ZVMwMlFxV09ZbTdTT182QWJNIn0.CRKiKlk97Tz0PH2wSWwrhSHgzZEkG5OOG01t-zy7Dl5g4tUMUploOH1OLF_ut58um9ySglvJHzrD23TSLSg3BQ"
+}
