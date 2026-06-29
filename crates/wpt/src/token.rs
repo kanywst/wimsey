@@ -181,8 +181,16 @@ pub fn verify(
         return Err(WptError::UnsupportedCritical);
     }
 
-    let signature_bytes = URL_SAFE_NO_PAD.decode(signature_b64)?;
-    let signature_array: [u8; 64] = signature_bytes
+    // Decode the signature straight into a stack buffer to avoid a heap
+    // allocation on the verify path. `decode_slice` rejects an output buffer
+    // smaller than its (conservative) length estimate, so the buffer is sized
+    // above the 64 bytes an Ed25519 signature decodes to; the exact decoded
+    // length is then pinned to 64.
+    let mut signature_buf = [0u8; 96];
+    let signature_len = URL_SAFE_NO_PAD
+        .decode_slice(signature_b64, &mut signature_buf)
+        .map_err(|_| WptError::MalformedToken)?;
+    let signature_array: [u8; 64] = signature_buf[..signature_len]
         .try_into()
         .map_err(|_| WptError::MalformedToken)?;
     let signature = Signature::from_bytes(&signature_array);
@@ -324,6 +332,23 @@ mod tests {
     fn rejects_too_few_parts() {
         let key = SigningKey::from_bytes(&[9u8; 32]);
         let err = verify("only.two", &key.verifying_key(), &valid_at(1_700_000_000));
+        assert!(matches!(err, Err(WptError::MalformedToken)));
+    }
+
+    #[test]
+    fn rejects_a_wrong_length_signature() {
+        use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+
+        let key = SigningKey::from_bytes(&[9u8; 32]);
+        let wpt = issue(&sample_claims(), &key).unwrap();
+
+        // Swap in a 32-byte (too short) signature segment.
+        let mut parts: Vec<&str> = wpt.split('.').collect();
+        let short = URL_SAFE_NO_PAD.encode([0u8; 32]);
+        parts[2] = &short;
+        let bad = parts.join(".");
+
+        let err = verify(&bad, &key.verifying_key(), &valid_at(1_700_000_000));
         assert!(matches!(err, Err(WptError::MalformedToken)));
     }
 
