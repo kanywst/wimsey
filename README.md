@@ -44,6 +44,35 @@ cargo test --workspace
 cargo run -p wimsey-cli
 ```
 
+## Using the `wimsey` CLI
+
+The `wimsey` binary ties the crates together. Keys are Ed25519, stored as OKP
+JSON Web Keys.
+
+```bash
+# Generate an issuer key and a workload proof-of-possession key.
+cargo run -p wimsey-cli -- key generate --out issuer.jwk
+cargo run -p wimsey-cli -- key generate --out pop.jwk
+
+# Issue a Workload Identity Token (its cnf is the pop public key).
+wimsey wit issue --issuer-key issuer.jwk --cnf-key pop.jwk \
+  --sub spiffe://example.org/api --iss https://issuer.example > wit.txt
+
+# Verify it, or decode it without verifying.
+wimsey wit verify --issuer-jwk issuer.jwk --token-file wit.txt
+wimsey wit inspect --token-file wit.txt
+
+# Create a Workload Proof Token bound to the WIT, then verify the pair.
+wimsey wpt new --pop-key pop.jwk --wit "$(cat wit.txt)" \
+  --aud https://service.example/transfer > wpt.txt
+wimsey wpt verify --issuer-jwk issuer.jwk --wit "$(cat wit.txt)" \
+  --aud https://service.example/transfer --proof "$(cat wpt.txt)"
+```
+
+`wpt verify` verifies the WIT with the issuer key first, then checks the proof
+against the WIT's confirmation key — success establishes the workload identity,
+not merely possession of some key.
+
 ## Roadmap
 
 See [`ROADMAP.md`](ROADMAP.md) for the phased plan from scaffold to CNCF
