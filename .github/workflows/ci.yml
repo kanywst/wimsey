@@ -34,6 +34,7 @@ jobs:
         run: |
           cargo run -q -p wimsey-wit --example dump_vector > conformance/wit/issue-basic.json
           cargo run -q -p wimsey-wpt --example dump_vector > conformance/wpt/proof-basic.json
+          cargo run -q -p wimsey-httpsig --example dump_vector > conformance/httpsig/sign-basic.json
           git diff --exit-code conformance/
 
   deny:
