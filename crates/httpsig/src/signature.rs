@@ -216,6 +216,8 @@ fn parse_params(rest: &str, params: &mut SignatureParams) -> Result<(), HttpSigE
             // A valueless (boolean) parameter, per RFC 8941; not used here.
             continue;
         };
+        let name = name.trim();
+        let raw = raw.trim();
         match name {
             "created" => {
                 params.created = Some(parse_int(raw)?);
