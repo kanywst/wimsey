@@ -11,7 +11,7 @@ use crate::error::HttpSigError;
 /// This crate supports the derived components `@method`, `@authority`, `@path`
 /// and `@query`, plus plain header fields. `@target-uri` and component
 /// parameters (for example `;sf` or `;key`) are not modeled.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub enum Component {
     /// The request method (`@method`).
     Method,
@@ -24,6 +24,24 @@ pub enum Component {
     /// A header field, identified by its lowercase name.
     Header(String),
 }
+
+// Header names are compared case-insensitively so a component built directly as
+// `Component::Header("Content-Type".into())` still matches a parsed, lowercased
+// one — for example in `VerifyConfig::required_components`.
+impl PartialEq for Component {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Method, Self::Method)
+            | (Self::Authority, Self::Authority)
+            | (Self::Path, Self::Path)
+            | (Self::Query, Self::Query) => true,
+            (Self::Header(a), Self::Header(b)) => a.eq_ignore_ascii_case(b),
+            _ => false,
+        }
+    }
+}
+
+impl Eq for Component {}
 
 impl Component {
     /// A header component from any-case `name`.
@@ -187,5 +205,14 @@ mod tests {
     fn content_digest_round_trips() {
         let body = b"payload";
         assert!(verify_content_digest(&content_digest_sha256(body), body));
+    }
+
+    #[test]
+    fn header_components_compare_case_insensitively() {
+        assert_eq!(
+            Component::Header("Content-Type".to_owned()),
+            Component::header("content-type")
+        );
+        assert_ne!(Component::header("a"), Component::header("b"));
     }
 }

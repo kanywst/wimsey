@@ -119,6 +119,13 @@ fn signature_base_from_params_str(
     components: &[Component],
     params_value: &str,
 ) -> Result<String, HttpSigError> {
+    // The received parameter substring is untrusted; a bare CR or LF in it would
+    // forge extra signature-base lines.
+    if params_value.contains(['\r', '\n']) {
+        return Err(HttpSigError::Parse(
+            "signature parameters contain CR or LF".to_owned(),
+        ));
+    }
     let mut base = String::new();
     for component in components {
         let value = request.component_value(component)?;
@@ -206,8 +213,49 @@ fn parse_sf_string(token: &str) -> Result<String, HttpSigError> {
     Ok(out)
 }
 
+/// The byte index of the first unescaped, unquoted `target` in `s`, respecting
+/// RFC 8941 string quoting so a delimiter inside a `"..."` value is skipped.
+fn find_unquoted(s: &str, target: char) -> Option<usize> {
+    let mut in_quotes = false;
+    let mut escaped = false;
+    for (idx, c) in s.char_indices() {
+        if escaped {
+            escaped = false;
+        } else if in_quotes && c == '\\' {
+            escaped = true;
+        } else if c == '"' {
+            in_quotes = !in_quotes;
+        } else if c == target && !in_quotes {
+            return Some(idx);
+        }
+    }
+    None
+}
+
+/// Splits `s` on unquoted `;`, keeping delimiters inside `"..."` values intact.
+fn split_unquoted_semicolons(s: &str) -> Vec<&str> {
+    let mut parts = Vec::new();
+    let mut start = 0;
+    let mut in_quotes = false;
+    let mut escaped = false;
+    for (idx, c) in s.char_indices() {
+        if escaped {
+            escaped = false;
+        } else if in_quotes && c == '\\' {
+            escaped = true;
+        } else if c == '"' {
+            in_quotes = !in_quotes;
+        } else if c == ';' && !in_quotes {
+            parts.push(&s[start..idx]);
+            start = idx + 1;
+        }
+    }
+    parts.push(&s[start..]);
+    parts
+}
+
 fn parse_params(rest: &str, params: &mut SignatureParams) -> Result<(), HttpSigError> {
-    for part in rest.split(';') {
+    for part in split_unquoted_semicolons(rest) {
         let part = part.trim();
         if part.is_empty() {
             continue;
@@ -249,14 +297,15 @@ fn parse_signature_input(
 ) -> Result<(String, Vec<Component>, SignatureParams, String), HttpSigError> {
     let (label, rest) = split_member(value)?;
     let rest = rest.trim();
-    let close = rest
-        .find(')')
+    if !rest.starts_with('(') {
+        return Err(HttpSigError::Parse(
+            "inner list must start with `(`".to_owned(),
+        ));
+    }
+    // Find the inner list's closing `)`, ignoring any `)` inside a quoted value.
+    let close = find_unquoted(rest, ')')
         .ok_or_else(|| HttpSigError::Parse("missing `)` in inner list".to_owned()))?;
-    let open = rest
-        .strip_prefix('(')
-        .map(|_| 1)
-        .ok_or_else(|| HttpSigError::Parse("inner list must start with `(`".to_owned()))?;
-    let inner = &rest[open..close];
+    let inner = &rest[1..close];
 
     let mut components = Vec::new();
     for token in inner.split_whitespace() {
@@ -729,5 +778,53 @@ mod tests {
         let header = content_digest_sha256(body);
         assert!(verify_content_digest(&header, body));
         assert!(!verify_content_digest(&header, b"tampered"));
+    }
+
+    #[test]
+    fn round_trips_params_with_quoted_delimiters() {
+        // A keyid whose value legitimately contains `;`, `)` and `"` (all valid
+        // inside an RFC 8941 string) must survive the round trip.
+        let key = SigningKey::from_bytes(&[5u8; 32]);
+        let request = rfc_request();
+        let params = SignatureParams {
+            created: Some(1_700_000_000),
+            keyid: Some("weird;key)with\"quote".to_owned()),
+            alg: Some(ALG.to_owned()),
+            ..SignatureParams::default()
+        };
+        let signed = sign(&request, &rfc_components(), &params, "sig1", &key).unwrap();
+
+        let verified = verify(
+            &request,
+            &signed.signature_input,
+            &signed.signature,
+            &key.verifying_key(),
+            &VerifyConfig::default(),
+        )
+        .unwrap();
+        assert_eq!(
+            verified.params.keyid.as_deref(),
+            Some("weird;key)with\"quote")
+        );
+    }
+
+    #[test]
+    fn rejects_crlf_in_signature_params() {
+        use base64::{engine::general_purpose::STANDARD, Engine};
+
+        let key = SigningKey::from_bytes(&[5u8; 32]);
+        let request = rfc_request();
+        // A newline smuggled into the parameters (parses, but must be rejected).
+        let signature_input = "sig1=(\"@method\")\n;created=1700000000";
+        let signature = format!("sig1=:{}:", STANDARD.encode([0u8; 64]));
+
+        let err = verify(
+            &request,
+            signature_input,
+            &signature,
+            &key.verifying_key(),
+            &VerifyConfig::default(),
+        );
+        assert!(matches!(err, Err(HttpSigError::Parse(_))));
     }
 }
