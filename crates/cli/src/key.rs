@@ -87,7 +87,7 @@ impl JwkKey {
 /// Reads a JWK key file.
 pub fn load(path: &Path) -> Result<JwkKey> {
     let bytes = std::fs::read(path).map_err(|e| format!("reading {}: {e}", path.display()))?;
-    Ok(serde_json::from_slice(&bytes)?)
+    serde_json::from_slice(&bytes).map_err(|e| format!("parsing {}: {e}", path.display()).into())
 }
 
 /// Serializes a JWK as pretty JSON.
