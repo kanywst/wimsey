@@ -65,7 +65,8 @@ impl Component {
             name if name.starts_with('@') => {
                 Err(HttpSigError::UnsupportedComponent(inner.to_owned()))
             }
-            name => Ok(Self::Header(name.to_owned())),
+            // RFC 9421 Section 2.1: header component identifiers are lowercase.
+            name => Ok(Self::Header(name.to_ascii_lowercase())),
         }
     }
 }
@@ -142,4 +143,49 @@ pub fn content_digest_sha256(body: &[u8]) -> String {
 #[must_use]
 pub fn verify_content_digest(header_value: &str, body: &[u8]) -> bool {
     header_value == content_digest_sha256(body)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{content_digest_sha256, verify_content_digest, Component, HttpRequest};
+
+    #[test]
+    fn parses_header_identifiers_case_insensitively() {
+        // RFC 9421 identifiers are lowercase; a mixed-case one normalizes so it
+        // matches a component built with `Component::header`.
+        let parsed = Component::from_quoted_id("\"Content-Type\"").unwrap();
+        assert_eq!(parsed, Component::header("content-type"));
+    }
+
+    #[test]
+    fn joins_repeated_headers_and_trims() {
+        let request = HttpRequest {
+            method: "GET".to_owned(),
+            authority: "EXAMPLE.com".to_owned(),
+            path: String::new(),
+            query: None,
+            headers: vec![
+                ("Accept".to_owned(), "  text/plain ".to_owned()),
+                ("accept".to_owned(), "application/json".to_owned()),
+            ],
+        };
+        assert_eq!(
+            request
+                .component_value(&Component::header("accept"))
+                .unwrap(),
+            "text/plain, application/json"
+        );
+        // `@authority` is lowercased; an empty `@path` becomes `/`.
+        assert_eq!(
+            request.component_value(&Component::Authority).unwrap(),
+            "example.com"
+        );
+        assert_eq!(request.component_value(&Component::Path).unwrap(), "/");
+    }
+
+    #[test]
+    fn content_digest_round_trips() {
+        let body = b"payload";
+        assert!(verify_content_digest(&content_digest_sha256(body), body));
+    }
 }
