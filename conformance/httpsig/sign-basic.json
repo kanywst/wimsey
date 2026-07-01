@@ -1,0 +1,43 @@
+{
+  "description": "WIMSE HTTP Message Signature (RFC 9421, ed25519) carrying a WIT",
+  "pop_signing_key_seed_b64u": "CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk",
+  "issuer_verifying_key_b64u": "iojj3XQJ8ZX9UtstPLpdcspnCb8dlBIb83SIAbQPb1w",
+  "verify_now": 1700000100,
+  "label": "wimse",
+  "components": [
+    "\"@method\"",
+    "\"@authority\"",
+    "\"@path\"",
+    "\"content-digest\"",
+    "\"workload-identity-token\""
+  ],
+  "params": {
+    "created": 1700000000,
+    "keyid": "issuer-key-1",
+    "alg": "ed25519"
+  },
+  "request": {
+    "method": "POST",
+    "authority": "service.example",
+    "path": "/transfer",
+    "query": null,
+    "headers": [
+      [
+        "Content-Type",
+        "application/json"
+      ],
+      [
+        "Content-Digest",
+        "sha-256=:TUu+Wcaq0iRCzeGZpqil8DRAX814+1qBwk7ySd4cRfE=:"
+      ],
+      [
+        "Workload-Identity-Token",
+        "eyJ0eXAiOiJ3aXQrand0IiwiYWxnIjoiRWREU0EiLCJraWQiOiJpc3N1ZXIta2V5LTEifQ.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvYXBpIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDM2MDAsImp0aSI6ImExYjJjMyIsImNuZiI6eyJqd2siOnsia3R5IjoiT0tQIiwiY3J2IjoiRWQyNTUxOSIsIngiOiJfUmNrT0ZxZ3gxdGstM2pOWUMtaDJaSDk2X2RyRThXTzF3THF5RFhwOWhnIn19fQ.VSUTP7VJTKt7hWfJfxe9humGbZcgzsvpJo2rysWE9x71UQjo1bp_1ObsziGoE4yDY5egRskzbQwG-fAD6ncOCQ"
+      ]
+    ]
+  },
+  "body": "{\"amount\":100}",
+  "wit": "eyJ0eXAiOiJ3aXQrand0IiwiYWxnIjoiRWREU0EiLCJraWQiOiJpc3N1ZXIta2V5LTEifQ.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvYXBpIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDM2MDAsImp0aSI6ImExYjJjMyIsImNuZiI6eyJqd2siOnsia3R5IjoiT0tQIiwiY3J2IjoiRWQyNTUxOSIsIngiOiJfUmNrT0ZxZ3gxdGstM2pOWUMtaDJaSDk2X2RyRThXTzF3THF5RFhwOWhnIn19fQ.VSUTP7VJTKt7hWfJfxe9humGbZcgzsvpJo2rysWE9x71UQjo1bp_1ObsziGoE4yDY5egRskzbQwG-fAD6ncOCQ",
+  "signature_input": "wimse=(\"@method\" \"@authority\" \"@path\" \"content-digest\" \"workload-identity-token\");created=1700000000;keyid=\"issuer-key-1\";alg=\"ed25519\"",
+  "signature": "wimse=:xntZ5wzykf30mOEm8EON58wAoo/cwul0aUDp1EJZV7y+KQ3jFBtfRFs2WL9r6xf6skFqemP61q8pVWkVz9/OCg==:"
+}
