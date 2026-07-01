@@ -24,6 +24,7 @@ categories = ["authentication", "cryptography"]
 [workspace.dependencies]
 wimsey-identifier = { path = "crates/identifier", version = "0.0.0" }
 wimsey-wit = { path = "crates/wit", version = "0.0.0" }
+wimsey-wpt = { path = "crates/wpt", version = "0.0.0" }
 ed25519-dalek = "2"
 base64 = "0.22"
 serde = { version = "1", features = ["derive"] }
