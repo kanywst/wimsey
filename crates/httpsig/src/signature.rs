@@ -398,6 +398,11 @@ pub fn verify(
             return Err(HttpSigError::InvalidTimeWindow);
         }
     }
+    // A `max_age` without a `now` would silently skip the freshness check; fail
+    // closed rather than give a false sense of enforcement.
+    if config.max_age.is_some() && config.now.is_none() {
+        return Err(HttpSigError::TooOld);
+    }
     if let Some(now) = config.now {
         if let Some(expires) = params.expires {
             if now > expires.saturating_add(config.leeway) {
@@ -826,5 +831,26 @@ mod tests {
             &VerifyConfig::default(),
         );
         assert!(matches!(err, Err(HttpSigError::Parse(_))));
+    }
+
+    #[test]
+    fn rejects_max_age_without_now() {
+        let key = SigningKey::from_bytes(&[5u8; 32]);
+        let request = rfc_request();
+        let signed = sign(&request, &rfc_components(), &ed25519_params(), "sig1", &key).unwrap();
+
+        // `max_age` set but `now` unset must fail closed, not silently skip.
+        let config = VerifyConfig {
+            max_age: Some(60),
+            ..VerifyConfig::default()
+        };
+        let err = verify(
+            &request,
+            &signed.signature_input,
+            &signed.signature,
+            &key.verifying_key(),
+            &config,
+        );
+        assert!(matches!(err, Err(HttpSigError::TooOld)));
     }
 }
