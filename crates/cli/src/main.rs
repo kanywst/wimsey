@@ -199,7 +199,7 @@ fn run_key(cmd: KeyCmd) -> Result<()> {
     match cmd {
         KeyCmd::Generate { seed, out } => {
             let signing_key = if let Some(seed) = seed {
-                let bytes = URL_SAFE_NO_PAD.decode(seed)?;
+                let bytes = URL_SAFE_NO_PAD.decode(seed.trim())?;
                 let seed: [u8; 32] = bytes.try_into().map_err(|_| "seed is not 32 bytes")?;
                 SigningKey::from_bytes(&seed)
             } else {
@@ -382,28 +382,43 @@ fn emit(content: &str, out: Option<&Path>) -> Result<()> {
     Ok(())
 }
 
-/// Writes `content` to `path`, restricting it to the owner (mode 0600 on unix)
-/// since these files may contain private key material.
+/// Writes `content` to `path` owner-only (mode 0600 on unix), atomically.
+///
+/// The bytes are written to a fresh temporary file created with the right
+/// permissions from the start (`create_new` + `mode`), then renamed over the
+/// destination. This avoids the race where an existing file is briefly readable
+/// between opening and tightening it, and leaves no partial file on failure.
 fn write_owner_only(path: &Path, content: &str) -> Result<()> {
     use std::io::Write as _;
 
+    let mut temp_name = path
+        .file_name()
+        .ok_or("output path has no file name")?
+        .to_os_string();
+    temp_name.push(format!(".tmp-{}", random_id()?));
+    let temp_path = match path.parent().filter(|p| !p.as_os_str().is_empty()) {
+        Some(dir) => dir.join(&temp_name),
+        None => PathBuf::from(&temp_name),
+    };
+
     let mut options = std::fs::OpenOptions::new();
-    options.write(true).create(true).truncate(true);
+    options.write(true).create_new(true);
     #[cfg(unix)]
     {
         use std::os::unix::fs::OpenOptionsExt as _;
         options.mode(0o600);
     }
-    let mut file = options.open(path)?;
-    // `mode` only applies when creating the file; force 0600 on an existing one
-    // too, so key material never lands with looser permissions.
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt as _;
-        let mut perms = file.metadata()?.permissions();
-        perms.set_mode(0o600);
-        file.set_permissions(perms)?;
+
+    let mut file = options
+        .open(&temp_path)
+        .map_err(|e| format!("creating temporary file: {e}"))?;
+    if let Err(e) = file.write_all(content.as_bytes()) {
+        let _ = std::fs::remove_file(&temp_path);
+        return Err(e.into());
     }
-    file.write_all(content.as_bytes())?;
+    if let Err(e) = std::fs::rename(&temp_path, path) {
+        let _ = std::fs::remove_file(&temp_path);
+        return Err(format!("renaming temporary file: {e}").into());
+    }
     Ok(())
 }
