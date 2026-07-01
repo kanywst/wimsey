@@ -218,6 +218,33 @@ fn wpt_verify_rejects_the_wrong_audience() {
 }
 
 #[test]
+fn wit_issue_rejects_ttl_overflow() {
+    let issuer = dir().join("issuer_ttl.jwk");
+    let pop = dir().join("pop_ttl.jwk");
+    generate_key(ISSUER_SEED, &issuer);
+    generate_key(POP_SEED, &pop);
+
+    // iat + ttl must not overflow u64; the command must fail closed.
+    let output = wimsey(&[
+        "wit",
+        "issue",
+        "--issuer-key",
+        issuer.to_str().unwrap(),
+        "--cnf-key",
+        pop.to_str().unwrap(),
+        "--sub",
+        "spiffe://example.org/api",
+        "--iss",
+        "https://issuer.example",
+        "--now",
+        "1000",
+        "--ttl",
+        "18446744073709551615",
+    ]);
+    assert!(!output.status.success());
+}
+
+#[test]
 fn wpt_verify_rejects_a_wit_from_the_wrong_issuer() {
     let issuer = dir().join("issuer4.jwk");
     let pop = dir().join("pop4.jwk");

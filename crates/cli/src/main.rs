@@ -214,7 +214,16 @@ fn run_key(cmd: KeyCmd) -> Result<()> {
         }
         KeyCmd::Public { r#in, out } => {
             let jwk = key::load(&r#in)?;
-            emit(&key::to_json(&jwk.to_public())?, out.as_deref())
+            // Validate before exporting: with a private seed, re-derive the
+            // public key so a mismatched `x` is rejected; otherwise confirm the
+            // advertised public key is a valid Ed25519 key.
+            let public = if jwk.d.is_some() {
+                JwkKey::from_signing_key(&jwk.signing_key()?).to_public()
+            } else {
+                jwk.verifying_key()?;
+                jwk.to_public()
+            };
+            emit(&key::to_json(&public)?, out.as_deref())
         }
     }
 }
@@ -234,11 +243,14 @@ fn run_wit(cmd: WitCmd) -> Result<()> {
             let issuer = key::load(&issuer_key)?.signing_key()?;
             let cnf = key::load(&cnf_key)?.verifying_key()?;
             let iat = now.unwrap_or_else(wimsey_wit::now_unix);
+            let exp = iat
+                .checked_add(ttl)
+                .ok_or("ttl overflows the expiry time")?;
             let claims = WitClaims {
-                iss,
-                sub: WorkloadIdentifier::parse(&sub)?,
+                iss: iss.trim().to_owned(),
+                sub: WorkloadIdentifier::parse(sub.trim())?,
                 iat,
-                exp: iat.saturating_add(ttl),
+                exp,
                 jti: jti.map_or_else(random_id, Ok)?,
                 cnf: Confirmation {
                     jwk: Jwk::from_ed25519(&cnf),
@@ -290,9 +302,12 @@ fn run_wpt(cmd: WptCmd) -> Result<()> {
         } => {
             let pop = key::load(&pop_key)?.signing_key()?;
             let iat = now.unwrap_or_else(wimsey_wit::now_unix);
+            let exp = iat
+                .checked_add(ttl)
+                .ok_or("ttl overflows the expiry time")?;
             let claims = WptClaims {
-                aud,
-                exp: iat.saturating_add(ttl),
+                aud: aud.trim().to_owned(),
+                exp,
                 jti: jti.map_or_else(random_id, Ok)?,
                 wth: wimsey_wpt::wit_thumbprint(wit.trim()),
                 ath: None,
@@ -379,6 +394,16 @@ fn write_owner_only(path: &Path, content: &str) -> Result<()> {
         use std::os::unix::fs::OpenOptionsExt as _;
         options.mode(0o600);
     }
-    options.open(path)?.write_all(content.as_bytes())?;
+    let mut file = options.open(path)?;
+    // `mode` only applies when creating the file; force 0600 on an existing one
+    // too, so key material never lands with looser permissions.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        let mut perms = file.metadata()?.permissions();
+        perms.set_mode(0o600);
+        file.set_permissions(perms)?;
+    }
+    file.write_all(content.as_bytes())?;
     Ok(())
 }
