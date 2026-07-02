@@ -151,14 +151,27 @@ fn parse_header(spec: &str) -> Result<(String, String)> {
     Ok((name.to_owned(), value.trim().to_owned()))
 }
 
-/// Validates and normalizes a request path: RFC 9421 requires `@path` to begin
-/// with `/`.
+/// Validates a request path: RFC 9421's `@path` is the absolute path only, so it
+/// must begin with `/` and carry no query (`?`) or fragment (`#`).
 fn checked_path(raw: &str) -> Result<String> {
     let path = raw.trim();
     if !path.starts_with('/') {
         return Err("path must start with `/`".into());
     }
+    if path.contains(['?', '#']) {
+        return Err("path must not contain a query (`?`) or fragment (`#`)".into());
+    }
     Ok(path.to_owned())
+}
+
+/// Validates an HTTP method: a non-empty RFC 9110 token, taken as-is (RFC 9421
+/// Section 2.2.1 performs no case transformation).
+fn checked_method(raw: &str) -> Result<String> {
+    let method = raw.trim();
+    if !is_valid_header_name(method) {
+        return Err("method must be a non-empty HTTP token".into());
+    }
+    Ok(method.to_owned())
 }
 
 fn parse_component(token: &str) -> Result<Component> {
@@ -181,15 +194,40 @@ fn parse_component(token: &str) -> Result<Component> {
 }
 
 fn parse_components(list: &str) -> Result<Vec<Component>> {
-    list.split(',')
+    let components: Vec<Component> = list
+        .split(',')
         .map(str::trim)
         .filter(|token| !token.is_empty())
         .map(parse_component)
-        .collect()
+        .collect::<Result<_>>()?;
+    if components.is_empty() {
+        return Err("the component list must not be empty".into());
+    }
+    Ok(components)
 }
 
 fn has_header(headers: &[(String, String)], name: &str) -> bool {
     headers.iter().any(|(n, _)| n.eq_ignore_ascii_case(name))
+}
+
+/// Builds and normalizes an [`HttpRequest`] the same way for signing and
+/// verification: `@method` is a validated token taken as-is, `@authority` is
+/// lowercased (RFC 9421 Section 2.2.2), and a leading `?` is stripped from the
+/// query (which is stored without it).
+fn build_request(
+    method: &str,
+    authority: &str,
+    path: &str,
+    query: Option<&str>,
+    headers: Vec<(String, String)>,
+) -> Result<HttpRequest> {
+    Ok(HttpRequest {
+        method: checked_method(method)?,
+        authority: authority.trim().to_ascii_lowercase(),
+        path: checked_path(path)?,
+        query: query.map(|q| q.trim().trim_start_matches('?').to_owned()),
+        headers,
+    })
 }
 
 fn run_sign(args: SignArgs) -> Result<()> {
@@ -213,21 +251,24 @@ fn run_sign(args: SignArgs) -> Result<()> {
         headers.push(("Workload-Identity-Token".to_owned(), wit.trim().to_owned()));
     }
 
-    let request = HttpRequest {
-        // `@method` is case-sensitive and taken as-is (RFC 9421 Section 2.2.1);
-        // `@authority` is lowercased (Section 2.2.2). A leading `?` on the query
-        // is stripped since the value is stored without it.
-        method: args.method.trim().to_owned(),
-        authority: args.authority.trim().to_ascii_lowercase(),
-        path: checked_path(&args.path)?,
-        query: args
-            .query
-            .map(|q| q.trim().trim_start_matches('?').to_owned()),
+    let request = build_request(
+        &args.method,
+        &args.authority,
+        &args.path,
+        args.query.as_deref(),
         headers,
-    };
+    )?;
 
     let components = if let Some(list) = args.cover {
-        parse_components(&list)?
+        let components = parse_components(&list)?;
+        if args.wit.is_some() && !components.contains(&Component::header("workload-identity-token"))
+        {
+            return Err("--cover must include workload-identity-token when --wit is set".into());
+        }
+        if args.body_file.is_some() && !components.contains(&Component::header("content-digest")) {
+            return Err("--cover must include content-digest when --body-file is set".into());
+        }
+        components
     } else {
         let mut components = vec![Component::Method, Component::Authority, Component::Path];
         if args.body_file.is_some() {
@@ -239,9 +280,13 @@ fn run_sign(args: SignArgs) -> Result<()> {
         components
     };
 
+    let keyid = args.keyid.trim();
+    if keyid.is_empty() {
+        return Err("keyid must not be empty".into());
+    }
     let params = SignatureParams {
         created: Some(args.created.unwrap_or_else(wimsey_wit::now_unix)),
-        keyid: Some(args.keyid),
+        keyid: Some(keyid.to_owned()),
         alg: Some(ALG.to_owned()),
         ..SignatureParams::default()
     };
@@ -280,18 +325,13 @@ fn run_verify(args: VerifyArgs) -> Result<()> {
         }
     }
 
-    let request = HttpRequest {
-        // `@method` is case-sensitive and taken as-is (RFC 9421 Section 2.2.1);
-        // `@authority` is lowercased (Section 2.2.2). A leading `?` on the query
-        // is stripped since the value is stored without it.
-        method: args.method.trim().to_owned(),
-        authority: args.authority.trim().to_ascii_lowercase(),
-        path: checked_path(&args.path)?,
-        query: args
-            .query
-            .map(|q| q.trim().trim_start_matches('?').to_owned()),
+    let request = build_request(
+        &args.method,
+        &args.authority,
+        &args.path,
+        args.query.as_deref(),
         headers,
-    };
+    )?;
 
     // Validate the WIT against the exact value the signature covers: RFC 9421
     // joins multiple same-named headers, so checking the joined component value
@@ -304,7 +344,15 @@ fn run_verify(args: VerifyArgs) -> Result<()> {
     }
 
     let required = if let Some(list) = args.require {
-        parse_components(&list)?
+        let required = parse_components(&list)?;
+        // The WIMSE profile always binds the WIT, and the body when present.
+        if !required.contains(&Component::header("workload-identity-token")) {
+            return Err("--require must include workload-identity-token".into());
+        }
+        if body.is_some() && !required.contains(&Component::header("content-digest")) {
+            return Err("--require must include content-digest when --body-file is set".into());
+        }
+        required
     } else {
         let mut required = vec![
             Component::Method,
