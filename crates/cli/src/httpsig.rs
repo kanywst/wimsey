@@ -114,7 +114,21 @@ fn parse_header(spec: &str) -> Result<(String, String)> {
     let (name, value) = spec
         .split_once(':')
         .ok_or("header must be in `Name: Value` form")?;
-    Ok((name.trim().to_owned(), value.trim().to_owned()))
+    let name = name.trim();
+    if name.is_empty() {
+        return Err("header name cannot be empty".into());
+    }
+    Ok((name.to_owned(), value.trim().to_owned()))
+}
+
+/// Validates and normalizes a request path: RFC 9421 requires `@path` to begin
+/// with `/`.
+fn checked_path(raw: &str) -> Result<String> {
+    let path = raw.trim();
+    if !path.starts_with('/') {
+        return Err("path must start with `/`".into());
+    }
+    Ok(path.to_owned())
 }
 
 fn parse_component(token: &str) -> Result<Component> {
@@ -168,7 +182,7 @@ fn run_sign(args: SignArgs) -> Result<()> {
     let request = HttpRequest {
         method: args.method.trim().to_owned(),
         authority: args.authority.trim().to_owned(),
-        path: args.path.trim().to_owned(),
+        path: checked_path(&args.path)?,
         query: args.query.map(|q| q.trim().to_owned()),
         headers,
     };
@@ -240,7 +254,7 @@ fn run_verify(args: VerifyArgs) -> Result<()> {
     let request = HttpRequest {
         method: args.method.trim().to_owned(),
         authority: args.authority.trim().to_owned(),
-        path: args.path.trim().to_owned(),
+        path: checked_path(&args.path)?,
         query: args.query.map(|q| q.trim().to_owned()),
         headers,
     };
