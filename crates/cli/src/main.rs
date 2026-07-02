@@ -272,7 +272,7 @@ fn run_wit(cmd: WitCmd) -> Result<()> {
             let mut validation =
                 wimsey_wit::Validation::at(now.unwrap_or_else(wimsey_wit::now_unix));
             if let Some(iss) = expected_iss {
-                validation = validation.expect_issuer(iss);
+                validation = validation.expect_issuer(iss.trim().to_owned());
             }
             let verified = wimsey_wit::verify(&token, &key, &validation)?;
             let out = json!({ "kid": verified.kid, "claims": verified.claims });
@@ -332,7 +332,7 @@ fn run_wpt(cmd: WptCmd) -> Result<()> {
             let issuer = key::load(&issuer_jwk)?.verifying_key()?;
             let mut wit_validation = wimsey_wit::Validation::at(now);
             if let Some(iss) = expected_iss {
-                wit_validation = wit_validation.expect_issuer(iss);
+                wit_validation = wit_validation.expect_issuer(iss.trim().to_owned());
             }
             let verified_wit = wimsey_wit::verify(wit, &issuer, &wit_validation)?;
 
@@ -412,7 +412,10 @@ fn write_owner_only(path: &Path, content: &str) -> Result<()> {
     let mut file = options
         .open(&temp_path)
         .map_err(|e| format!("creating temporary file: {e}"))?;
-    if let Err(e) = file.write_all(content.as_bytes()) {
+    if let Err(e) = file
+        .write_all(content.as_bytes())
+        .and_then(|()| file.sync_all())
+    {
         let _ = std::fs::remove_file(&temp_path);
         return Err(e.into());
     }
