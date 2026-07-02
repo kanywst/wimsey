@@ -98,6 +98,9 @@ pub(crate) struct VerifyArgs {
     /// Require this issuer on the WIT.
     #[arg(long)]
     expected_iss: Option<String>,
+    /// Reject a signature whose `created` is older than this many seconds.
+    #[arg(long)]
+    max_age: Option<u64>,
     /// Override the current time (Unix seconds). For testing only.
     #[arg(long)]
     now: Option<u64>,
@@ -134,7 +137,7 @@ fn checked_path(raw: &str) -> Result<String> {
 fn parse_component(token: &str) -> Result<Component> {
     let token = token.trim();
     if let Some(derived) = token.strip_prefix('@') {
-        match derived {
+        match derived.to_ascii_lowercase().as_str() {
             "method" => Ok(Component::Method),
             "authority" => Ok(Component::Authority),
             "path" => Ok(Component::Path),
@@ -142,6 +145,7 @@ fn parse_component(token: &str) -> Result<Component> {
             other => Err(format!("unsupported derived component `@{other}`").into()),
         }
     } else {
+        // `Component::header` lowercases the name (RFC 9421 Section 2.1).
         Ok(Component::header(token))
     }
 }
@@ -180,10 +184,15 @@ fn run_sign(args: SignArgs) -> Result<()> {
     }
 
     let request = HttpRequest {
+        // `@method` is case-sensitive and taken as-is (RFC 9421 Section 2.2.1);
+        // `@authority` is lowercased (Section 2.2.2). A leading `?` on the query
+        // is stripped since the value is stored without it.
         method: args.method.trim().to_owned(),
-        authority: args.authority.trim().to_owned(),
+        authority: args.authority.trim().to_ascii_lowercase(),
         path: checked_path(&args.path)?,
-        query: args.query.map(|q| q.trim().to_owned()),
+        query: args
+            .query
+            .map(|q| q.trim().trim_start_matches('?').to_owned()),
         headers,
     };
 
@@ -242,10 +251,15 @@ fn run_verify(args: VerifyArgs) -> Result<()> {
     }
 
     let request = HttpRequest {
+        // `@method` is case-sensitive and taken as-is (RFC 9421 Section 2.2.1);
+        // `@authority` is lowercased (Section 2.2.2). A leading `?` on the query
+        // is stripped since the value is stored without it.
         method: args.method.trim().to_owned(),
-        authority: args.authority.trim().to_owned(),
+        authority: args.authority.trim().to_ascii_lowercase(),
         path: checked_path(&args.path)?,
-        query: args.query.map(|q| q.trim().to_owned()),
+        query: args
+            .query
+            .map(|q| q.trim().trim_start_matches('?').to_owned()),
         headers,
     };
 
@@ -277,6 +291,7 @@ fn run_verify(args: VerifyArgs) -> Result<()> {
     let config = VerifyConfig {
         now: Some(now),
         required_components: required,
+        max_age: args.max_age,
         ..VerifyConfig::default()
     };
     let verified = verify(
