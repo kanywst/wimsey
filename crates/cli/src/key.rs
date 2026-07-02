@@ -61,12 +61,12 @@ impl JwkKey {
             .d
             .as_ref()
             .ok_or("key file has no private component `d`")?;
-        let bytes = URL_SAFE_NO_PAD.decode(d)?;
+        let bytes = URL_SAFE_NO_PAD.decode(d.trim())?;
         let seed: [u8; 32] = bytes.try_into().map_err(|_| "`d` is not 32 bytes")?;
         let signing_key = SigningKey::from_bytes(&seed);
 
         let advertised: [u8; 32] = URL_SAFE_NO_PAD
-            .decode(&self.x)?
+            .decode(self.x.trim())?
             .try_into()
             .map_err(|_| "`x` is not 32 bytes")?;
         if advertised != signing_key.verifying_key().to_bytes() {
@@ -78,7 +78,7 @@ impl JwkKey {
     /// The Ed25519 verifying (public) key.
     pub fn verifying_key(&self) -> Result<VerifyingKey> {
         self.check_type()?;
-        let bytes = URL_SAFE_NO_PAD.decode(&self.x)?;
+        let bytes = URL_SAFE_NO_PAD.decode(self.x.trim())?;
         let public: [u8; 32] = bytes.try_into().map_err(|_| "`x` is not 32 bytes")?;
         VerifyingKey::from_bytes(&public).map_err(|_| "`x` is not a valid Ed25519 key".into())
     }
