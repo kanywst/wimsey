@@ -409,3 +409,53 @@ fn httpsig_sign_and_verify_flow() {
     ]);
     assert!(!output.status.success());
 }
+
+#[test]
+fn httpsig_verify_rejects_a_smuggled_wit_header() {
+    let issuer = dir().join("issuer_smug.jwk");
+    let pop = dir().join("pop_smug.jwk");
+    generate_key(ISSUER_SEED, &issuer);
+    generate_key(POP_SEED, &pop);
+
+    let wit = stdout(&wimsey(&[
+        "wit",
+        "issue",
+        "--issuer-key",
+        issuer.to_str().unwrap(),
+        "--cnf-key",
+        pop.to_str().unwrap(),
+        "--sub",
+        "spiffe://example.org/api",
+        "--iss",
+        "https://issuer.example",
+        "--now",
+        "1700000000",
+    ]));
+    let wit = wit.trim();
+
+    // A second, unverified Workload-Identity-Token header alongside the verified
+    // --wit joins into the covered value and must be rejected before any output.
+    let output = wimsey(&[
+        "httpsig",
+        "verify",
+        "--issuer-jwk",
+        issuer.to_str().unwrap(),
+        "--wit",
+        wit,
+        "--method",
+        "POST",
+        "--authority",
+        "service.example",
+        "--path",
+        "/x",
+        "--header",
+        "Workload-Identity-Token: smuggled.token.value",
+        "--signature-input",
+        "wimse=(\"@method\");created=1700000000",
+        "--signature",
+        "wimse=:AAAA:",
+        "--now",
+        "1700000100",
+    ]);
+    assert!(!output.status.success());
+}
