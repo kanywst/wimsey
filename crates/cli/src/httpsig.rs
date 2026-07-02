@@ -152,10 +152,16 @@ fn run_sign(args: SignArgs) -> Result<()> {
         headers.push(parse_header(spec)?);
     }
     if let Some(body_file) = &args.body_file {
+        if has_header(&headers, "content-digest") {
+            return Err("do not pass a Content-Digest header together with --body-file".into());
+        }
         let body = std::fs::read(body_file)?;
         headers.push(("Content-Digest".to_owned(), content_digest_sha256(&body)));
     }
     if let Some(wit) = &args.wit {
+        if has_header(&headers, "workload-identity-token") {
+            return Err("do not pass a Workload-Identity-Token header together with --wit".into());
+        }
         headers.push(("Workload-Identity-Token".to_owned(), wit.trim().to_owned()));
     }
 
@@ -208,8 +214,17 @@ fn run_verify(args: VerifyArgs) -> Result<()> {
     for spec in &args.header {
         headers.push(parse_header(spec)?);
     }
-    // The signature covered the WIT header; add it if not already supplied.
-    if !has_header(&headers, "workload-identity-token") {
+    // The signature covered the WIT header. If the caller supplied one, it must
+    // match the verified WIT, otherwise the reported subject would describe a
+    // different token than the request actually carries.
+    if let Some((_, existing)) = headers
+        .iter()
+        .find(|(name, _)| name.eq_ignore_ascii_case("workload-identity-token"))
+    {
+        if existing.trim() != wit {
+            return Err("the supplied Workload-Identity-Token header does not match --wit".into());
+        }
+    } else {
         headers.push(("Workload-Identity-Token".to_owned(), wit.to_owned()));
     }
     let body = match &args.body_file {
