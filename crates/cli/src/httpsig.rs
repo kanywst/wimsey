@@ -228,17 +228,7 @@ fn run_verify(args: VerifyArgs) -> Result<()> {
     for spec in &args.header {
         headers.push(parse_header(spec)?);
     }
-    // The signature covered the WIT header. If the caller supplied one, it must
-    // match the verified WIT, otherwise the reported subject would describe a
-    // different token than the request actually carries.
-    if let Some((_, existing)) = headers
-        .iter()
-        .find(|(name, _)| name.eq_ignore_ascii_case("workload-identity-token"))
-    {
-        if existing.trim() != wit {
-            return Err("the supplied Workload-Identity-Token header does not match --wit".into());
-        }
-    } else {
+    if !has_header(&headers, "workload-identity-token") {
         headers.push(("Workload-Identity-Token".to_owned(), wit.to_owned()));
     }
     let body = match &args.body_file {
@@ -258,6 +248,16 @@ fn run_verify(args: VerifyArgs) -> Result<()> {
         query: args.query.map(|q| q.trim().to_owned()),
         headers,
     };
+
+    // Validate the WIT against the exact value the signature covers: RFC 9421
+    // joins multiple same-named headers, so checking the joined component value
+    // (not just the first header) prevents smuggling a second, unverified token.
+    let covered_wit = request
+        .component_value(&Component::header("workload-identity-token"))
+        .map_err(|_| "workload-identity-token header is missing")?;
+    if covered_wit != wit {
+        return Err("the supplied Workload-Identity-Token header does not match --wit".into());
+    }
 
     let required = if let Some(list) = args.require {
         parse_components(&list)?
@@ -287,15 +287,13 @@ fn run_verify(args: VerifyArgs) -> Result<()> {
         &config,
     )?;
 
-    // Bind the body, if provided, to the covered content-digest header.
+    // Bind the body to the exact content-digest value the signature covers
+    // (the joined component value, not just the first matching header).
     if let Some(body) = &body {
         let digest = request
-            .headers
-            .iter()
-            .find(|(name, _)| name.eq_ignore_ascii_case("content-digest"))
-            .map(|(_, value)| value.as_str())
-            .ok_or("content-digest header is missing")?;
-        if !verify_content_digest(digest, body) {
+            .component_value(&Component::header("content-digest"))
+            .map_err(|_| "content-digest header is missing")?;
+        if !verify_content_digest(&digest, body) {
             return Err("content-digest does not match the body".into());
         }
     }
