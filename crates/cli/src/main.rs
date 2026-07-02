@@ -217,13 +217,14 @@ fn run_key(cmd: KeyCmd) -> Result<()> {
             // Validate before exporting: with a private seed, re-derive the
             // public key so a mismatched `x` is rejected; otherwise confirm the
             // advertised public key is a valid Ed25519 key.
-            let public = if jwk.d.is_some() {
-                JwkKey::from_signing_key(&jwk.signing_key()?).to_public()
+            // Validate before exporting: `signing_key` checks that `d` matches
+            // `x`; `verifying_key` checks a public-only key is a real key.
+            if jwk.d.is_some() {
+                jwk.signing_key()?;
             } else {
                 jwk.verifying_key()?;
-                jwk.to_public()
-            };
-            emit(&key::to_json(&public)?, out.as_deref())
+            }
+            emit(&key::to_json(&jwk.to_public())?, out.as_deref())
         }
     }
 }
@@ -412,15 +413,17 @@ fn write_owner_only(path: &Path, content: &str) -> Result<()> {
     let mut file = options
         .open(&temp_path)
         .map_err(|e| format!("creating temporary file: {e}"))?;
-    if let Err(e) = file
+    let write_result = file
         .write_all(content.as_bytes())
-        .and_then(|()| file.sync_all())
-    {
+        .and_then(|()| file.sync_all());
+    // Close the handle before touching the file again; Windows refuses to
+    // rename or delete a file that is still open.
+    drop(file);
+
+    if let Err(e) = write_result {
         let _ = std::fs::remove_file(&temp_path);
         return Err(e.into());
     }
-    // Close the handle before renaming; Windows refuses to rename an open file.
-    drop(file);
     if let Err(e) = std::fs::rename(&temp_path, path) {
         let _ = std::fs::remove_file(&temp_path);
         return Err(format!("renaming temporary file: {e}").into());
