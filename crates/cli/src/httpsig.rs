@@ -101,6 +101,9 @@ pub(crate) struct VerifyArgs {
     /// Reject a signature whose `created` is older than this many seconds.
     #[arg(long)]
     max_age: Option<u64>,
+    /// The signature label to accept.
+    #[arg(long, default_value = "wimse")]
+    label: String,
     /// Override the current time (Unix seconds). For testing only.
     #[arg(long)]
     now: Option<u64>,
@@ -140,6 +143,12 @@ fn is_valid_header_name(name: &str) -> bool {
         })
 }
 
+/// Whether `value` is an acceptable HTTP field value: no ASCII control
+/// characters other than horizontal tab (which also excludes CR and LF).
+fn is_valid_header_value(value: &str) -> bool {
+    value.chars().all(|c| c == '\t' || !c.is_ascii_control())
+}
+
 fn parse_header(spec: &str) -> Result<(String, String)> {
     let (name, value) = spec
         .split_once(':')
@@ -148,7 +157,28 @@ fn parse_header(spec: &str) -> Result<(String, String)> {
     if !is_valid_header_name(name) {
         return Err(format!("invalid header name `{name}`").into());
     }
-    Ok((name.to_owned(), value.trim().to_owned()))
+    let value = value.trim();
+    if !is_valid_header_value(value) {
+        return Err(format!("header `{name}` has an invalid value").into());
+    }
+    Ok((name.to_owned(), value.to_owned()))
+}
+
+/// Validates a request authority: non-empty, and free of `/`, `?`, `#`, spaces
+/// and control characters. Returns it lowercased (RFC 9421 Section 2.2.2).
+fn checked_authority(raw: &str) -> Result<String> {
+    let authority = raw.trim();
+    if authority.is_empty() {
+        return Err("authority must not be empty".into());
+    }
+    if authority.contains(['/', '?', '#'])
+        || authority.chars().any(|c| c == ' ' || c.is_ascii_control())
+    {
+        return Err(
+            "authority must not contain `/`, `?`, `#`, spaces or control characters".into(),
+        );
+    }
+    Ok(authority.to_ascii_lowercase())
 }
 
 /// Validates a request path: RFC 9421's `@path` is the absolute path only, so it
@@ -228,6 +258,33 @@ fn has_header(headers: &[(String, String)], name: &str) -> bool {
     headers.iter().any(|(n, _)| n.eq_ignore_ascii_case(name))
 }
 
+/// The components a WIMSE signature must cover so it cannot be replayed against a
+/// different target: always the request method, authority and path; the query
+/// when one is present; the WIT; and the content digest when a body is present.
+fn mandatory_components(has_query: bool, has_body: bool, has_wit: bool) -> Vec<Component> {
+    let mut components = vec![Component::Method, Component::Authority, Component::Path];
+    if has_query {
+        components.push(Component::Query);
+    }
+    if has_wit {
+        components.push(Component::header("workload-identity-token"));
+    }
+    if has_body {
+        components.push(Component::header("content-digest"));
+    }
+    components
+}
+
+/// Errors unless every component in `mandatory` is present in `set`.
+fn ensure_covers(set: &[Component], mandatory: &[Component]) -> Result<()> {
+    for component in mandatory {
+        if !set.contains(component) {
+            return Err(format!("component {} must be covered", component.quoted_id()).into());
+        }
+    }
+    Ok(())
+}
+
 /// Builds and normalizes an [`HttpRequest`] the same way for signing and
 /// verification: `@method` is a validated token taken as-is, `@authority` is
 /// lowercased (RFC 9421 Section 2.2.2), and a leading `?` is stripped from the
@@ -241,7 +298,7 @@ fn build_request(
 ) -> Result<HttpRequest> {
     Ok(HttpRequest {
         method: checked_method(method)?,
-        authority: authority.trim().to_ascii_lowercase(),
+        authority: checked_authority(authority)?,
         path: checked_path(path)?,
         query: query.map(|q| q.trim().trim_start_matches('?').to_owned()),
         headers,
@@ -277,25 +334,17 @@ fn run_sign(args: SignArgs) -> Result<()> {
         headers,
     )?;
 
+    let mandatory = mandatory_components(
+        args.query.is_some(),
+        args.body_file.is_some(),
+        args.wit.is_some(),
+    );
     let components = if let Some(list) = args.cover {
         let components = parse_components(&list)?;
-        if args.wit.is_some() && !components.contains(&Component::header("workload-identity-token"))
-        {
-            return Err("--cover must include workload-identity-token when --wit is set".into());
-        }
-        if args.body_file.is_some() && !components.contains(&Component::header("content-digest")) {
-            return Err("--cover must include content-digest when --body-file is set".into());
-        }
+        ensure_covers(&components, &mandatory)?;
         components
     } else {
-        let mut components = vec![Component::Method, Component::Authority, Component::Path];
-        if args.body_file.is_some() {
-            components.push(Component::header("content-digest"));
-        }
-        if args.wit.is_some() {
-            components.push(Component::header("workload-identity-token"));
-        }
-        components
+        mandatory
     };
 
     let keyid = args.keyid.trim();
@@ -362,33 +411,22 @@ fn run_verify(args: VerifyArgs) -> Result<()> {
         return Err("the supplied Workload-Identity-Token header does not match --wit".into());
     }
 
+    // Always required on verify: the target components, the WIT, the query when
+    // present, and the content digest when a body is present.
+    let mandatory = mandatory_components(args.query.is_some(), body.is_some(), true);
     let required = if let Some(list) = args.require {
         let required = parse_components(&list)?;
-        // The WIMSE profile always binds the WIT, and the body when present.
-        if !required.contains(&Component::header("workload-identity-token")) {
-            return Err("--require must include workload-identity-token".into());
-        }
-        if body.is_some() && !required.contains(&Component::header("content-digest")) {
-            return Err("--require must include content-digest when --body-file is set".into());
-        }
+        ensure_covers(&required, &mandatory)?;
         required
     } else {
-        let mut required = vec![
-            Component::Method,
-            Component::Authority,
-            Component::Path,
-            Component::header("workload-identity-token"),
-        ];
-        if body.is_some() {
-            required.push(Component::header("content-digest"));
-        }
-        required
+        mandatory
     };
 
     let config = VerifyConfig {
         now: Some(now),
         required_components: required,
         max_age: args.max_age,
+        label: Some(checked_label(&args.label)?),
         ..VerifyConfig::default()
     };
     let verified = verify(
