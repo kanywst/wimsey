@@ -174,6 +174,24 @@ fn checked_method(raw: &str) -> Result<String> {
     Ok(method.to_owned())
 }
 
+/// Validates a signature label as an RFC 8941 structured-field key: it starts
+/// with a lowercase letter or `*`, then `[a-z0-9_.*-]`.
+fn checked_label(raw: &str) -> Result<String> {
+    let label = raw.trim();
+    let mut chars = label.chars();
+    let first_ok = matches!(chars.next(), Some(c) if c.is_ascii_lowercase() || c == '*');
+    let rest_ok = chars.all(|c| {
+        c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, '_' | '-' | '.' | '*')
+    });
+    if !first_ok || !rest_ok {
+        return Err(
+            "label must be a structured-field key: a lowercase letter or `*`, then `[a-z0-9_.*-]`"
+                .into(),
+        );
+    }
+    Ok(label.to_owned())
+}
+
 fn parse_component(token: &str) -> Result<Component> {
     let token = token.trim();
     if let Some(derived) = token.strip_prefix('@') {
@@ -291,7 +309,8 @@ fn run_sign(args: SignArgs) -> Result<()> {
         ..SignatureParams::default()
     };
 
-    let signed = sign(&request, &components, &params, args.label.trim(), &pop)?;
+    let label = checked_label(&args.label)?;
+    let signed = sign(&request, &components, &params, &label, &pop)?;
     println!("Signature-Input: {}", signed.signature_input);
     println!("Signature: {}", signed.signature);
     Ok(())
