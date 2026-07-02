@@ -113,13 +113,40 @@ pub(crate) fn run(cmd: HttpsigCmd) -> Result<()> {
     }
 }
 
+/// Whether `name` is a valid HTTP field name — a non-empty run of RFC 9110
+/// `tchar`s. This keeps stray characters (including CR/LF or `:`) out of the
+/// signature base's component identifiers.
+fn is_valid_header_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.chars().all(|c| {
+            c.is_ascii_alphanumeric()
+                || matches!(
+                    c,
+                    '!' | '#'
+                        | '$'
+                        | '%'
+                        | '&'
+                        | '\''
+                        | '*'
+                        | '+'
+                        | '-'
+                        | '.'
+                        | '^'
+                        | '_'
+                        | '`'
+                        | '|'
+                        | '~'
+                )
+        })
+}
+
 fn parse_header(spec: &str) -> Result<(String, String)> {
     let (name, value) = spec
         .split_once(':')
         .ok_or("header must be in `Name: Value` form")?;
     let name = name.trim();
-    if name.is_empty() {
-        return Err("header name cannot be empty".into());
+    if !is_valid_header_name(name) {
+        return Err(format!("invalid header name `{name}`").into());
     }
     Ok((name.to_owned(), value.trim().to_owned()))
 }
@@ -145,6 +172,9 @@ fn parse_component(token: &str) -> Result<Component> {
             other => Err(format!("unsupported derived component `@{other}`").into()),
         }
     } else {
+        if !is_valid_header_name(token) {
+            return Err(format!("invalid header component `{token}`").into());
+        }
         // `Component::header` lowercases the name (RFC 9421 Section 2.1).
         Ok(Component::header(token))
     }
