@@ -3,6 +3,7 @@
 //! Issues, verifies and inspects Workload Identity Tokens and Workload Proof
 //! Tokens using Ed25519 keys stored as OKP JSON Web Keys.
 
+mod httpsig;
 mod key;
 
 use std::path::{Path, PathBuf};
@@ -47,6 +48,11 @@ enum Command {
     Wpt {
         #[command(subcommand)]
         cmd: WptCmd,
+    },
+    /// HTTP Message Signature (RFC 9421) operations.
+    Httpsig {
+        #[command(subcommand)]
+        cmd: httpsig::HttpsigCmd,
     },
 }
 
@@ -192,6 +198,7 @@ fn run(cli: Cli) -> Result<()> {
         Command::Key { cmd } => run_key(cmd),
         Command::Wit { cmd } => run_wit(cmd),
         Command::Wpt { cmd } => run_wpt(cmd),
+        Command::Httpsig { cmd } => httpsig::run(cmd),
     }
 }
 

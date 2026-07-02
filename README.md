@@ -73,6 +73,22 @@ wimsey wpt verify --issuer-jwk issuer.jwk --wit "$(cat wit.txt)" \
 against the WIT's confirmation key — success establishes the workload identity,
 not merely possession of some key.
 
+Alternatively, sign an HTTP request (RFC 9421) carrying the WIT, covering the
+method, authority, path, content digest and the WIT header:
+
+```bash
+printf '{"amount":100}' > body.json
+wimsey httpsig sign --pop-key pop.jwk \
+  --method POST --authority service.example --path /transfer \
+  --wit "$(cat wit.txt)" --body-file body.json --keyid issuer-key-1 > sig.txt
+
+wimsey httpsig verify --issuer-jwk issuer.jwk --wit "$(cat wit.txt)" \
+  --method POST --authority service.example --path /transfer \
+  --body-file body.json \
+  --signature-input "$(sed -n 's/^Signature-Input: //p' sig.txt)" \
+  --signature "$(sed -n 's/^Signature: //p' sig.txt)"
+```
+
 ## Roadmap
 
 See [`ROADMAP.md`](ROADMAP.md) for the phased plan from scaffold to CNCF
