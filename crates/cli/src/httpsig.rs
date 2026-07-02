@@ -101,6 +101,9 @@ pub(crate) struct VerifyArgs {
     /// Reject a signature whose `created` is older than this many seconds.
     #[arg(long)]
     max_age: Option<u64>,
+    /// Clock-skew tolerance, in seconds, applied to time checks.
+    #[arg(long, default_value_t = 5)]
+    leeway: u64,
     /// The signature label to accept.
     #[arg(long, default_value = "wimse")]
     label: String,
@@ -334,10 +337,12 @@ fn run_sign(args: SignArgs) -> Result<()> {
         headers,
     )?;
 
+    // Base the mandatory set on the headers actually present, so a WIT or
+    // Content-Digest supplied via --header is covered like --wit/--body-file.
     let mandatory = mandatory_components(
         args.query.is_some(),
-        args.body_file.is_some(),
-        args.wit.is_some(),
+        has_header(&request.headers, "content-digest"),
+        has_header(&request.headers, "workload-identity-token"),
     );
     let components = if let Some(list) = args.cover {
         let components = parse_components(&list)?;
@@ -424,10 +429,10 @@ fn run_verify(args: VerifyArgs) -> Result<()> {
 
     let config = VerifyConfig {
         now: Some(now),
+        leeway: args.leeway,
         required_components: required,
         max_age: args.max_age,
         label: Some(checked_label(&args.label)?),
-        ..VerifyConfig::default()
     };
     let verified = verify(
         &request,
