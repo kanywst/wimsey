@@ -300,3 +300,112 @@ fn wpt_verify_rejects_a_wit_from_the_wrong_issuer() {
     ]);
     assert!(!output.status.success());
 }
+
+#[test]
+fn httpsig_sign_and_verify_flow() {
+    let issuer = dir().join("issuer_hs.jwk");
+    let pop = dir().join("pop_hs.jwk");
+    generate_key(ISSUER_SEED, &issuer);
+    generate_key(POP_SEED, &pop);
+    let body = dir().join("body_hs.json");
+    std::fs::write(&body, br#"{"amount":100}"#).unwrap();
+
+    let wit = stdout(&wimsey(&[
+        "wit",
+        "issue",
+        "--issuer-key",
+        issuer.to_str().unwrap(),
+        "--cnf-key",
+        pop.to_str().unwrap(),
+        "--sub",
+        "spiffe://example.org/api",
+        "--iss",
+        "https://issuer.example",
+        "--now",
+        "1700000000",
+    ]));
+    let wit = wit.trim();
+
+    let signed = stdout(&wimsey(&[
+        "httpsig",
+        "sign",
+        "--pop-key",
+        pop.to_str().unwrap(),
+        "--method",
+        "POST",
+        "--authority",
+        "service.example",
+        "--path",
+        "/transfer",
+        "--wit",
+        wit,
+        "--body-file",
+        body.to_str().unwrap(),
+        "--keyid",
+        "issuer-key-1",
+        "--created",
+        "1700000000",
+    ]));
+    let sig_input = signed
+        .lines()
+        .find_map(|l| l.strip_prefix("Signature-Input: "))
+        .expect("signature-input line")
+        .to_owned();
+    let sig = signed
+        .lines()
+        .find_map(|l| l.strip_prefix("Signature: "))
+        .expect("signature line")
+        .to_owned();
+
+    // Valid: the WIT verifies and the signature covers the request and body.
+    let verified = stdout(&wimsey(&[
+        "httpsig",
+        "verify",
+        "--issuer-jwk",
+        issuer.to_str().unwrap(),
+        "--wit",
+        wit,
+        "--method",
+        "POST",
+        "--authority",
+        "service.example",
+        "--path",
+        "/transfer",
+        "--body-file",
+        body.to_str().unwrap(),
+        "--signature-input",
+        &sig_input,
+        "--signature",
+        &sig,
+        "--now",
+        "1700000100",
+    ]));
+    assert!(verified.contains("spiffe://example.org/api"));
+
+    // A tampered body changes the covered content-digest and must fail.
+    let tampered = dir().join("body_hs_tampered.json");
+    std::fs::write(&tampered, br#"{"amount":999}"#).unwrap();
+    let output = wimsey(&[
+        "httpsig",
+        "verify",
+        "--issuer-jwk",
+        issuer.to_str().unwrap(),
+        "--wit",
+        wit,
+        "--method",
+        "POST",
+        "--authority",
+        "service.example",
+        "--path",
+        "/transfer",
+        "--body-file",
+        tampered.to_str().unwrap(),
+        "--signature-input",
+        &sig_input,
+        "--signature",
+        &sig,
+        "--now",
+        "1700000100",
+    ]);
+    assert!(!output.status.success());
+}

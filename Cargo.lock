@@ -492,6 +492,7 @@ dependencies = [
  "getrandom",
  "serde",
  "serde_json",
+ "wimsey-httpsig",
  "wimsey-identifier",
  "wimsey-wit",
  "wimsey-wpt",
