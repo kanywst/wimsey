@@ -419,6 +419,8 @@ fn write_owner_only(path: &Path, content: &str) -> Result<()> {
         let _ = std::fs::remove_file(&temp_path);
         return Err(e.into());
     }
+    // Close the handle before renaming; Windows refuses to rename an open file.
+    drop(file);
     if let Err(e) = std::fs::rename(&temp_path, path) {
         let _ = std::fs::remove_file(&temp_path);
         return Err(format!("renaming temporary file: {e}").into());
