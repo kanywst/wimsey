@@ -11,5 +11,13 @@ authors.workspace = true
 keywords.workspace = true
 categories.workspace = true
 
+[dependencies]
+wimsey-identifier = { workspace = true }
+ed25519-dalek = { workspace = true }
+thiserror = { workspace = true }
+rcgen = { version = "0.14", default-features = false, features = ["crypto", "ring"] }
+x509-parser = "0.17"
+time = "0.3"
+
 [lints]
 workspace = true
