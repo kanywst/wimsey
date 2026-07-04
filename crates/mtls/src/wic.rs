@@ -114,13 +114,19 @@ pub fn verify(wic_der: &[u8], ca_der: &[u8], now: u64) -> Result<WorkloadIdentif
     let (_, leaf) = X509Certificate::from_der(wic_der).map_err(|_| MtlsError::Parse)?;
     let (_, ca) = X509Certificate::from_der(ca_der).map_err(|_| MtlsError::Parse)?;
 
-    // Both the certificate signature and the CA's own key must be Ed25519.
+    // The outer signatureAlgorithm, the inner tbsCertificate.signature (RFC 5280
+    // Section 4.1.1.2) and the CA's own key must all be Ed25519.
     if leaf.signature_algorithm.algorithm != OID_SIG_ED25519
+        || leaf.tbs_certificate.signature.algorithm != OID_SIG_ED25519
         || ca.public_key().algorithm.algorithm != OID_SIG_ED25519
     {
         return Err(MtlsError::UnsupportedAlgorithm);
     }
 
+    // The CA public key BIT STRING must be a whole number of octets.
+    if ca.public_key().subject_public_key.unused_bits != 0 {
+        return Err(MtlsError::InvalidKey);
+    }
     let ca_key: [u8; 32] = ca
         .public_key()
         .subject_public_key
@@ -163,19 +169,16 @@ fn uri_san(cert: &X509Certificate) -> Result<WorkloadIdentifier, MtlsError> {
         .map_err(|_| MtlsError::Parse)?
         .ok_or(MtlsError::MissingIdentifier)?;
 
-    // An X.509-SVID carries exactly one URI SAN (SPIFFE X509-SVID Section 4.2).
-    let mut uris = san
-        .value
-        .general_names
-        .iter()
-        .filter_map(|name| match name {
-            GeneralName::URI(uri) => Some(*uri),
-            _ => None,
+    // An X.509-SVID's SAN is exactly one URI and nothing else (SPIFFE X509-SVID
+    // Section 4.2).
+    let names = san.value.general_names.as_slice();
+    let [GeneralName::URI(uri)] = names else {
+        return Err(if names.len() > 1 {
+            MtlsError::MultipleIdentifiers
+        } else {
+            MtlsError::MissingIdentifier
         });
-    let uri = uris.next().ok_or(MtlsError::MissingIdentifier)?;
-    if uris.next().is_some() {
-        return Err(MtlsError::MultipleIdentifiers);
-    }
+    };
     Ok(WorkloadIdentifier::parse(uri)?)
 }
 
