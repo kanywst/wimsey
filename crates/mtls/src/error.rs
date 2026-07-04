@@ -25,6 +25,9 @@ pub enum MtlsError {
     /// The certificate carries no URI SAN workload identifier.
     #[error("certificate has no URI SAN workload identifier")]
     MissingIdentifier,
+    /// The certificate carries more than one URI SAN.
+    #[error("certificate has more than one URI SAN")]
+    MultipleIdentifiers,
     /// The URI SAN was not a valid workload identifier.
     #[error("invalid workload identifier: {0}")]
     Identifier(#[from] wimsey_identifier::ParseError),

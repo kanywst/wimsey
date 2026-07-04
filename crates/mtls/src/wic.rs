@@ -101,8 +101,9 @@ pub fn workload_identifier(wic_der: &[u8]) -> Result<WorkloadIdentifier, MtlsErr
 /// Verifies a WIC against a CA certificate at time `now` (Unix seconds) and
 /// returns the workload identifier.
 ///
-/// Checks the signature algorithm is Ed25519, the CA signature over the
-/// tbsCertificate, the validity window, and the presence of a URI SAN.
+/// Checks that both the certificate signature and the CA key are Ed25519, the
+/// CA signature over the tbsCertificate, that both the CA and leaf are within
+/// their validity windows, and that the leaf carries exactly one URI SAN.
 ///
 /// # Errors
 ///
@@ -113,7 +114,10 @@ pub fn verify(wic_der: &[u8], ca_der: &[u8], now: u64) -> Result<WorkloadIdentif
     let (_, leaf) = X509Certificate::from_der(wic_der).map_err(|_| MtlsError::Parse)?;
     let (_, ca) = X509Certificate::from_der(ca_der).map_err(|_| MtlsError::Parse)?;
 
-    if leaf.signature_algorithm.algorithm != OID_SIG_ED25519 {
+    // Both the certificate signature and the CA's own key must be Ed25519.
+    if leaf.signature_algorithm.algorithm != OID_SIG_ED25519
+        || ca.public_key().algorithm.algorithm != OID_SIG_ED25519
+    {
         return Err(MtlsError::UnsupportedAlgorithm);
     }
 
@@ -126,6 +130,10 @@ pub fn verify(wic_der: &[u8], ca_der: &[u8], now: u64) -> Result<WorkloadIdentif
         .map_err(|_| MtlsError::InvalidKey)?;
     let ca_key = VerifyingKey::from_bytes(&ca_key).map_err(|_| MtlsError::InvalidKey)?;
 
+    // The signature BIT STRING must be a whole number of octets.
+    if leaf.signature_value.unused_bits != 0 {
+        return Err(MtlsError::InvalidSignature);
+    }
     let signature: [u8; 64] = leaf
         .signature_value
         .data
@@ -139,9 +147,10 @@ pub fn verify(wic_der: &[u8], ca_der: &[u8], now: u64) -> Result<WorkloadIdentif
         )
         .map_err(|_| MtlsError::InvalidSignature)?;
 
+    // Both the leaf and the CA must be within their validity windows.
     let secs = i64::try_from(now).map_err(|_| MtlsError::Time)?;
     let at = ASN1Time::from_timestamp(secs).map_err(|_| MtlsError::Time)?;
-    if !leaf.validity().is_valid_at(at) {
+    if !ca.validity().is_valid_at(at) || !leaf.validity().is_valid_at(at) {
         return Err(MtlsError::NotValid);
     }
 
@@ -153,12 +162,21 @@ fn uri_san(cert: &X509Certificate) -> Result<WorkloadIdentifier, MtlsError> {
         .subject_alternative_name()
         .map_err(|_| MtlsError::Parse)?
         .ok_or(MtlsError::MissingIdentifier)?;
-    for name in &san.value.general_names {
-        if let GeneralName::URI(uri) = name {
-            return Ok(WorkloadIdentifier::parse(uri)?);
-        }
+
+    // An X.509-SVID carries exactly one URI SAN (SPIFFE X509-SVID Section 4.2).
+    let mut uris = san
+        .value
+        .general_names
+        .iter()
+        .filter_map(|name| match name {
+            GeneralName::URI(uri) => Some(*uri),
+            _ => None,
+        });
+    let uri = uris.next().ok_or(MtlsError::MissingIdentifier)?;
+    if uris.next().is_some() {
+        return Err(MtlsError::MultipleIdentifiers);
     }
-    Err(MtlsError::MissingIdentifier)
+    Ok(WorkloadIdentifier::parse(uri)?)
 }
 
 #[cfg(test)]
@@ -216,5 +234,21 @@ mod tests {
         let ca = WorkloadCa::generate().unwrap();
         let err = workload_identifier(ca.certificate_der());
         assert!(matches!(err, Err(MtlsError::MissingIdentifier)));
+    }
+
+    #[test]
+    fn rejects_multiple_uri_sans() {
+        use rcgen::{CertificateParams, KeyPair, SanType, PKCS_ED25519};
+
+        let mut params = CertificateParams::new(Vec::new()).unwrap();
+        params.subject_alt_names = vec![
+            SanType::URI("spiffe://example.org/a".try_into().unwrap()),
+            SanType::URI("spiffe://example.org/b".try_into().unwrap()),
+        ];
+        let key = KeyPair::generate_for(&PKCS_ED25519).unwrap();
+        let cert = params.self_signed(&key).unwrap();
+
+        let err = workload_identifier(cert.der().as_ref());
+        assert!(matches!(err, Err(MtlsError::MultipleIdentifiers)));
     }
 }
