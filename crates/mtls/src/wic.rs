@@ -94,7 +94,10 @@ fn to_time(unix: u64) -> Result<::time::OffsetDateTime, MtlsError> {
 /// Returns [`MtlsError::Parse`] if the certificate cannot be parsed, or
 /// [`MtlsError::MissingIdentifier`] if it has no URI SAN.
 pub fn workload_identifier(wic_der: &[u8]) -> Result<WorkloadIdentifier, MtlsError> {
-    let (_, cert) = X509Certificate::from_der(wic_der).map_err(|_| MtlsError::Parse)?;
+    let (rest, cert) = X509Certificate::from_der(wic_der).map_err(|_| MtlsError::Parse)?;
+    if !rest.is_empty() {
+        return Err(MtlsError::Parse);
+    }
     uri_san(&cert)
 }
 
@@ -111,8 +114,11 @@ pub fn workload_identifier(wic_der: &[u8]) -> Result<WorkloadIdentifier, MtlsErr
 /// algorithm or key, a bad signature, an out-of-window certificate, or a
 /// missing / invalid identifier.
 pub fn verify(wic_der: &[u8], ca_der: &[u8], now: u64) -> Result<WorkloadIdentifier, MtlsError> {
-    let (_, leaf) = X509Certificate::from_der(wic_der).map_err(|_| MtlsError::Parse)?;
-    let (_, ca) = X509Certificate::from_der(ca_der).map_err(|_| MtlsError::Parse)?;
+    let (rest_wic, leaf) = X509Certificate::from_der(wic_der).map_err(|_| MtlsError::Parse)?;
+    let (rest_ca, ca) = X509Certificate::from_der(ca_der).map_err(|_| MtlsError::Parse)?;
+    if !rest_wic.is_empty() || !rest_ca.is_empty() {
+        return Err(MtlsError::Parse);
+    }
 
     // The outer signatureAlgorithm, the inner tbsCertificate.signature (RFC 5280
     // Section 4.1.1.2) and the CA's own key must all be Ed25519.
