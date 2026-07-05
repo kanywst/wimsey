@@ -175,16 +175,20 @@ fn uri_san(cert: &X509Certificate) -> Result<WorkloadIdentifier, MtlsError> {
         .map_err(|_| MtlsError::Parse)?
         .ok_or(MtlsError::MissingIdentifier)?;
 
-    // An X.509-SVID's SAN is exactly one URI and nothing else (SPIFFE X509-SVID
-    // Section 4.2).
-    let names = san.value.general_names.as_slice();
-    let [GeneralName::URI(uri)] = names else {
-        return Err(if names.len() > 1 {
-            MtlsError::MultipleIdentifiers
-        } else {
-            MtlsError::MissingIdentifier
+    // A SPIFFE X.509-SVID carries exactly one URI SAN; other SAN types (e.g.
+    // DNS names) are permitted and ignored.
+    let mut uris = san
+        .value
+        .general_names
+        .iter()
+        .filter_map(|name| match name {
+            GeneralName::URI(uri) => Some(*uri),
+            _ => None,
         });
-    };
+    let uri = uris.next().ok_or(MtlsError::MissingIdentifier)?;
+    if uris.next().is_some() {
+        return Err(MtlsError::MultipleIdentifiers);
+    }
     Ok(WorkloadIdentifier::parse(uri)?)
 }
 
@@ -259,5 +263,25 @@ mod tests {
 
         let err = workload_identifier(cert.der().as_ref());
         assert!(matches!(err, Err(MtlsError::MultipleIdentifiers)));
+    }
+
+    #[test]
+    fn accepts_a_uri_san_alongside_other_san_types() {
+        use rcgen::{CertificateParams, KeyPair, SanType, PKCS_ED25519};
+
+        // SPIFFE permits a single URI SAN together with other SAN types.
+        let identifier = id();
+        let mut params = CertificateParams::new(Vec::new()).unwrap();
+        params.subject_alt_names = vec![
+            SanType::URI(identifier.as_str().try_into().unwrap()),
+            SanType::DnsName("example.org".try_into().unwrap()),
+        ];
+        let key = KeyPair::generate_for(&PKCS_ED25519).unwrap();
+        let cert = params.self_signed(&key).unwrap();
+
+        assert_eq!(
+            workload_identifier(cert.der().as_ref()).unwrap(),
+            identifier
+        );
     }
 }
