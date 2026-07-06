@@ -61,7 +61,11 @@ fn load_key() -> Result<SigningKey> {
     } else {
         let mut seed = [0u8; 32];
         getrandom::fill(&mut seed).map_err(|e| format!("getrandom: {e}"))?;
-        tracing::warn!("WIMSEY_ISSUER_KEY not set; generated an ephemeral key");
+        tracing::warn!(
+            "WIMSEY_ISSUER_KEY not set; generated an ephemeral key — issued WITs \
+             stop verifying after a restart, and multiple instances disagree; set \
+             a stable key for anything beyond local experimentation"
+        );
         Ok(SigningKey::from_bytes(&seed))
     }
 }
