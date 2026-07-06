@@ -89,6 +89,25 @@ wimsey httpsig verify --issuer-jwk issuer.jwk --wit "$(cat wit.txt)" \
   --signature "$(sed -n 's/^Signature: //p' sig.txt)"
 ```
 
+## Running the issuer
+
+`wimsey-issuer` is an experimental HTTP service that issues WITs. A workload
+posts its identifier and proof-of-possession public key; the issuer returns a
+signed WIT and publishes its own public key at `/jwks`.
+
+```bash
+export WIMSEY_ISSUER_KEY=$(wimsey key generate | jq -r .d)
+export WIMSEY_ISSUER_ISS=https://issuer.example
+cargo run -p wimsey-issuer &
+
+curl -s localhost:8080/jwks
+curl -s -X POST localhost:8080/wit -H 'content-type: application/json' \
+  -d '{"sub":"spiffe://example.org/api","cnf_jwk":{"kty":"OKP","crv":"Ed25519","x":"..."}}'
+```
+
+It is scoped as a reference/experimentation issuer, not a SPIRE replacement; a
+SPIFFE Workload API shim is planned.
+
 ## Roadmap
 
 See [`ROADMAP.md`](ROADMAP.md) for the phased plan from scaffold to CNCF
