@@ -211,7 +211,7 @@ fn run_key(cmd: KeyCmd) -> Result<()> {
                 SigningKey::from_bytes(&seed)
             } else {
                 let mut seed = [0u8; 32];
-                getrandom::getrandom(&mut seed).map_err(|e| format!("getrandom: {e}"))?;
+                getrandom::fill(&mut seed).map_err(|e| format!("getrandom: {e}"))?;
                 SigningKey::from_bytes(&seed)
             };
             emit(
@@ -374,7 +374,7 @@ fn random_id() -> Result<String> {
     use std::fmt::Write as _;
 
     let mut bytes = [0u8; 16];
-    getrandom::getrandom(&mut bytes).map_err(|e| format!("getrandom: {e}"))?;
+    getrandom::fill(&mut bytes).map_err(|e| format!("getrandom: {e}"))?;
     let mut id = String::with_capacity(bytes.len() * 2);
     for b in bytes {
         let _ = write!(id, "{b:02x}");
