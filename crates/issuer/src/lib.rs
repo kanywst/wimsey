@@ -137,9 +137,13 @@ async fn healthz() -> &'static str {
 }
 
 async fn jwks(State(issuer): State<Arc<Issuer>>) -> impl IntoResponse {
-    // The bytes are pre-rendered; `Bytes::clone` is a cheap refcount bump.
+    // The bytes are pre-rendered; `Bytes::clone` is a cheap refcount bump. The
+    // JWKS is static, so it is cacheable; the media type is the RFC 7517 one.
     (
-        [(axum::http::header::CONTENT_TYPE, "application/json")],
+        [
+            (axum::http::header::CONTENT_TYPE, "application/jwk-set+json"),
+            (axum::http::header::CACHE_CONTROL, "public, max-age=3600"),
+        ],
         issuer.jwks.clone(),
     )
 }
