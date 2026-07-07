@@ -7,6 +7,8 @@ reaches a first release.
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-07-07
+
 ### Added
 
 - `wimsey-identifier`: a SPIFFE-ID compatible workload identifier parser.
@@ -24,4 +26,5 @@ reaches a first release.
 - Project governance, security policy, contributing guide (DCO), and OpenSSF
   Scorecard automation.
 
-[Unreleased]: https://github.com/kanywst/wimsey/commits/main
+[Unreleased]: https://github.com/kanywst/wimsey/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/kanywst/wimsey/releases/tag/v0.1.0
