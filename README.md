@@ -52,9 +52,12 @@ The proof of possession is one of three interchangeable bindings:
 ## Quick start
 
 ```bash
+# Install the CLI once (or prefix each command with `cargo run -p wimsey-cli --`).
+cargo install --path crates/cli
+
 # An issuer key and a workload proof-of-possession key.
-cargo run -p wimsey-cli -- key generate --out issuer.jwk
-cargo run -p wimsey-cli -- key generate --out pop.jwk
+wimsey key generate --out issuer.jwk
+wimsey key generate --out pop.jwk
 
 # Issue a WIT for a workload, then verify it.
 wimsey wit issue --issuer-key issuer.jwk --cnf-key pop.jwk \
