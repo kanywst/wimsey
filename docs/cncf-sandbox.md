@@ -7,15 +7,15 @@ a living checklist, not a claim of acceptance.
 ## Why CNCF, and why not a duplicate
 
 WIMSE (Workload Identity in Multi System Environments) is an IETF working group
-standardising how workloads authenticate to one another across systems. The WG
+standardizing how workloads authenticate to one another across systems. The WG
 publishes specifications but ships no reference code, and the existing
 implementations are vendor-tied and almost all in Go.
 
 `wimsey` is a vendor-neutral, spec-faithful reference implementation in Rust,
 with cross-implementation conformance vectors other implementers can validate
 against. It is **not** a SPIFFE/SPIRE competitor: WIC is compatible with the
-X.509-SVID shape, the issuer is scoped to reference/experimentation with a SPIFFE
-Workload API shim planned, and the value is a neutral reference plus test
+X.509-SVID shape. The issuer is scoped to reference/experimentation (with a
+SPIFFE Workload API shim planned), and the value is a neutral reference plus test
 vectors that the whole ecosystem — SPIFFE included — can use. That neutrality is
 exactly what a CNCF home protects.
 
@@ -47,7 +47,7 @@ exactly what a CNCF home protects.
    committer base. Recruit at least a second maintainer — the SPIFFE sig-spec,
    Defakto, Teleport and Cofide communities are natural places to ask — and get
    `wimsey` listed in the drafts' RFC 7942 implementation-status sections.
-2. **Personal namespace.** Move the repository to a neutral GitHub organisation
+2. **Personal namespace.** Move the repository to a neutral GitHub organization
    before or as part of the donation.
 3. **No tagged release yet.** Cut `0.1.0` so there is a referenceable artifact.
 

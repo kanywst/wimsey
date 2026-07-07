@@ -8,7 +8,7 @@
 [WIMSE](https://datatracker.ietf.org/wg/wimse/about/) workload-identity specs,
 in Rust.**
 
-WIMSE (Workload Identity in Multi System Environments) standardises how software
+WIMSE (Workload Identity in Multi System Environments) standardizes how software
 workloads prove their identity to one another. The working group publishes
 specifications but no reference code — `wimsey` fills that gap with a clean,
 spec-faithful implementation plus cross-implementation conformance vectors that

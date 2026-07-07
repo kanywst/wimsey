@@ -28,11 +28,11 @@ cargo test --workspace --all-targets
 
 ## Guidelines
 
-- One logical change per commit; keep refactors separate from behaviour
+- One logical change per commit; keep refactors separate from behavior
   changes.
 - Reference the relevant draft section for spec-driven code, and keep
   [`SPEC-MAP.md`](SPEC-MAP.md) accurate when a pinned revision changes.
-- Add or update conformance vectors alongside behaviour changes.
+- Add or update conformance vectors alongside behavior changes.
 - Security-sensitive code must fail closed and be covered by negative tests.
 
 ## Reporting security issues
