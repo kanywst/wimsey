@@ -1,122 +1,91 @@
 # wimsey
 
 [![ci](https://github.com/kanywst/wimsey/actions/workflows/ci.yml/badge.svg)](https://github.com/kanywst/wimsey/actions/workflows/ci.yml)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/kanywst/wimsey/badge)](https://scorecard.dev/viewer/?uri=github.com/kanywst/wimsey)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
-A vendor-neutral WIMSE reference implementation in Rust.
+**A vendor-neutral reference implementation of the IETF
+[WIMSE](https://datatracker.ietf.org/wg/wimse/about/) workload-identity specs,
+in Rust.**
 
-[WIMSE](https://datatracker.ietf.org/wg/wimse/about/) (Workload Identity in
-Multi System Environments) is an IETF working group standardising how software
-workloads prove their identity to one another. `wimsey` implements the WIMSE
-credential formats and transport bindings as a clean, spec-faithful Rust
-workspace, with cross-implementation conformance vectors so other implementers
-can test against it.
+WIMSE (Workload Identity in Multi System Environments) standardises how software
+workloads prove their identity to one another. The working group publishes
+specifications but no reference code — `wimsey` fills that gap with a clean,
+spec-faithful implementation plus cross-implementation conformance vectors that
+any vendor can validate against.
 
-> Status: pre-alpha. The specs are Internet-Drafts (no RFC yet) and `wimsey`
-> pins specific draft revisions — see [`SPEC-MAP.md`](SPEC-MAP.md). Nothing here
-> is production-ready.
+> **Pre-alpha.** The specs are Internet-Drafts (no RFC yet) and `wimsey` pins
+> specific draft revisions in [`SPEC-MAP.md`](SPEC-MAP.md). Not production-ready.
 
-## Why this exists
+## How it works
 
-The IETF WIMSE working group publishes specs but no reference code. Existing
-implementations are vendor-tied and mostly Go (SPIFFE/SPIRE, Teleport, Defakto,
-Cofide). `wimsey` aims to be a neutral, readable, conformance-tested
-implementation that any vendor can validate against, and a candidate for
-donation to a neutral home (e.g. CNCF Sandbox).
+A workload gets a signed **Workload Identity Token (WIT)** from an issuer, then
+proves possession of its key whenever it calls a peer.
 
-## Workspace layout
-
-| Crate | Purpose | Spec |
-| --- | --- | --- |
-| `wimsey-identifier` | Workload Identifier URI scheme | `draft-ietf-wimse-identifier` |
-| `wimsey-wit` | Workload Identity Token + Certificate | `draft-ietf-wimse-workload-creds` |
-| `wimsey-wpt` | Workload Proof Token (PoP) | `draft-ietf-wimse-wpt` |
-| `wimsey-httpsig` | HTTP Message Signatures binding | `draft-ietf-wimse-http-signature` |
-| `wimsey-mtls` | Mutual TLS binding | `draft-ietf-wimse-mutual-tls` |
-| `wimsey-issuer` | Experimental issuer + SPIFFE Workload API shim | — |
-| `wimsey-cli` | The `wimsey` command-line tool | — |
-
-## Building
-
-```bash
-cargo check --workspace
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace
-cargo run -p wimsey-cli
+```mermaid
+flowchart LR
+    W[Workload] -- "1 - identifier + PoP key" --> ISS[wimsey-issuer]
+    ISS -- "2 - WIT, signed by the issuer" --> W
+    W -- "3 - WIT + proof of possession" --> P[Peer service]
+    P -- "4 - verify the WIT, then the proof" --> P
 ```
 
-## Using the `wimsey` CLI
+The proof of possession is one of three interchangeable bindings:
 
-The `wimsey` binary ties the crates together. Keys are Ed25519, stored as OKP
-JSON Web Keys.
+- a **Workload Proof Token (WPT)** — a DPoP-style JWT bound to the WIT;
+- an **RFC 9421 HTTP Message Signature** over the request carrying the WIT;
+- **mutual TLS** with a **Workload Identity Certificate (WIC)**, the X.509-SVID
+  shape SPIFFE uses.
+
+## Components
+
+| Crate | Role | Spec |
+| --- | --- | --- |
+| `wimsey-identifier` | Workload identifier URI scheme | `draft-ietf-wimse-identifier` |
+| `wimsey-wit` | Workload Identity Token (WIT / WIC) | `draft-ietf-wimse-workload-creds` |
+| `wimsey-wpt` | Workload Proof Token | `draft-ietf-wimse-wpt` |
+| `wimsey-httpsig` | HTTP Message Signatures binding | `draft-ietf-wimse-http-signature` |
+| `wimsey-mtls` | mTLS binding (WIC) | `draft-ietf-wimse-mutual-tls` |
+| `wimsey-cli` | The `wimsey` command-line tool | — |
+| `wimsey-issuer` | Experimental HTTP issuer | — |
+
+## Quick start
 
 ```bash
-# Generate an issuer key and a workload proof-of-possession key.
+# An issuer key and a workload proof-of-possession key.
 cargo run -p wimsey-cli -- key generate --out issuer.jwk
 cargo run -p wimsey-cli -- key generate --out pop.jwk
 
-# Issue a Workload Identity Token (its cnf is the pop public key).
+# Issue a WIT for a workload, then verify it.
 wimsey wit issue --issuer-key issuer.jwk --cnf-key pop.jwk \
   --sub spiffe://example.org/api --iss https://issuer.example > wit.txt
-
-# Verify it, or decode it without verifying.
 wimsey wit verify --issuer-jwk issuer.jwk --token-file wit.txt
-wimsey wit inspect --token-file wit.txt
 
-# Create a Workload Proof Token bound to the WIT, then verify the pair.
+# Prove possession with a WPT, then verify the WIT and proof together.
 wimsey wpt new --pop-key pop.jwk --wit "$(cat wit.txt)" \
   --aud https://service.example/transfer > wpt.txt
 wimsey wpt verify --issuer-jwk issuer.jwk --wit "$(cat wit.txt)" \
   --aud https://service.example/transfer --proof "$(cat wpt.txt)"
 ```
 
-`wpt verify` verifies the WIT with the issuer key first, then checks the proof
-against the WIT's confirmation key — success establishes the workload identity,
-not merely possession of some key.
+The same WIT can instead be carried in an RFC 9421 HTTP signature
+(`wimsey httpsig sign|verify`) or an mTLS client certificate. Run
+`wimsey --help`, or start the issuer with `cargo run -p wimsey-issuer`.
 
-Alternatively, sign an HTTP request (RFC 9421) carrying the WIT, covering the
-method, authority, path, content digest and the WIT header:
+## Documentation
 
-```bash
-printf '{"amount":100}' > body.json
-wimsey httpsig sign --pop-key pop.jwk \
-  --method POST --authority service.example --path /transfer \
-  --wit "$(cat wit.txt)" --body-file body.json --keyid issuer-key-1 > sig.txt
+- [Roadmap](ROADMAP.md) — the phased plan toward CNCF Sandbox readiness.
+- [Spec map](SPEC-MAP.md) — the pinned IETF draft revisions per crate.
+- [CNCF Sandbox readiness](docs/cncf-sandbox.md) — criteria checklist and draft
+  application.
+- [Changelog](CHANGELOG.md).
 
-wimsey httpsig verify --issuer-jwk issuer.jwk --wit "$(cat wit.txt)" \
-  --method POST --authority service.example --path /transfer \
-  --body-file body.json \
-  --signature-input "$(sed -n 's/^Signature-Input: //p' sig.txt)" \
-  --signature "$(sed -n 's/^Signature: //p' sig.txt)"
-```
-
-## Running the issuer
-
-`wimsey-issuer` is an experimental HTTP service that issues WITs. A workload
-posts its identifier and proof-of-possession public key; the issuer returns a
-signed WIT and publishes its own public key at `/jwks`.
-
-```bash
-export WIMSEY_ISSUER_KEY=$(wimsey key generate | jq -r .d)
-export WIMSEY_ISSUER_ISS=https://issuer.example
-cargo run -p wimsey-issuer &
-
-curl -s localhost:8080/jwks
-curl -s -X POST localhost:8080/wit -H 'content-type: application/json' \
-  -d '{"sub":"spiffe://example.org/api","cnf_jwk":{"kty":"OKP","crv":"Ed25519","x":"..."}}'
-```
-
-It is scoped as a reference/experimentation issuer, not a SPIRE replacement; a
-SPIFFE Workload API shim is planned.
-
-## Roadmap
-
-See [`ROADMAP.md`](ROADMAP.md) for the phased plan from scaffold to CNCF
-Sandbox readiness.
-
-## Contributing
+## Community
 
 Contributions are welcome under the [DCO](CONTRIBUTING.md). Please read the
-[Code of Conduct](CODE_OF_CONDUCT.md) and [security policy](SECURITY.md).
+[Code of Conduct](CODE_OF_CONDUCT.md), the [governance](GOVERNANCE.md) and
+[maintainers](MAINTAINERS.md), and the [security policy](SECURITY.md). Using
+`wimsey`? Add yourself to [`ADOPTERS.md`](ADOPTERS.md).
 
 ## License
 
