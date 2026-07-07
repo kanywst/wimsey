@@ -15,7 +15,7 @@ toward the CNCF project governance expectations as the maintainer base widens.
 - Routine changes are approved by maintainer review of a pull request.
 - Significant changes (spec revision bumps, new crates, governance changes) are
   proposed as an issue or pull request and decided by maintainer consensus.
-- The project explicitly seeks maintainers from more than one organisation to
+- The project explicitly seeks maintainers from more than one organization to
   preserve vendor neutrality.
 
 ## Adding maintainers

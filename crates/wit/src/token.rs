@@ -31,7 +31,7 @@ struct Header {
 /// Parameters controlling WIT verification.
 ///
 /// `now` is injected rather than read from the system clock so that
-/// time-dependent behaviour is deterministic and reproducible in tests.
+/// time-dependent behavior is deterministic and reproducible in tests.
 #[derive(Debug, Clone)]
 pub struct Validation {
     /// The current time, in seconds since the Unix epoch.
