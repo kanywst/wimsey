@@ -11,7 +11,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.0.0"
+version = "0.1.0"
 edition = "2021"
 rust-version = "1.85"
 license = "Apache-2.0"
@@ -22,10 +22,10 @@ keywords = ["wimse", "workload-identity", "spiffe", "wit", "jose"]
 categories = ["authentication", "cryptography"]
 
 [workspace.dependencies]
-wimsey-identifier = { path = "crates/identifier", version = "0.0.0" }
-wimsey-wit = { path = "crates/wit", version = "0.0.0" }
-wimsey-wpt = { path = "crates/wpt", version = "0.0.0" }
-wimsey-httpsig = { path = "crates/httpsig", version = "0.0.0" }
+wimsey-identifier = { path = "crates/identifier", version = "0.1.0" }
+wimsey-wit = { path = "crates/wit", version = "0.1.0" }
+wimsey-wpt = { path = "crates/wpt", version = "0.1.0" }
+wimsey-httpsig = { path = "crates/httpsig", version = "0.1.0" }
 ed25519-dalek = "2"
 base64 = "0.22"
 serde = { version = "1", features = ["derive"] }
