@@ -26,9 +26,13 @@ jobs:
     # A pull request from a fork gets no secrets, so the job would fail on
     # authentication rather than say anything useful. Drafts are skipped until
     # they are marked ready, which is what the ready_for_review trigger is for.
+    # Dependabot only ever bumps a version in Cargo.toml and Cargo.lock; none of
+    # the five things below apply to it, so a review costs tokens to say nothing.
+    # CI and cargo-deny are the checks that matter for a bump.
     if: >-
       github.event.pull_request.head.repo.full_name == github.repository &&
-      github.event.pull_request.draft == false
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.user.login != 'dependabot[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
