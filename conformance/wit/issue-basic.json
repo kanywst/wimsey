@@ -1,5 +1,9 @@
 {
-  "description": "WIT issuance with EdDSA (Ed25519), draft-ietf-wimse-workload-creds-01",
+  "format": "wimse-conformance/v1",
+  "suite": "wit",
+  "id": "issue-basic",
+  "spec": "draft-ietf-wimse-workload-creds-01",
+  "description": "WIT issuance with EdDSA (Ed25519), plus the inputs a verifier must reject",
   "alg": "EdDSA",
   "issuer_signing_key_seed_b64u": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
   "kid": "issuer-key-1",
@@ -18,5 +22,43 @@
       }
     }
   },
-  "token": "eyJ0eXAiOiJ3aXQrand0IiwiYWxnIjoiRWREU0EiLCJraWQiOiJpc3N1ZXIta2V5LTEifQ.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvYXBpIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDM2MDAsImp0aSI6ImExYjJjMyIsImNuZiI6eyJqd2siOnsia3R5IjoiT0tQIiwiY3J2IjoiRWQyNTUxOSIsIngiOiI2a3BzWS1LY1VncS05VkI3RXk3Ri1aVkhkcTYtdm51U1FoN3FhUlJHMGl3In19fQ.cZdOOzjoMG85kBab1w8ZnJwVDFmwZE_SbeSIhsuyDG0pWDR8VBme2Mqf5H4CNCF4fMt3AsPviKRiLwzcsPbNBQ"
+  "token": "eyJ0eXAiOiJ3aXQrand0IiwiYWxnIjoiRWREU0EiLCJraWQiOiJpc3N1ZXIta2V5LTEifQ.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvYXBpIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDM2MDAsImp0aSI6ImExYjJjMyIsImNuZiI6eyJqd2siOnsia3R5IjoiT0tQIiwiY3J2IjoiRWQyNTUxOSIsIngiOiI2a3BzWS1LY1VncS05VkI3RXk3Ri1aVkhkcTYtdm51U1FoN3FhUlJHMGl3In19fQ.cZdOOzjoMG85kBab1w8ZnJwVDFmwZE_SbeSIhsuyDG0pWDR8VBme2Mqf5H4CNCF4fMt3AsPviKRiLwzcsPbNBQ",
+  "negative": [
+    {
+      "id": "expired",
+      "description": "verified one second after `exp`",
+      "expect": "expired",
+      "verify_now": 1700003601
+    },
+    {
+      "id": "issued-in-future",
+      "description": "verified one second before `iat`",
+      "expect": "issued_in_future",
+      "verify_now": 1699999999
+    },
+    {
+      "id": "wrong-typ",
+      "description": "validly signed, but the JOSE `typ` is `jwt` and not `wit+jwt`",
+      "expect": "wrong_type",
+      "token": "eyJ0eXAiOiJqd3QiLCJhbGciOiJFZERTQSIsImtpZCI6Imlzc3Vlci1rZXktMSJ9.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvYXBpIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDM2MDAsImp0aSI6ImExYjJjMyIsImNuZiI6eyJqd2siOnsia3R5IjoiT0tQIiwiY3J2IjoiRWQyNTUxOSIsIngiOiI2a3BzWS1LY1VncS05VkI3RXk3Ri1aVkhkcTYtdm51U1FoN3FhUlJHMGl3In19fQ.OAozXBux37CX9Vgi2ixRznuHd0YqYl8gHzya9ESgNHCTDoNxZUIXnh4UKJpXMo8JMRnzgNE-mjGWymOwMWLzBw"
+    },
+    {
+      "id": "tampered-payload",
+      "description": "`jti` was altered after signing; the payload is still valid JSON",
+      "expect": "invalid_signature",
+      "token": "eyJ0eXAiOiJ3aXQrand0IiwiYWxnIjoiRWREU0EiLCJraWQiOiJpc3N1ZXIta2V5LTEifQ.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvYXBpIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDM2MDAsImp0aSI6ImExYjJjNCIsImNuZiI6eyJqd2siOnsia3R5IjoiT0tQIiwiY3J2IjoiRWQyNTUxOSIsIngiOiI2a3BzWS1LY1VncS05VkI3RXk3Ri1aVkhkcTYtdm51U1FoN3FhUlJHMGl3In19fQ.cZdOOzjoMG85kBab1w8ZnJwVDFmwZE_SbeSIhsuyDG0pWDR8VBme2Mqf5H4CNCF4fMt3AsPviKRiLwzcsPbNBQ"
+    },
+    {
+      "id": "wrong-issuer-key",
+      "description": "verified against an issuer key that did not sign the token",
+      "expect": "invalid_signature",
+      "issuer_verifying_key_b64u": "gTl3Dqh9F19Wo1Rmw0x-zMuNipG07jeiXfYPW4_Js5Q"
+    },
+    {
+      "id": "issuer-mismatch",
+      "description": "the verifier expects a different `iss` than the token carries",
+      "expect": "issuer_mismatch",
+      "expected_iss": "https://other-issuer.example"
+    }
+  ]
 }

@@ -1,5 +1,9 @@
 {
-  "description": "WIMSE HTTP Message Signature (RFC 9421, ed25519) carrying a WIT",
+  "format": "wimse-conformance/v1",
+  "suite": "httpsig",
+  "id": "sign-basic",
+  "spec": "draft-ietf-wimse-http-signature-03",
+  "description": "WIMSE HTTP Message Signature (RFC 9421, ed25519) carrying a WIT, plus the inputs a verifier must reject",
   "pop_signing_key_seed_b64u": "CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk",
   "issuer_verifying_key_b64u": "iojj3XQJ8ZX9UtstPLpdcspnCb8dlBIb83SIAbQPb1w",
   "verify_now": 1700000100,
@@ -39,5 +43,65 @@
   "body": "{\"amount\":100}",
   "wit": "eyJ0eXAiOiJ3aXQrand0IiwiYWxnIjoiRWREU0EiLCJraWQiOiJpc3N1ZXIta2V5LTEifQ.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvYXBpIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDM2MDAsImp0aSI6ImExYjJjMyIsImNuZiI6eyJqd2siOnsia3R5IjoiT0tQIiwiY3J2IjoiRWQyNTUxOSIsIngiOiJfUmNrT0ZxZ3gxdGstM2pOWUMtaDJaSDk2X2RyRThXTzF3THF5RFhwOWhnIn19fQ.VSUTP7VJTKt7hWfJfxe9humGbZcgzsvpJo2rysWE9x71UQjo1bp_1ObsziGoE4yDY5egRskzbQwG-fAD6ncOCQ",
   "signature_input": "wimse=(\"@method\" \"@authority\" \"@path\" \"content-digest\" \"workload-identity-token\");created=1700000000;keyid=\"issuer-key-1\";alg=\"ed25519\"",
-  "signature": "wimse=:xntZ5wzykf30mOEm8EON58wAoo/cwul0aUDp1EJZV7y+KQ3jFBtfRFs2WL9r6xf6skFqemP61q8pVWkVz9/OCg==:"
+  "signature": "wimse=:xntZ5wzykf30mOEm8EON58wAoo/cwul0aUDp1EJZV7y+KQ3jFBtfRFs2WL9r6xf6skFqemP61q8pVWkVz9/OCg==:",
+  "negative": [
+    {
+      "id": "tampered-body",
+      "description": "the body no longer hashes to the signed `Content-Digest`",
+      "expect": "content_digest_mismatch",
+      "body": "{\"amount\":999}"
+    },
+    {
+      "id": "rerouted-path",
+      "description": "an intermediary changed `@path` after the signature was made",
+      "expect": "invalid_signature",
+      "request": {
+        "method": "POST",
+        "authority": "service.example",
+        "path": "/admin",
+        "query": null,
+        "headers": [
+          [
+            "Content-Type",
+            "application/json"
+          ],
+          [
+            "Content-Digest",
+            "sha-256=:TUu+Wcaq0iRCzeGZpqil8DRAX814+1qBwk7ySd4cRfE=:"
+          ],
+          [
+            "Workload-Identity-Token",
+            "eyJ0eXAiOiJ3aXQrand0IiwiYWxnIjoiRWREU0EiLCJraWQiOiJpc3N1ZXIta2V5LTEifQ.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvYXBpIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDM2MDAsImp0aSI6ImExYjJjMyIsImNuZiI6eyJqd2siOnsia3R5IjoiT0tQIiwiY3J2IjoiRWQyNTUxOSIsIngiOiJfUmNrT0ZxZ3gxdGstM2pOWUMtaDJaSDk2X2RyRThXTzF3THF5RFhwOWhnIn19fQ.VSUTP7VJTKt7hWfJfxe9humGbZcgzsvpJo2rysWE9x71UQjo1bp_1ObsziGoE4yDY5egRskzbQwG-fAD6ncOCQ"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "created-in-future",
+      "description": "the signature's `created` is ahead of the verifier's clock",
+      "expect": "created_in_future",
+      "verify_now": 1699999999
+    },
+    {
+      "id": "too-old",
+      "description": "the signature is older than the verifier's `max_age`",
+      "expect": "too_old",
+      "verify_now": 1700003600,
+      "max_age": 30
+    },
+    {
+      "id": "label-mismatch",
+      "description": "the verifier only accepts a label the request does not carry",
+      "expect": "label_mismatch",
+      "accept_label": "other"
+    },
+    {
+      "id": "missing-required-component",
+      "description": "the verifier requires a component the signature does not cover",
+      "expect": "missing_required_component",
+      "required_components": [
+        "\"authorization\""
+      ]
+    }
+  ]
 }

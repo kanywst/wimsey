@@ -1,0 +1,497 @@
+//! Deterministic generation of the conformance vectors.
+//!
+//! Everything here is fixed: the key seeds are constants, the timestamps are
+//! constants, and `EdDSA` is deterministic, so regenerating must reproduce the
+//! committed files byte for byte. CI relies on that — it regenerates and diffs,
+//! so an unintended encoding change shows up as a failing build rather than as a
+//! silent interop break.
+
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+use ed25519_dalek::{Signer, SigningKey};
+use wimsey_httpsig::{content_digest_sha256, sign, Component, HttpRequest, SignatureParams, ALG};
+use wimsey_identifier::WorkloadIdentifier;
+use wimsey_wit::{issue as issue_wit, Confirmation, Jwk, WitClaims};
+use wimsey_wpt::{issue as issue_wpt, wit_thumbprint, WptClaims};
+
+use crate::vectors::{
+    ErrorCode, Header, HttpSigNegative, HttpSigVector, Manifest, ManifestEntry, VectorParams,
+    VectorRequest, WitNegative, WitVector, WptNegative, WptVector, FORMAT,
+};
+
+/// The issuer's Ed25519 seed. Fixed so the vectors are reproducible.
+const ISSUER_SEED: [u8; 32] = [1u8; 32];
+/// A second issuer, used only as the wrong trust anchor in a negative case.
+const OTHER_ISSUER_SEED: [u8; 32] = [2u8; 32];
+/// The proof-of-possession seed used by the WIT vector.
+const WIT_POP_SEED: [u8; 32] = [7u8; 32];
+/// The proof-of-possession seed used by the WPT and httpsig vectors.
+const POP_SEED: [u8; 32] = [9u8; 32];
+
+const ISSUER: &str = "https://issuer.example";
+const SUBJECT: &str = "spiffe://example.org/workload/api";
+const KID: &str = "issuer-key-1";
+const IAT: u64 = 1_700_000_000;
+const EXP: u64 = 1_700_003_600;
+
+const WIT_SPEC: &str = "draft-ietf-wimse-workload-creds-01";
+const WPT_SPEC: &str = "draft-ietf-wimse-wpt-01";
+const HTTPSIG_SPEC: &str = "draft-ietf-wimse-http-signature-03";
+
+fn header(suite: &str, id: &str, spec: &str, description: &str) -> Header {
+    Header {
+        format: FORMAT.to_owned(),
+        suite: suite.to_owned(),
+        id: id.to_owned(),
+        spec: spec.to_owned(),
+        description: description.to_owned(),
+    }
+}
+
+fn wit_claims(sub: &str, pop: &SigningKey) -> WitClaims {
+    WitClaims {
+        iss: ISSUER.to_owned(),
+        sub: WorkloadIdentifier::parse(sub).expect("the fixed subject is a valid identifier"),
+        iat: IAT,
+        exp: EXP,
+        jti: "a1b2c3".to_owned(),
+        cnf: Confirmation {
+            jwk: Jwk::from_ed25519(&pop.verifying_key()),
+        },
+    }
+}
+
+/// A negative case with every override left unset; callers fill in the ones
+/// that make it invalid via struct update syntax.
+fn wit_neg(id: &str, description: &str, expect: ErrorCode) -> WitNegative {
+    WitNegative {
+        id: id.to_owned(),
+        description: description.to_owned(),
+        expect,
+        token: None,
+        verify_now: None,
+        issuer_verifying_key_b64u: None,
+        expected_iss: None,
+    }
+}
+
+fn wpt_neg(id: &str, description: &str, expect: ErrorCode) -> WptNegative {
+    WptNegative {
+        id: id.to_owned(),
+        description: description.to_owned(),
+        expect,
+        proof: None,
+        verify_now: None,
+        audience: None,
+        wit: None,
+    }
+}
+
+fn httpsig_neg(id: &str, description: &str, expect: ErrorCode) -> HttpSigNegative {
+    HttpSigNegative {
+        id: id.to_owned(),
+        description: description.to_owned(),
+        expect,
+        request: None,
+        body: None,
+        signature_input: None,
+        signature: None,
+        verify_now: None,
+        accept_label: None,
+        max_age: None,
+        required_components: None,
+    }
+}
+
+/// Re-signs a token's payload under a different JOSE header.
+///
+/// Used to mint negative cases that are *validly signed* but wrong in some other
+/// way — a token with `typ: jwt` must be rejected for its type, not because the
+/// signature happens not to check out.
+fn resign_with_header(token: &str, header_json: &str, key: &SigningKey) -> String {
+    let payload = token.split('.').nth(1).expect("token has three parts");
+    let signing_input = format!("{}.{payload}", URL_SAFE_NO_PAD.encode(header_json));
+    let signature = key.sign(signing_input.as_bytes());
+    format!(
+        "{signing_input}.{}",
+        URL_SAFE_NO_PAD.encode(signature.to_bytes())
+    )
+}
+
+/// Rewrites one claim value in a token's payload, leaving the signature alone.
+///
+/// `from` and `to` must be the same length so the payload stays valid JSON: the
+/// case has to fail on the signature, not on a parse error.
+fn tamper_payload(token: &str, from: &str, to: &str) -> String {
+    assert_eq!(
+        from.len(),
+        to.len(),
+        "replacement must not change the length"
+    );
+    let mut parts = token.split('.');
+    let header = parts.next().expect("token has a header");
+    let payload = parts.next().expect("token has a payload");
+    let signature = parts.next().expect("token has a signature");
+
+    let decoded = URL_SAFE_NO_PAD
+        .decode(payload)
+        .expect("payload is base64url");
+    let decoded = String::from_utf8(decoded).expect("payload is utf-8");
+    assert!(decoded.contains(from), "payload does not contain {from}");
+
+    let tampered = URL_SAFE_NO_PAD.encode(decoded.replace(from, to));
+    format!("{header}.{tampered}.{signature}")
+}
+
+/// Builds the WIT vector.
+///
+/// # Panics
+///
+/// Panics if the fixed inputs in this module stop being valid — which would
+/// mean the implementation can no longer issue its own reference credentials.
+#[must_use]
+pub fn wit_vector() -> WitVector {
+    let issuer_key = SigningKey::from_bytes(&ISSUER_SEED);
+    let other_issuer = SigningKey::from_bytes(&OTHER_ISSUER_SEED);
+    let pop_key = SigningKey::from_bytes(&WIT_POP_SEED);
+
+    let claims = wit_claims(SUBJECT, &pop_key);
+    let kid = Some(KID.to_owned());
+    let token = issue_wit(&claims, kid.as_deref(), &issuer_key).expect("issue");
+
+    let negative = vec![
+        WitNegative {
+            verify_now: Some(EXP + 1),
+            ..wit_neg(
+                "expired",
+                "verified one second after `exp`",
+                ErrorCode::Expired,
+            )
+        },
+        WitNegative {
+            verify_now: Some(IAT - 1),
+            ..wit_neg(
+                "issued-in-future",
+                "verified one second before `iat`",
+                ErrorCode::IssuedInFuture,
+            )
+        },
+        WitNegative {
+            token: Some(resign_with_header(
+                &token,
+                r#"{"typ":"jwt","alg":"EdDSA","kid":"issuer-key-1"}"#,
+                &issuer_key,
+            )),
+            ..wit_neg(
+                "wrong-typ",
+                "validly signed, but the JOSE `typ` is `jwt` and not `wit+jwt`",
+                ErrorCode::WrongType,
+            )
+        },
+        WitNegative {
+            token: Some(tamper_payload(&token, "a1b2c3", "a1b2c4")),
+            ..wit_neg(
+                "tampered-payload",
+                "`jti` was altered after signing; the payload is still valid JSON",
+                ErrorCode::InvalidSignature,
+            )
+        },
+        WitNegative {
+            issuer_verifying_key_b64u: Some(
+                URL_SAFE_NO_PAD.encode(other_issuer.verifying_key().to_bytes()),
+            ),
+            ..wit_neg(
+                "wrong-issuer-key",
+                "verified against an issuer key that did not sign the token",
+                ErrorCode::InvalidSignature,
+            )
+        },
+        WitNegative {
+            expected_iss: Some("https://other-issuer.example".to_owned()),
+            ..wit_neg(
+                "issuer-mismatch",
+                "the verifier expects a different `iss` than the token carries",
+                ErrorCode::IssuerMismatch,
+            )
+        },
+    ];
+
+    WitVector {
+        header: header(
+            "wit",
+            "issue-basic",
+            WIT_SPEC,
+            "WIT issuance with EdDSA (Ed25519), plus the inputs a verifier must reject",
+        ),
+        alg: "EdDSA".to_owned(),
+        issuer_signing_key_seed_b64u: URL_SAFE_NO_PAD.encode(ISSUER_SEED),
+        kid,
+        verify_now: IAT,
+        claims,
+        token,
+        negative,
+    }
+}
+
+/// Builds the WPT vector.
+///
+/// # Panics
+///
+/// Panics if the fixed inputs in this module stop being valid — which would
+/// mean the implementation can no longer issue its own reference credentials.
+#[must_use]
+pub fn wpt_vector() -> WptVector {
+    let issuer_key = SigningKey::from_bytes(&ISSUER_SEED);
+    let pop_key = SigningKey::from_bytes(&POP_SEED);
+
+    let wit = issue_wit(&wit_claims(SUBJECT, &pop_key), Some(KID), &issuer_key).expect("issue WIT");
+    // A second, equally valid WIT for the same key: the proof is bound to the
+    // first one, so presenting it with this one must fail on `wth`.
+    let other_wit = issue_wit(
+        &wit_claims("spiffe://example.org/workload/other", &pop_key),
+        Some(KID),
+        &issuer_key,
+    )
+    .expect("issue the second WIT");
+
+    let audience = "https://workload.example.com/path".to_owned();
+    let claims = WptClaims {
+        aud: audience.clone(),
+        exp: 1_700_000_300,
+        jti: "0123456789abcdef".to_owned(),
+        wth: wit_thumbprint(&wit),
+        ath: None,
+    };
+    let proof = issue_wpt(&claims, &pop_key).expect("issue WPT");
+
+    let negative = vec![
+        WptNegative {
+            verify_now: Some(claims.exp + 1),
+            ..wpt_neg(
+                "expired",
+                "verified one second after `exp`",
+                ErrorCode::Expired,
+            )
+        },
+        WptNegative {
+            audience: Some("https://other.example.com/path".to_owned()),
+            ..wpt_neg(
+                "audience-mismatch",
+                "presented to a service other than the one named in `aud`",
+                ErrorCode::AudienceMismatch,
+            )
+        },
+        WptNegative {
+            wit: Some(other_wit),
+            ..wpt_neg(
+                "wit-binding-mismatch",
+                "replayed alongside a different, otherwise valid WIT",
+                ErrorCode::WitBindingMismatch,
+            )
+        },
+        WptNegative {
+            proof: Some(resign_with_header(
+                &proof,
+                r#"{"typ":"jwt","alg":"EdDSA"}"#,
+                &pop_key,
+            )),
+            ..wpt_neg(
+                "wrong-typ",
+                "validly signed, but the JOSE `typ` is `jwt` and not `wpt+jwt`",
+                ErrorCode::WrongType,
+            )
+        },
+        WptNegative {
+            proof: Some(tamper_payload(
+                &proof,
+                "0123456789abcdef",
+                "0123456789abcdee",
+            )),
+            ..wpt_neg(
+                "tampered-payload",
+                "`jti` was altered after signing; the payload is still valid JSON",
+                ErrorCode::InvalidSignature,
+            )
+        },
+    ];
+
+    WptVector {
+        header: header(
+            "wpt",
+            "proof-basic",
+            WPT_SPEC,
+            "WPT bound to a WIT via `wth`, plus the inputs a verifier must reject",
+        ),
+        alg: "EdDSA".to_owned(),
+        pop_signing_key_seed_b64u: URL_SAFE_NO_PAD.encode(POP_SEED),
+        issuer_verifying_key_b64u: URL_SAFE_NO_PAD.encode(issuer_key.verifying_key().to_bytes()),
+        verify_now: IAT,
+        audience,
+        wit,
+        claims,
+        proof,
+        negative,
+    }
+}
+
+/// Builds the httpsig vector.
+///
+/// # Panics
+///
+/// Panics if the fixed inputs in this module stop being valid — which would
+/// mean the implementation can no longer issue its own reference credentials.
+#[must_use]
+pub fn httpsig_vector() -> HttpSigVector {
+    let issuer_key = SigningKey::from_bytes(&ISSUER_SEED);
+    let pop_key = SigningKey::from_bytes(&POP_SEED);
+    let wit = issue_wit(&wit_claims(SUBJECT, &pop_key), Some(KID), &issuer_key).expect("issue WIT");
+
+    let body = br#"{"amount":100}"#;
+    let request = HttpRequest {
+        method: "POST".to_owned(),
+        authority: "service.example".to_owned(),
+        path: "/transfer".to_owned(),
+        query: None,
+        headers: vec![
+            ("Content-Type".to_owned(), "application/json".to_owned()),
+            ("Content-Digest".to_owned(), content_digest_sha256(body)),
+            ("Workload-Identity-Token".to_owned(), wit.clone()),
+        ],
+    };
+    let components = vec![
+        Component::Method,
+        Component::Authority,
+        Component::Path,
+        Component::header("content-digest"),
+        Component::header("workload-identity-token"),
+    ];
+    let params = SignatureParams {
+        created: Some(IAT),
+        keyid: Some(KID.to_owned()),
+        alg: Some(ALG.to_owned()),
+        ..SignatureParams::default()
+    };
+    let signed = sign(&request, &components, &params, "wimse", &pop_key).expect("sign");
+
+    let vector_request = VectorRequest {
+        method: request.method,
+        authority: request.authority,
+        path: request.path,
+        query: request.query,
+        headers: request.headers,
+    };
+    let negative = httpsig_negatives(&vector_request);
+
+    HttpSigVector {
+        header: header(
+            "httpsig",
+            "sign-basic",
+            HTTPSIG_SPEC,
+            "WIMSE HTTP Message Signature (RFC 9421, ed25519) carrying a WIT, plus the inputs a verifier must reject",
+        ),
+        pop_signing_key_seed_b64u: URL_SAFE_NO_PAD.encode(POP_SEED),
+        issuer_verifying_key_b64u: URL_SAFE_NO_PAD.encode(issuer_key.verifying_key().to_bytes()),
+        verify_now: 1_700_000_100,
+        label: "wimse".to_owned(),
+        components: components.iter().map(Component::quoted_id).collect(),
+        params: VectorParams {
+            created: IAT,
+            keyid: KID.to_owned(),
+            alg: ALG.to_owned(),
+        },
+        request: vector_request,
+        body: String::from_utf8(body.to_vec()).expect("the fixed body is utf-8"),
+        wit,
+        signature_input: signed.signature_input,
+        signature: signed.signature,
+        negative,
+    }
+}
+
+/// The inputs an httpsig verifier must reject, given the signed request.
+///
+/// Note that `accept_label`, `max_age` and `required_components` describe how
+/// strict the *receiver* is rather than anything about the message: the case
+/// asserts that a receiver configured that way turns the request away.
+fn httpsig_negatives(signed_request: &VectorRequest) -> Vec<HttpSigNegative> {
+    let rerouted = VectorRequest {
+        path: "/admin".to_owned(),
+        ..signed_request.clone()
+    };
+
+    vec![
+        HttpSigNegative {
+            body: Some(r#"{"amount":999}"#.to_owned()),
+            ..httpsig_neg(
+                "tampered-body",
+                "the body no longer hashes to the signed `Content-Digest`",
+                ErrorCode::ContentDigestMismatch,
+            )
+        },
+        HttpSigNegative {
+            request: Some(rerouted),
+            ..httpsig_neg(
+                "rerouted-path",
+                "an intermediary changed `@path` after the signature was made",
+                ErrorCode::InvalidSignature,
+            )
+        },
+        HttpSigNegative {
+            verify_now: Some(IAT - 1),
+            ..httpsig_neg(
+                "created-in-future",
+                "the signature's `created` is ahead of the verifier's clock",
+                ErrorCode::CreatedInFuture,
+            )
+        },
+        HttpSigNegative {
+            verify_now: Some(IAT + 3600),
+            max_age: Some(30),
+            ..httpsig_neg(
+                "too-old",
+                "the signature is older than the verifier's `max_age`",
+                ErrorCode::TooOld,
+            )
+        },
+        HttpSigNegative {
+            accept_label: Some("other".to_owned()),
+            ..httpsig_neg(
+                "label-mismatch",
+                "the verifier only accepts a label the request does not carry",
+                ErrorCode::LabelMismatch,
+            )
+        },
+        HttpSigNegative {
+            required_components: Some(vec![r#""authorization""#.to_owned()]),
+            ..httpsig_neg(
+                "missing-required-component",
+                "the verifier requires a component the signature does not cover",
+                ErrorCode::MissingRequiredComponent,
+            )
+        },
+    ]
+}
+
+/// Builds the manifest that indexes every vector.
+#[must_use]
+pub fn manifest() -> Manifest {
+    Manifest {
+        format: FORMAT.to_owned(),
+        vectors: vec![
+            ManifestEntry {
+                suite: "wit".to_owned(),
+                path: "wit/issue-basic.json".to_owned(),
+                spec: WIT_SPEC.to_owned(),
+            },
+            ManifestEntry {
+                suite: "wpt".to_owned(),
+                path: "wpt/proof-basic.json".to_owned(),
+                spec: WPT_SPEC.to_owned(),
+            },
+            ManifestEntry {
+                suite: "httpsig".to_owned(),
+                path: "httpsig/sign-basic.json".to_owned(),
+                spec: HTTPSIG_SPEC.to_owned(),
+            },
+        ],
+    }
+}

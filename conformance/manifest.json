@@ -1,0 +1,20 @@
+{
+  "format": "wimse-conformance/v1",
+  "vectors": [
+    {
+      "suite": "wit",
+      "path": "wit/issue-basic.json",
+      "spec": "draft-ietf-wimse-workload-creds-01"
+    },
+    {
+      "suite": "wpt",
+      "path": "wpt/proof-basic.json",
+      "spec": "draft-ietf-wimse-wpt-01"
+    },
+    {
+      "suite": "httpsig",
+      "path": "httpsig/sign-basic.json",
+      "spec": "draft-ietf-wimse-http-signature-03"
+    }
+  ]
+}

@@ -30,11 +30,11 @@ jobs:
         run: cargo test --workspace --all-targets
       - name: doctests
         run: cargo test --workspace --doc
+      - name: conformance suite
+        run: cargo run -q -p wimsey-conformance -- run --dir conformance
       - name: conformance vectors are fresh
         run: |
-          cargo run -q -p wimsey-wit --example dump_vector > conformance/wit/issue-basic.json
-          cargo run -q -p wimsey-wpt --example dump_vector > conformance/wpt/proof-basic.json
-          cargo run -q -p wimsey-httpsig --example dump_vector > conformance/httpsig/sign-basic.json
+          cargo run -q -p wimsey-conformance -- generate --out conformance
           git diff --exit-code conformance/
 
   deny:
