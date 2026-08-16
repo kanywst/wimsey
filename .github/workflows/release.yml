@@ -113,9 +113,17 @@ jobs:
     env:
       TAG: ${{ needs.guard.outputs.tag }}
     steps:
+      # The tag's tree is what the SBOM describes.
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.guard.outputs.tag }}
+          persist-credentials: false
+      # The release-notes template has to come from the workflow's own ref
+      # instead: back-filling an older tag must not depend on that tag having
+      # shipped the template, which by definition it did not.
+      - uses: actions/checkout@v7
+        with:
+          path: .workflow-ref
           persist-credentials: false
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -164,6 +172,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
+          # The identity Sigstore actually bound the signature to. It follows the
+          # ref the *workflow* ran from, which is the tag on a tag push but the
+          # default branch on a dispatched back-fill — so it has to be read off
+          # github.ref rather than assumed to be the tag, or the published
+          # command tells people to check something that was never signed.
+          IDENTITY: https://github.com/${{ github.repository }}/.github/workflows/release.yml@${{ github.ref }}
         run: |
           set -euo pipefail
           if ! gh release view "$TAG" >/dev/null 2>&1; then
@@ -177,6 +191,7 @@ jobs:
           if ! grep -q '^## Verifying this release$' notes.md; then
             printf '\n' >> notes.md
             sed -e "s|__TAG__|$TAG|g" -e "s|__REPO__|$REPO|g" \
-              .github/release-notes-verification.md >> notes.md
+              -e "s|__IDENTITY__|$IDENTITY|g" \
+              .workflow-ref/.github/release-notes-verification.md >> notes.md
             gh release edit "$TAG" --notes-file notes.md
           fi

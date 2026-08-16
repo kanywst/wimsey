@@ -1,17 +1,19 @@
 ## Verifying this release
 
-Every asset is signed with [cosign](https://docs.sigstore.dev/) keyless, so there is no long-lived key to leak or rotate. The certificate binds the signature to this repository's release workflow at tag `__TAG__` — a signature made by anything else will not verify, whatever the file is called.
+Every asset is signed with [cosign](https://docs.sigstore.dev/) keyless, so there is no long-lived key to leak or rotate. The certificate binds the signature to the workflow run that produced these assets — a signature made by anything else will not verify, whatever the file is called.
 
 Start with `SHA256SUMS`: verify its signature, then let it vouch for everything else.
 
 ```bash
 cosign verify-blob SHA256SUMS \
   --bundle SHA256SUMS.sigstore.json \
-  --certificate-identity "https://github.com/__REPO__/.github/workflows/release.yml@refs/tags/__TAG__" \
+  --certificate-identity "__IDENTITY__" \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 
 sha256sum --check --ignore-missing SHA256SUMS
 ```
+
+The identity above is the exact one these assets were signed under. It usually ends in `refs/tags/__TAG__`; if it ends in a branch instead, the assets were attached by a re-run of the release workflow from that branch rather than by the original tag push.
 
 Each asset also has its own `<name>.sigstore.json` bundle, carrying that asset's signature and certificate together, if you would rather verify one directly.
 
