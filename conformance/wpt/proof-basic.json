@@ -1,5 +1,9 @@
 {
-  "description": "WPT bound to a WIT, EdDSA (Ed25519), draft-ietf-wimse-wpt-01",
+  "format": "wimse-conformance/v1",
+  "suite": "wpt",
+  "id": "proof-basic",
+  "spec": "draft-ietf-wimse-wpt-01",
+  "description": "WPT bound to a WIT via `wth`, plus the inputs a verifier must reject",
   "alg": "EdDSA",
   "pop_signing_key_seed_b64u": "CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk",
   "issuer_verifying_key_b64u": "iojj3XQJ8ZX9UtstPLpdcspnCb8dlBIb83SIAbQPb1w",
@@ -12,5 +16,37 @@
     "jti": "0123456789abcdef",
     "wth": "TRzlmgZv5aMYE0q73gJ9q-__veS02QqWOYm7SO_6AbM"
   },
-  "proof": "eyJ0eXAiOiJ3cHQrand0IiwiYWxnIjoiRWREU0EifQ.eyJhdWQiOiJodHRwczovL3dvcmtsb2FkLmV4YW1wbGUuY29tL3BhdGgiLCJleHAiOjE3MDAwMDAzMDAsImp0aSI6IjAxMjM0NTY3ODlhYmNkZWYiLCJ3dGgiOiJUUnpsbWdadjVhTVlFMHE3M2dKOXEtX192ZVMwMlFxV09ZbTdTT182QWJNIn0.CRKiKlk97Tz0PH2wSWwrhSHgzZEkG5OOG01t-zy7Dl5g4tUMUploOH1OLF_ut58um9ySglvJHzrD23TSLSg3BQ"
+  "proof": "eyJ0eXAiOiJ3cHQrand0IiwiYWxnIjoiRWREU0EifQ.eyJhdWQiOiJodHRwczovL3dvcmtsb2FkLmV4YW1wbGUuY29tL3BhdGgiLCJleHAiOjE3MDAwMDAzMDAsImp0aSI6IjAxMjM0NTY3ODlhYmNkZWYiLCJ3dGgiOiJUUnpsbWdadjVhTVlFMHE3M2dKOXEtX192ZVMwMlFxV09ZbTdTT182QWJNIn0.CRKiKlk97Tz0PH2wSWwrhSHgzZEkG5OOG01t-zy7Dl5g4tUMUploOH1OLF_ut58um9ySglvJHzrD23TSLSg3BQ",
+  "negative": [
+    {
+      "id": "expired",
+      "description": "verified one second after `exp`",
+      "expect": "expired",
+      "verify_now": 1700000301
+    },
+    {
+      "id": "audience-mismatch",
+      "description": "presented to a service other than the one named in `aud`",
+      "expect": "audience_mismatch",
+      "audience": "https://other.example.com/path"
+    },
+    {
+      "id": "wit-binding-mismatch",
+      "description": "replayed alongside a different, otherwise valid WIT",
+      "expect": "wit_binding_mismatch",
+      "wit": "eyJ0eXAiOiJ3aXQrand0IiwiYWxnIjoiRWREU0EiLCJraWQiOiJpc3N1ZXIta2V5LTEifQ.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvb3RoZXIiLCJpYXQiOjE3MDAwMDAwMDAsImV4cCI6MTcwMDAwMzYwMCwianRpIjoiYTFiMmMzIiwiY25mIjp7Imp3ayI6eyJrdHkiOiJPS1AiLCJjcnYiOiJFZDI1NTE5IiwieCI6Il9SY2tPRnFneDF0ay0zak5ZQy1oMlpIOTZfZHJFOFdPMXdMcXlEWHA5aGcifX19.TN9gxhW8vpQoVzeavtUZkUmSIV3AE9iW0TXytqC0uQQgP-H-zt9G-pRAyb8zSplMtCH84XXiNqbv5T1ikXCLDA"
+    },
+    {
+      "id": "wrong-typ",
+      "description": "validly signed, but the JOSE `typ` is `jwt` and not `wpt+jwt`",
+      "expect": "wrong_type",
+      "proof": "eyJ0eXAiOiJqd3QiLCJhbGciOiJFZERTQSJ9.eyJhdWQiOiJodHRwczovL3dvcmtsb2FkLmV4YW1wbGUuY29tL3BhdGgiLCJleHAiOjE3MDAwMDAzMDAsImp0aSI6IjAxMjM0NTY3ODlhYmNkZWYiLCJ3dGgiOiJUUnpsbWdadjVhTVlFMHE3M2dKOXEtX192ZVMwMlFxV09ZbTdTT182QWJNIn0.wdTnDauGlhtfkxwfcwxU3wE27QZN7jILYMJYeSha3bgkkKSv7efNJ4npxqdYW2T_Jl4gCfUCN3klebRP0qkHCA"
+    },
+    {
+      "id": "tampered-payload",
+      "description": "`jti` was altered after signing; the payload is still valid JSON",
+      "expect": "invalid_signature",
+      "proof": "eyJ0eXAiOiJ3cHQrand0IiwiYWxnIjoiRWREU0EifQ.eyJhdWQiOiJodHRwczovL3dvcmtsb2FkLmV4YW1wbGUuY29tL3BhdGgiLCJleHAiOjE3MDAwMDAzMDAsImp0aSI6IjAxMjM0NTY3ODlhYmNkZWUiLCJ3dGgiOiJUUnpsbWdadjVhTVlFMHE3M2dKOXEtX192ZVMwMlFxV09ZbTdTT182QWJNIn0.CRKiKlk97Tz0PH2wSWwrhSHgzZEkG5OOG01t-zy7Dl5g4tUMUploOH1OLF_ut58um9ySglvJHzrD23TSLSg3BQ"
+    }
+  ]
 }

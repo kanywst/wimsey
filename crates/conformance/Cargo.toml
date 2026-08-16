@@ -1,6 +1,6 @@
 [package]
-name = "wimsey-wpt"
-description = "WIMSE Workload Proof Token (WPT), a DPoP-style proof of possession."
+name = "wimsey-conformance"
+description = "Generator and runner for the WIMSE cross-implementation conformance vectors."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -10,14 +10,22 @@ homepage.workspace = true
 authors.workspace = true
 keywords.workspace = true
 categories.workspace = true
+publish = false
+
+[[bin]]
+name = "wimsey-conformance"
+path = "src/main.rs"
 
 [dependencies]
+wimsey-identifier = { workspace = true }
+wimsey-wit = { workspace = true }
+wimsey-wpt = { workspace = true }
+wimsey-httpsig = { workspace = true }
 ed25519-dalek = { workspace = true }
 base64 = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-sha2 = { workspace = true }
-thiserror = { workspace = true }
+clap = { version = "4", features = ["derive"] }
 
 [lints]
 workspace = true

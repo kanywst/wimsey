@@ -32,7 +32,11 @@ cargo test --workspace --all-targets
   changes.
 - Reference the relevant draft section for spec-driven code, and keep
   [`SPEC-MAP.md`](SPEC-MAP.md) accurate when a pinned revision changes.
-- Add or update conformance vectors alongside behavior changes.
+- Add or update conformance vectors alongside behavior changes, including the
+  negative cases. See [`conformance/README.md`](conformance/README.md); the
+  vectors are regenerated and run with
+  `cargo run -p wimsey-conformance -- generate --out conformance` and
+  `cargo run -p wimsey-conformance -- run --dir conformance`.
 - Security-sensitive code must fail closed and be covered by negative tests.
 
 ## Reporting security issues
