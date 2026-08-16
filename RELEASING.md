@@ -71,7 +71,9 @@ The workflow also takes a `workflow_dispatch` with a tag input, for retrying a r
 gh workflow run release.yml -f tag=vX.Y.Z
 ```
 
-Signing is keyless, so there is no release key anywhere — the Sigstore certificate binds each signature to this repository's release workflow at that tag. Each asset gets a `<name>.sigstore.json` bundle holding its signature and certificate together, which is what cosign v4 wants; the separate `--output-signature`/`--output-certificate` pair is deprecated and silently ignored. The published notes carry the `cosign verify-blob` invocation, so the verification instructions land on the page people actually download from.
+One thing to understand about a dispatched run: **the Sigstore identity follows the ref the workflow ran from, not the tag it built**. A tag push signs as `…/release.yml@refs/tags/vX.Y.Z`; a dispatch from `main` signs as `…/release.yml@refs/heads/main`. Both are honest statements of what produced the assets, and the workflow writes whichever one applies into the release notes. A tag push is the better provenance, so back-filling is for repair, not the normal path.
+
+Signing is keyless, so there is no release key anywhere — the Sigstore certificate binds each signature to this repository's release workflow at the ref described above. Each asset gets a `<name>.sigstore.json` bundle holding its signature and certificate together, which is what cosign v4 wants; the separate `--output-signature`/`--output-certificate` pair is deprecated and silently ignored. The published notes carry the `cosign verify-blob` invocation with the identity that actually signed, so the verification instructions land on the page people actually download from — and match what they are verifying.
 
 ## What is deliberately not automated
 
