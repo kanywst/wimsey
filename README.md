@@ -81,6 +81,10 @@ The same WIT can instead be carried in an RFC 9421 HTTP signature
 - [Spec map](SPEC-MAP.md) — the pinned IETF draft revisions per crate.
 - [CNCF Sandbox readiness](docs/cncf-sandbox.md) — criteria checklist and draft
   application.
+- [Conformance vectors](conformance/README.md) — the cross-implementation
+  vector format, for other WIMSE implementations.
+- [Releasing](RELEASING.md) — cadence, versioning, and how to verify a release's
+  signatures and SBOM.
 - [Changelog](CHANGELOG.md).
 
 ## Community
