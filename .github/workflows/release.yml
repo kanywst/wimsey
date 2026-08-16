@@ -146,12 +146,12 @@ jobs:
           set -euo pipefail
           cd dist
           # Keyless: the certificate binds the signature to this workflow at this
-          # tag, so there is no long-lived key to leak or rotate.
+          # tag, so there is no long-lived key to leak or rotate. The signature
+          # and that certificate travel together in one Sigstore bundle; cosign
+          # v4 deprecated the separate --output-signature/--output-certificate
+          # pair and ignores them.
           for file in *.tar.gz *.spdx.json SHA256SUMS; do
-            cosign sign-blob --yes \
-              --output-signature "$file.sig" \
-              --output-certificate "$file.pem" \
-              "$file"
+            cosign sign-blob --yes --bundle "$file.sigstore.json" "$file"
           done
           ls -1
 

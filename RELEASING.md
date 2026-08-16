@@ -61,7 +61,7 @@ Pushing the tag is the trigger; everything after it is automated.
 | --- | --- |
 | `guard` | Refuses to go further unless the tag, `[workspace.package] version` and a `## [X.Y.Z]` section in `CHANGELOG.md` all agree |
 | `build` | Builds `wimsey` natively for four targets: x86-64 and arm64 Linux, x86-64 and Apple-silicon macOS |
-| `publish` | SPDX SBOM, `SHA256SUMS`, a cosign keyless signature and certificate for every asset, SLSA build provenance for the tarballs, then creates the release and uploads it all |
+| `publish` | SPDX SBOM, `SHA256SUMS`, a cosign keyless Sigstore bundle for every asset, SLSA build provenance for the tarballs, then creates the release and uploads it all |
 
 The guard exists because the failure it prevents is silent: a tag that says `v0.3.0` on a tree that still says `0.2.0` produces a release whose binaries report the wrong version, and nobody notices until someone files a confusing bug.
 
@@ -71,7 +71,7 @@ The workflow also takes a `workflow_dispatch` with a tag input, for retrying a r
 gh workflow run release.yml -f tag=vX.Y.Z
 ```
 
-Signing is keyless, so there is no release key anywhere — the Sigstore certificate binds each signature to this repository's release workflow at that tag. The published notes carry the `cosign verify-blob` invocation, so the verification instructions land on the page people actually download from.
+Signing is keyless, so there is no release key anywhere — the Sigstore certificate binds each signature to this repository's release workflow at that tag. Each asset gets a `<name>.sigstore.json` bundle holding its signature and certificate together, which is what cosign v4 wants; the separate `--output-signature`/`--output-certificate` pair is deprecated and silently ignored. The published notes carry the `cosign verify-blob` invocation, so the verification instructions land on the page people actually download from.
 
 ## What is deliberately not automated
 

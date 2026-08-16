@@ -5,17 +5,15 @@ Every asset is signed with [cosign](https://docs.sigstore.dev/) keyless, so ther
 Start with `SHA256SUMS`: verify its signature, then let it vouch for everything else.
 
 ```bash
-cosign verify-blob \
-  --certificate SHA256SUMS.pem \
-  --signature SHA256SUMS.sig \
+cosign verify-blob SHA256SUMS \
+  --bundle SHA256SUMS.sigstore.json \
   --certificate-identity "https://github.com/__REPO__/.github/workflows/release.yml@refs/tags/__TAG__" \
-  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  SHA256SUMS
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
 
 sha256sum --check --ignore-missing SHA256SUMS
 ```
 
-Each asset also has its own detached `.sig` and `.pem` if you would rather verify one directly.
+Each asset also has its own `<name>.sigstore.json` bundle, carrying that asset's signature and certificate together, if you would rather verify one directly.
 
 The tarballs carry SLSA build provenance, which says which workflow run built them from which commit:
 
