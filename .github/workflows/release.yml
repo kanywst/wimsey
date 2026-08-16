@@ -175,6 +175,9 @@ jobs:
       - name: publish
         env:
           GH_TOKEN: ${{ github.token }}
+          # Neither checkout lands at the workspace root any more, so there is no
+          # git remote for gh to infer the repository from. Say it explicitly.
+          GH_REPO: ${{ github.repository }}
           REPO: ${{ github.repository }}
           # The identity Sigstore actually bound the signature to. It follows the
           # ref the *workflow* ran from, which is the tag on a tag push but the
