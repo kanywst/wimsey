@@ -194,20 +194,27 @@ jobs:
 
           # Tell people how to check the signatures on the page where they are
           # downloading the thing. Instructions nobody sees protect nobody.
+          #
+          # Rewritten on every run rather than appended once, because a re-run
+          # re-signs the assets and the identity Sigstore binds them to follows
+          # the ref the workflow ran from. A dispatched run therefore replaces
+          # tag-signed assets with main-signed ones, and notes left alone would
+          # go on naming an identity nothing was signed with — instructions that
+          # fail for every person who follows them.
           gh release view "$TAG" --json body -q .body > notes.md
-          if ! grep -q '^## Verifying this release$' notes.md; then
-            # Substituted with bash parameter expansion, not sed: a ref name may
-            # legally contain `&` or `|`, which sed would respectively swallow
-            # into the match and mistake for its own delimiter. Publishing a
-            # subtly wrong identity is the exact failure this step exists to
-            # prevent.
-            template=$(cat workflow/.github/release-notes-verification.md)
-            template=${template//__TAG__/$TAG}
-            template=${template//__REPO__/$REPO}
-            template=${template//__IDENTITY__/$IDENTITY}
-            printf '\n%s\n' "$template" >> notes.md
-            gh release edit "$TAG" --notes-file notes.md
-          fi
+          awk '/^## Verifying this release$/{exit} {print}' notes.md > notes.trimmed
+          mv notes.trimmed notes.md
+          # Substituted with bash parameter expansion, not sed: a ref name may
+          # legally contain `&` or `|`, which sed would respectively swallow
+          # into the match and mistake for its own delimiter. Publishing a
+          # subtly wrong identity is the exact failure this step exists to
+          # prevent.
+          template=$(cat workflow/.github/release-notes-verification.md)
+          template=${template//__TAG__/$TAG}
+          template=${template//__REPO__/$REPO}
+          template=${template//__IDENTITY__/$IDENTITY}
+          printf '\n%s\n' "$template" >> notes.md
+          gh release edit "$TAG" --notes-file notes.md
 
   crates-io:
     name: publish to crates.io
