@@ -1,0 +1,28 @@
+[package]
+name = "wimsey-demo"
+description = "An end-to-end WIMSE demo: two services and a middlebox between them."
+publish = false
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[[bin]]
+name = "wimsey-demo"
+path = "src/main.rs"
+
+[dependencies]
+wimsey-identifier = { workspace = true }
+wimsey-wit = { workspace = true }
+wimsey-wpt = { workspace = true }
+wimsey-httpsig = { workspace = true }
+wimsey-mtls = { path = "../mtls", version = "0.2.0" }
+ed25519-dalek = { workspace = true }
+
+[lints]
+workspace = true

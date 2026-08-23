@@ -8,6 +8,7 @@ members = [
     "crates/mtls",
     "crates/issuer",
     "crates/cli",
+    "crates/demo",
     "crates/conformance",
 ]
 
