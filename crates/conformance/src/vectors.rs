@@ -8,6 +8,7 @@
 
 use serde::{Deserialize, Serialize};
 use wimsey_httpsig::HttpSigError;
+use wimsey_identifier::ParseError;
 use wimsey_wit::{WitClaims, WitError};
 use wimsey_wpt::{WptClaims, WptError};
 
@@ -130,6 +131,35 @@ pub enum ErrorCode {
     ForbiddenConfirmationAlg,
     /// The `cnf` JWK named a legal algorithm the implementation cannot use.
     UnsupportedConfirmationAlg,
+    /// A workload identifier exceeded the maximum accepted length.
+    IdentifierTooLong,
+    /// A workload identifier did not use a scheme the implementation knows.
+    UnsupportedScheme,
+    /// A workload identifier carried a query component.
+    HasQuery,
+    /// A workload identifier carried a fragment component.
+    HasFragment,
+    /// A workload identifier carried user information in its authority.
+    HasUserInfo,
+    /// A workload identifier carried a port in its authority.
+    HasPort,
+    /// A workload identifier had an empty trust domain.
+    EmptyTrustDomain,
+    /// A trust domain exceeded the maximum length its scheme allows.
+    TrustDomainTooLong,
+    /// A trust domain contained a character its scheme does not allow.
+    InvalidTrustDomainChar,
+    /// A path had an empty segment, including a trailing slash.
+    EmptyPathSegment,
+    /// A path had a `.` or `..` segment.
+    DotSegment,
+    /// A path segment contained a character its scheme does not allow.
+    InvalidPathChar,
+    /// A percent-escape was not `%` followed by two hex digits.
+    BadPercentEncoding,
+    /// A percent-escape was well-formed but not in RFC 3986 normalized form:
+    /// lowercase hex, or encoding an unreserved character.
+    NonNormalizedPercentEncoding,
     /// The implementation rejected the input for a reason this table does not
     /// name.
     ///
@@ -158,6 +188,28 @@ impl From<&WitError> for ErrorCode {
             WitError::UnsupportedConfirmationAlg { .. } => Self::UnsupportedConfirmationAlg,
             // `WitError` is `#[non_exhaustive]`; a variant added upstream is a
             // gap in this table, not something to guess at.
+            _ => Self::Unmapped,
+        }
+    }
+}
+
+impl From<&ParseError> for ErrorCode {
+    fn from(error: &ParseError) -> Self {
+        match error {
+            ParseError::TooLong => Self::IdentifierTooLong,
+            ParseError::UnsupportedScheme => Self::UnsupportedScheme,
+            ParseError::HasQuery => Self::HasQuery,
+            ParseError::HasFragment => Self::HasFragment,
+            ParseError::HasUserInfo => Self::HasUserInfo,
+            ParseError::HasPort => Self::HasPort,
+            ParseError::EmptyTrustDomain => Self::EmptyTrustDomain,
+            ParseError::TrustDomainTooLong => Self::TrustDomainTooLong,
+            ParseError::InvalidTrustDomainChar(_) => Self::InvalidTrustDomainChar,
+            ParseError::EmptyPathSegment => Self::EmptyPathSegment,
+            ParseError::DotSegment => Self::DotSegment,
+            ParseError::InvalidPathChar(_) => Self::InvalidPathChar,
+            ParseError::BadPercentEncoding => Self::BadPercentEncoding,
+            ParseError::NonNormalizedPercentEncoding(_) => Self::NonNormalizedPercentEncoding,
             _ => Self::Unmapped,
         }
     }
@@ -412,4 +464,53 @@ pub struct HttpSigNegative {
     /// Components the verifier requires, instead of the default set.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub required_components: Option<Vec<String>>,
+}
+
+/// A workload identifier parsing vector.
+///
+/// Unlike the token suites there is nothing to re-sign here, so the contract is
+/// different in shape but the same in spirit: an identifier in `accept` must
+/// parse *and decompose* exactly as recorded, and one in `reject` must be
+/// refused for the recorded reason.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct IdentifierVector {
+    /// The common header fields.
+    #[serde(flatten)]
+    pub header: Header,
+    /// Identifiers that must parse, with the decomposition they must yield.
+    pub accept: Vec<IdentifierAccept>,
+    /// Identifiers that MUST be rejected, and why.
+    pub reject: Vec<IdentifierReject>,
+}
+
+/// An identifier that must parse, and the components it must decompose into.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct IdentifierAccept {
+    /// A stable identifier, unique within the file.
+    pub id: String,
+    /// What this case establishes, in prose.
+    pub description: String,
+    /// The identifier under test.
+    pub identifier: String,
+    /// The scheme name, without `://`.
+    pub scheme: String,
+    /// The authority component.
+    pub trust_domain: String,
+    /// The path including its leading `/`, or `""` when there is none.
+    pub path: String,
+    /// The scheme and trust domain with the path omitted.
+    pub origin: String,
+}
+
+/// An identifier that must be rejected, and the reason it must be rejected for.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct IdentifierReject {
+    /// A stable identifier, unique within the file.
+    pub id: String,
+    /// What makes this identifier invalid, in prose.
+    pub description: String,
+    /// The identifier under test.
+    pub identifier: String,
+    /// The reason parsing must report.
+    pub expect: ErrorCode,
 }

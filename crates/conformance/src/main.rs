@@ -57,6 +57,10 @@ fn write_json<T: serde::Serialize>(path: &Path, value: &T) -> std::io::Result<()
 
 fn write_vectors(out: &Path) -> std::io::Result<()> {
     write_json(&out.join("manifest.json"), &generate::manifest())?;
+    write_json(
+        &out.join("identifier/parse-basic.json"),
+        &generate::identifier_vector(),
+    )?;
     write_json(&out.join("wit/issue-basic.json"), &generate::wit_vector())?;
     write_json(&out.join("wpt/proof-basic.json"), &generate::wpt_vector())?;
     write_json(

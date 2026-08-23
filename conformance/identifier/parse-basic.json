@@ -1,0 +1,161 @@
+{
+  "format": "wimse-conformance/v1",
+  "suite": "identifier",
+  "id": "parse-basic",
+  "spec": "draft-ietf-wimse-identifier-03",
+  "description": "Workload identifier syntax for the spiffe and wimse schemes, plus the inputs a parser must reject",
+  "accept": [
+    {
+      "id": "spiffe-basic",
+      "description": "the SPIFFE scheme the architecture draft cites as a conforming identifier",
+      "identifier": "spiffe://example.org/workload/api",
+      "scheme": "spiffe",
+      "trust_domain": "example.org",
+      "path": "/workload/api",
+      "origin": "spiffe://example.org"
+    },
+    {
+      "id": "wimse-basic",
+      "description": "the wimse scheme defined in Section 4.4",
+      "identifier": "wimse://trust.example.com/service/payment",
+      "scheme": "wimse",
+      "trust_domain": "trust.example.com",
+      "path": "/service/payment",
+      "origin": "wimse://trust.example.com"
+    },
+    {
+      "id": "trust-domain-only",
+      "description": "the path is optional; an identifier may be a bare trust domain",
+      "identifier": "spiffe://prod.trust.domain",
+      "scheme": "spiffe",
+      "trust_domain": "prod.trust.domain",
+      "path": "",
+      "origin": "spiffe://prod.trust.domain"
+    },
+    {
+      "id": "wimse-pchar-path",
+      "description": "Section 4.4 leaves the wimse path to the generic RFC 3986 pchar set",
+      "identifier": "wimse://example.org/a~b!c$d&e'f(g)h*i+j,k;l=m:n@o",
+      "scheme": "wimse",
+      "trust_domain": "example.org",
+      "path": "/a~b!c$d&e'f(g)h*i+j,k;l=m:n@o",
+      "origin": "wimse://example.org"
+    },
+    {
+      "id": "wimse-encoded-reserved",
+      "description": "a reserved character stays encodable: %2F is a `/` that is data, not a delimiter",
+      "identifier": "wimse://example.org/a%2Fb",
+      "scheme": "wimse",
+      "trust_domain": "example.org",
+      "path": "/a%2Fb",
+      "origin": "wimse://example.org"
+    },
+    {
+      "id": "deep-path",
+      "description": "the path may encode structured information within the trust domain",
+      "identifier": "spiffe://prod.trust.domain/ns/prod-01/sa/foo-service",
+      "scheme": "spiffe",
+      "trust_domain": "prod.trust.domain",
+      "path": "/ns/prod-01/sa/foo-service",
+      "origin": "spiffe://prod.trust.domain"
+    }
+  ],
+  "reject": [
+    {
+      "id": "unsupported-scheme",
+      "description": "an https URI is not a workload identifier",
+      "identifier": "https://example.org/x",
+      "expect": "unsupported_scheme"
+    },
+    {
+      "id": "has-query",
+      "description": "Section 4.1 forbids a query component",
+      "identifier": "wimse://example.org/a?b=c",
+      "expect": "has_query"
+    },
+    {
+      "id": "has-fragment",
+      "description": "Section 4.1 forbids a fragment component",
+      "identifier": "wimse://example.org/a#frag",
+      "expect": "has_fragment"
+    },
+    {
+      "id": "has-user-info",
+      "description": "Section 4.1 forbids user information",
+      "identifier": "wimse://user@example.org/a",
+      "expect": "has_user_info"
+    },
+    {
+      "id": "has-port",
+      "description": "Section 4.1 forbids a port component",
+      "identifier": "wimse://example.org:8443/a",
+      "expect": "has_port"
+    },
+    {
+      "id": "empty-trust-domain",
+      "description": "Section 4.1 requires a non-empty authority",
+      "identifier": "spiffe:///path",
+      "expect": "empty_trust_domain"
+    },
+    {
+      "id": "uppercase-trust-domain",
+      "description": "the authority is case-insensitive, so mixed case is a second spelling",
+      "identifier": "spiffe://Example.org/x",
+      "expect": "invalid_trust_domain_char"
+    },
+    {
+      "id": "trailing-slash",
+      "description": "a trailing slash is an empty final segment",
+      "identifier": "spiffe://example.org/x/",
+      "expect": "empty_path_segment"
+    },
+    {
+      "id": "empty-path-segment",
+      "description": "`//` in a path is an empty segment normalization would collapse",
+      "identifier": "spiffe://example.org/x//y",
+      "expect": "empty_path_segment"
+    },
+    {
+      "id": "dot-segment",
+      "description": "`..` is removed by RFC 3986 Section 6 dot-segment removal",
+      "identifier": "spiffe://example.org/a/../b",
+      "expect": "dot_segment"
+    },
+    {
+      "id": "encoded-dot-segment",
+      "description": "%2E%2E decodes to `..`, so it must not slip past the dot-segment check",
+      "identifier": "wimse://example.org/%2E%2E/api",
+      "expect": "non_normalized_percent_encoding"
+    },
+    {
+      "id": "encoded-unreserved",
+      "description": "%61 decodes to `a`, making this a second spelling of /api",
+      "identifier": "wimse://example.org/%61pi",
+      "expect": "non_normalized_percent_encoding"
+    },
+    {
+      "id": "lowercase-escape-hex",
+      "description": "RFC 3986 Section 6.2.2.1 uppercases the hex digits of an escape",
+      "identifier": "wimse://example.org/a%2fb",
+      "expect": "non_normalized_percent_encoding"
+    },
+    {
+      "id": "malformed-escape",
+      "description": "a percent-escape must be `%` followed by two hex digits",
+      "identifier": "wimse://example.org/a%zz",
+      "expect": "bad_percent_encoding"
+    },
+    {
+      "id": "invalid-path-char",
+      "description": "a space is outside the pchar set",
+      "identifier": "wimse://example.org/a b",
+      "expect": "invalid_path_char"
+    },
+    {
+      "id": "spiffe-path-charset-is-narrower",
+      "description": "`~` is a legal pchar but outside the SPIFFE ID path charset",
+      "identifier": "spiffe://example.org/a~b",
+      "expect": "invalid_path_char"
+    }
+  ]
+}
