@@ -17,6 +17,32 @@ any vendor can validate against.
 > **Pre-alpha.** The specs are Internet-Drafts (no RFC yet) and `wimsey` pins
 > specific draft revisions in [`SPEC-MAP.md`](SPEC-MAP.md). Not production-ready.
 
+## Isn't that what SPIRE does?
+
+SPIRE is a workload identity *platform*: it attests workloads, manages a CA, and
+delivers credentials at runtime. `wimsey` is not that, and is not trying to be.
+It is two narrower things:
+
+- **An executable reading of the WIMSE drafts.** The working group publishes
+  specifications and no reference code, so the only way to find out what a
+  sentence means today is to implement it. Each crate pins one draft revision,
+  and where the code does not meet its pinned draft that is
+  [written down](SPEC-MAP.md#known-divergences) rather than left implied.
+- **Conformance vectors any implementation can be held to.** `conformance/`
+  records inputs, the exact bytes they must produce, and — for every negative
+  case — a language-neutral code naming *why* it must be rejected. Rejecting an
+  expired token because the payload failed to parse is still wrong, and a
+  byte-diff of your own output will never tell you so.
+
+So the relationship is complementary. SPIFFE identifiers are first-class here
+(`spiffe://` parses alongside the newer `wimse://` scheme), the WIC is the
+X.509-SVID shape, and the bundled issuer is scoped to reference and
+experimentation — it exists to exercise the protocol, not to replace SPIRE.
+
+If you are running workload identity in production today, use SPIRE. If you are
+implementing the WIMSE drafts, or want to check an implementation against
+somebody else's reading of them, that is what this is for.
+
 ## How it works
 
 A workload gets a signed **Workload Identity Token (WIT)** from an issuer, then
@@ -47,9 +73,23 @@ The proof of possession is one of three interchangeable bindings:
 | `wimsey-httpsig` | HTTP Message Signatures binding | `draft-ietf-wimse-http-signature` |
 | `wimsey-mtls` | mTLS binding (WIC) | `draft-ietf-wimse-mutual-tls` |
 | `wimsey-cli` | The `wimsey` command-line tool | — |
+| `wimsey-demo` | End-to-end demo: two services and a middlebox | — |
 | `wimsey-issuer` | Experimental HTTP issuer | — |
 
 ## Quick start
+
+The fastest way to see the whole trust chain is to run it:
+
+```bash
+cargo run -p wimsey-demo
+```
+
+It issues a WIT, signs a request with the proof-of-possession key, forwards it
+through a middlebox that reads and annotates the request, verifies it at the
+far end, and then shows the same middlebox rerouting the request and being
+refused. Every step asserts, so it is also a CI gate.
+
+To drive the pieces yourself:
 
 ```bash
 # Install the CLI once (or prefix each command with `cargo run -p wimsey-cli --`).

@@ -42,12 +42,14 @@ has a verification gate that must be green before the next begins.
 - `wimsey-issuer`: an experimental issuer with a SPIFFE Workload API shim
   (interoperate, do not compete).
 - `wimsey-cli`: `issue` / `verify` / `inspect` subcommands.
-- An end-to-end demo: two services and a middlebox.
-- **Gate:** the end-to-end demo runs green in CI.
+- An end-to-end demo: two services and a middlebox (`cargo run -p wimsey-demo`).
+- **Gate:** the end-to-end demo runs green in CI. **Met** — the demo asserts at
+  every step and CI runs it, so the gate fails the build rather than a reader.
 
 ## Phase 5 — Interop and conformance
 
-- `conformance/`: JSON test vectors and a runner.
+- `conformance/`: JSON test vectors and a runner, covering the identifier, WIT,
+  WPT and HTTP-signature elements.
 - Cross-implementation interop in CI against a Go implementation (e.g. Cofide
   `minispire`).
 - Publish the vectors for other implementers.
