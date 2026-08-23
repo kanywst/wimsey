@@ -16,7 +16,14 @@ categories.workspace = true
 wimsey-identifier = { workspace = true }
 ed25519-dalek = { workspace = true }
 thiserror = { workspace = true }
-rcgen = { version = "0.14", default-features = false, features = ["crypto", "ring"] }
+rcgen = { version = "0.14", default-features = false, features = [
+    "crypto",
+    "ring",
+    # Needed to certify a public key the workload generated itself: it is what
+    # provides `SubjectPublicKeyInfo::from_der`. x509-parser is already a direct
+    # dependency of this crate, so this adds no new supply chain surface.
+    "x509-parser",
+] }
 x509-parser = "0.18"
 time = "0.3"
 

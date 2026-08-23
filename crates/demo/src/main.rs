@@ -10,8 +10,8 @@
 //! intermediary changes anything the signature covers.
 //!
 //! Keys and timestamps are fixed, and Ed25519 is deterministic, so every run
-//! prints the same bytes. The one exception is the mTLS step, whose certificate
-//! keys are generated fresh; nothing in its output is byte-compared.
+//! prints the same bytes — including the certificates, since a WIC is issued
+//! over a public key the workload supplies rather than one the CA invents.
 
 use ed25519_dalek::SigningKey;
 use wimsey_httpsig::{
@@ -27,8 +27,12 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 /// The identity server's signing key. Fixed so the demo reproduces.
 const ISSUER_SEED: [u8; 32] = [1u8; 32];
-/// Service A's proof-of-possession key. Its public half goes in the WIT `cnf`.
+/// Service A's proof-of-possession key. Its public half goes in the WIT `cnf`,
+/// and in the URI SAN certificate when the same identity travels over mTLS.
 const POP_SEED: [u8; 32] = [9u8; 32];
+/// The workload CA's long-lived signing key. In a real deployment this lives
+/// outside the process, not in a constant.
+const CA_SEED: [u8; 32] = [3u8; 32];
 
 const ISSUER: &str = "https://identity.demo.example";
 const SERVICE_A: &str = "wimse://demo.example/service/a";
@@ -234,17 +238,43 @@ fn proof_token_instead(issuer_key: &SigningKey, pop_key: &SigningKey, wit: &str)
 fn mutual_tls_instead() -> Result<()> {
     rule("6. the same identity over mTLS, as a WIC");
 
-    let ca = WorkloadCa::generate()?;
-    let identifier = WorkloadIdentifier::parse(SERVICE_A)?;
-    let wic = ca.issue_wic(&identifier, NOW, NOW + 86_400)?;
+    // The CA key is long-lived and belongs to the operator. Loading it, rather
+    // than generating one per process, is what lets peers keep trusting the same
+    // anchor across a restart.
+    let ca_key = SigningKey::from_bytes(&CA_SEED);
+    let ca = WorkloadCa::from_ed25519(&ca_key, NOW - 86_400, NOW + 31_536_000)?;
 
-    let presented = wimsey_mtls::verify(&wic.certificate_der, ca.certificate_der(), LATER)?;
+    // The workload generates its own key pair. Only the public half is sent to
+    // the CA — there is no API here that would let the CA see the private one.
+    let workload_key = SigningKey::from_bytes(&POP_SEED);
+    let identifier = WorkloadIdentifier::parse(SERVICE_A)?;
+    let wic = ca.issue(
+        &identifier,
+        &workload_key.verifying_key(),
+        NOW,
+        NOW + 86_400,
+    )?;
+
+    let presented = wimsey_mtls::verify(&wic, ca.certificate_der(), LATER)?;
     assert_eq!(presented, identifier, "the WIC must carry A's identifier");
+    println!("   CA key held by the operator, loaded not generated");
+    println!("   workload keeps its private key; the CA saw only the public half");
     println!("   certificate URI SAN {presented}");
 
+    // The CA process restarts. Same key, same certificate, so the peer that
+    // trusted it a minute ago still does.
+    let restarted = WorkloadCa::from_ed25519(&ca_key, NOW - 86_400, NOW + 31_536_000)?;
+    assert_eq!(
+        ca.certificate_der(),
+        restarted.certificate_der(),
+        "reloading the CA key must reproduce the same CA certificate"
+    );
+    wimsey_mtls::verify(&wic, restarted.certificate_der(), LATER)?;
+    println!("   CA restarted: same certificate, the WIC still verifies");
+
     // A certificate from an unrelated CA must not be accepted as this one's peer.
-    let stranger = WorkloadCa::generate()?;
-    let error = wimsey_mtls::verify(&wic.certificate_der, stranger.certificate_der(), LATER)
+    let stranger = WorkloadCa::generate(NOW - 86_400, NOW + 31_536_000)?;
+    let error = wimsey_mtls::verify(&wic, stranger.certificate_der(), LATER)
         .expect_err("a WIC must not verify against a CA that did not sign it");
     println!("   verified against an unrelated CA: {error}");
     Ok(())
