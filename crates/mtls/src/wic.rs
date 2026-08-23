@@ -2,7 +2,10 @@
 //! workload identifier in a URI subjectAltName, signed by a workload CA.
 
 use ed25519_dalek::{Signature, VerifyingKey};
-use rcgen::{BasicConstraints, CertificateParams, IsCa, Issuer, KeyPair, SanType, PKCS_ED25519};
+use rcgen::{
+    BasicConstraints, CertificateParams, ExtendedKeyUsagePurpose, IsCa, Issuer, KeyPair, SanType,
+    PKCS_ED25519,
+};
 use wimsey_identifier::WorkloadIdentifier;
 use x509_parser::certificate::X509Certificate;
 use x509_parser::extensions::GeneralName;
@@ -72,6 +75,14 @@ impl WorkloadCa {
         )];
         params.not_before = to_time(not_before)?;
         params.not_after = to_time(not_after)?;
+        // Section 3 of `draft-ietf-wimse-mutual-tls`: a WIC used by a TLS client
+        // SHOULD carry `id-kp-clientAuth`, and one used by a TLS server
+        // `id-kp-serverAuth`. A workload is routinely both, and the draft allows
+        // a certificate to carry both, so issuance sets the pair.
+        params.extended_key_usages = vec![
+            ExtendedKeyUsagePurpose::ClientAuth,
+            ExtendedKeyUsagePurpose::ServerAuth,
+        ];
 
         let leaf_key = KeyPair::generate_for(&PKCS_ED25519)?;
         let cert = params.signed_by(&leaf_key, &self.issuer)?;
@@ -213,6 +224,27 @@ mod tests {
 
         let verified = verify(&wic.certificate_der, ca.certificate_der(), NBF + 100).unwrap();
         assert_eq!(verified, id());
+    }
+
+    // The mutual-TLS draft asks a WIC used for client authentication to carry
+    // `id-kp-clientAuth`, and one used for server authentication
+    // `id-kp-serverAuth`; a workload is typically both.
+    #[test]
+    fn issues_with_both_extended_key_usages() {
+        use x509_parser::certificate::X509Certificate;
+        use x509_parser::prelude::FromDer;
+
+        let ca = WorkloadCa::generate().unwrap();
+        let wic = ca.issue_wic(&id(), NBF, NAF).unwrap();
+
+        let (_, cert) = X509Certificate::from_der(&wic.certificate_der).unwrap();
+        let eku = cert
+            .extended_key_usage()
+            .unwrap()
+            .expect("the WIC carries an extendedKeyUsage extension")
+            .value;
+        assert!(eku.client_auth, "id-kp-clientAuth must be set");
+        assert!(eku.server_auth, "id-kp-serverAuth must be set");
     }
 
     #[test]

@@ -1,6 +1,6 @@
 //! `wimsey-mtls` — the WIMSE mutual TLS transport binding.
 //!
-//! Target spec: `draft-ietf-wimse-mutual-tls-01`. The workload authenticates
+//! Target spec: `draft-ietf-wimse-mutual-tls-02`. The workload authenticates
 //! with a Workload Identity Certificate (WIC): an X.509 client certificate that
 //! carries the workload identifier in a URI subjectAltName, signed by a workload
 //! CA. This is the X.509-SVID shape SPIFFE uses.
