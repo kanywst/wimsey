@@ -1,8 +1,13 @@
 //! `wimsey-wit` — WIMSE Workload Identity Token (WIT) issuance and verification.
 //!
-//! Target spec: `draft-ietf-wimse-workload-creds-01`. A WIT is a JWT with JOSE
+//! Target spec: `draft-ietf-wimse-workload-creds-02`. A WIT is a JWT with JOSE
 //! header `typ: wit+jwt`, signed by an issuer, carrying the workload's
 //! identifier in `sub` and a proof-of-possession key in `cnf`.
+//!
+//! Only `sub`, `exp` and `cnf` are mandatory; `iss`, `iat` and `jti` are
+//! optional and are omitted from the serialization when unset. The `cnf` JWK
+//! must carry an `alg` member, which pins the algorithm the proof of possession
+//! has to be produced with.
 //!
 //! This crate signs with `EdDSA` (Ed25519, RFC 8037). Ed25519 signatures are
 //! deterministic, so a token is byte-for-byte reproducible for a given key and
@@ -17,11 +22,11 @@
 //! let pop_key = SigningKey::from_bytes(&[7u8; 32]);
 //!
 //! let claims = WitClaims {
-//!     iss: "https://issuer.example".to_owned(),
+//!     iss: Some("https://issuer.example".to_owned()),
 //!     sub: WorkloadIdentifier::parse("spiffe://example.org/api").unwrap(),
-//!     iat: 1_700_000_000,
+//!     iat: Some(1_700_000_000),
 //!     exp: 1_700_003_600,
-//!     jti: "a1b2c3".to_owned(),
+//!     jti: Some("a1b2c3".to_owned()),
 //!     cnf: Confirmation { jwk: Jwk::from_ed25519(&pop_key.verifying_key()) },
 //! };
 //!

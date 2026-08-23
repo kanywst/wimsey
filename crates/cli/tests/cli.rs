@@ -301,15 +301,13 @@ fn wpt_verify_rejects_a_wit_from_the_wrong_issuer() {
     assert!(!output.status.success());
 }
 
-#[test]
-fn httpsig_sign_and_verify_flow() {
-    let issuer = dir().join("issuer_hs.jwk");
-    let pop = dir().join("pop_hs.jwk");
-    generate_key(ISSUER_SEED, &issuer);
-    generate_key(POP_SEED, &pop);
-    let body = dir().join("body_hs.json");
-    std::fs::write(&body, br#"{"amount":100}"#).unwrap();
-
+/// Issues a WIT and signs a fixed request with it, returning the WIT and the two
+/// signature header values.
+fn sign_request(
+    issuer: &std::path::Path,
+    pop: &std::path::Path,
+    body: &std::path::Path,
+) -> (String, String, String) {
     let wit = stdout(&wimsey(&[
         "wit",
         "issue",
@@ -341,8 +339,10 @@ fn httpsig_sign_and_verify_flow() {
         wit,
         "--body-file",
         body.to_str().unwrap(),
-        "--keyid",
-        "issuer-key-1",
+        "--aud",
+        "https://service.example/transfer",
+        "--nonce",
+        "abcd1111",
         "--created",
         "1700000000",
     ]));
@@ -356,8 +356,22 @@ fn httpsig_sign_and_verify_flow() {
         .find_map(|l| l.strip_prefix("Signature: "))
         .expect("signature line")
         .to_owned();
+    (wit.to_owned(), sig_input, sig)
+}
 
-    // Valid: the WIT verifies and the signature covers the request and body.
+/// The happy path: the WIT verifies and the signature covers request and body.
+#[test]
+fn httpsig_sign_and_verify_flow() {
+    let issuer = dir().join("issuer_hs.jwk");
+    let pop = dir().join("pop_hs.jwk");
+    generate_key(ISSUER_SEED, &issuer);
+    generate_key(POP_SEED, &pop);
+    let body = dir().join("body_hs.json");
+    std::fs::write(&body, br#"{"amount":100}"#).unwrap();
+
+    let (wit, sig_input, sig) = sign_request(&issuer, &pop, &body);
+    let wit = wit.as_str();
+
     let verified = stdout(&wimsey(&[
         "httpsig",
         "verify",
@@ -377,13 +391,29 @@ fn httpsig_sign_and_verify_flow() {
         &sig_input,
         "--signature",
         &sig,
+        "--aud",
+        "https://service.example/transfer",
         "--now",
         "1700000100",
     ]));
     assert!(verified.contains("spiffe://example.org/api"));
+}
 
-    // A tampered body changes the covered content-digest and must fail.
-    let tampered = dir().join("body_hs_tampered.json");
+/// A tampered body changes the covered `Content-Digest` and must fail, even
+/// though the signature itself still checks out over the original header.
+#[test]
+fn httpsig_verify_rejects_a_tampered_body() {
+    let issuer = dir().join("issuer_hstb.jwk");
+    let pop = dir().join("pop_hstb.jwk");
+    generate_key(ISSUER_SEED, &issuer);
+    generate_key(POP_SEED, &pop);
+    let body = dir().join("body_hstb.json");
+    std::fs::write(&body, br#"{"amount":100}"#).unwrap();
+
+    let (wit, sig_input, sig) = sign_request(&issuer, &pop, &body);
+    let wit = wit.as_str();
+
+    let tampered = dir().join("body_hstb_tampered.json");
     std::fs::write(&tampered, br#"{"amount":999}"#).unwrap();
     let output = wimsey(&[
         "httpsig",
@@ -404,6 +434,8 @@ fn httpsig_sign_and_verify_flow() {
         &sig_input,
         "--signature",
         &sig,
+        "--aud",
+        "https://service.example/transfer",
         "--now",
         "1700000100",
     ]);
@@ -454,6 +486,8 @@ fn httpsig_verify_rejects_a_smuggled_wit_header() {
         "wimse=(\"@method\");created=1700000000",
         "--signature",
         "wimse=:AAAA:",
+        "--aud",
+        "https://service.example/x",
         "--now",
         "1700000100",
     ]);

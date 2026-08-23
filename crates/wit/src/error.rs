@@ -48,4 +48,21 @@ pub enum WitError {
     /// A key could not be decoded into an Ed25519 key.
     #[error("invalid key")]
     InvalidKey,
+    /// The `cnf` JWK omitted the `alg` member, which the draft requires.
+    #[error("the confirmation key is missing the required `alg` member")]
+    MissingConfirmationAlg,
+    /// The `cnf` JWK named an algorithm the draft forbids: `none`, a symmetric
+    /// algorithm, or an encryption algorithm.
+    #[error("the confirmation key algorithm `{found}` is forbidden for a proof of possession")]
+    ForbiddenConfirmationAlg {
+        /// The `alg` value that was found.
+        found: String,
+    },
+    /// The `cnf` JWK named a legal algorithm this crate cannot verify a proof
+    /// with. This crate supports `EdDSA` only.
+    #[error("unsupported confirmation key algorithm `{found}`, expected `EdDSA`")]
+    UnsupportedConfirmationAlg {
+        /// The `alg` value that was found.
+        found: String,
+    },
 }

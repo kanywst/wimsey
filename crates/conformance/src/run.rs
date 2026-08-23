@@ -329,8 +329,12 @@ pub fn run_httpsig(vector: &HttpSigVector, report: &mut Report) {
 
     let params = SignatureParams {
         created: Some(vector.params.created),
-        keyid: Some(vector.params.keyid.clone()),
-        alg: Some(vector.params.alg.clone()),
+        expires: Some(vector.params.expires),
+        nonce: Some(vector.params.nonce.clone()),
+        tag: Some(vector.params.tag.clone()),
+        wimse_aud: Some(vector.params.wimse_aud.clone()),
+        wimse_sign_response: vector.params.wimse_sign_response,
+        wimse_req_nonce: vector.params.wimse_req_nonce.clone(),
         ..SignatureParams::default()
     };
     let request = http_request(&vector.request);
@@ -357,6 +361,8 @@ pub fn run_httpsig(vector: &HttpSigVector, report: &mut Report) {
         let config = VerifyConfig {
             now: Some(vector.verify_now),
             required_components: covered.clone(),
+            wimse_profile: true,
+            expected_audience: Some(vector.params.wimse_aud.clone()),
             ..VerifyConfig::default()
         };
         let verified = verify_httpsig(
@@ -427,6 +433,12 @@ fn run_httpsig_negatives(
                 label: case.accept_label.clone(),
                 required_components: required,
                 max_age: case.max_age,
+                wimse_profile: true,
+                expected_audience: Some(
+                    case.accept_audience
+                        .clone()
+                        .unwrap_or_else(|| vector.params.wimse_aud.clone()),
+                ),
                 ..VerifyConfig::default()
             };
             let actual = verify_httpsig(

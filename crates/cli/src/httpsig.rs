@@ -6,7 +6,7 @@ use clap::{Args, Subcommand};
 use serde_json::json;
 use wimsey_httpsig::{
     content_digest_sha256, sign, verify, verify_content_digest, Component, HttpRequest,
-    SignatureParams, VerifyConfig, ALG,
+    SignatureParams, VerifyConfig, WIMSE_TAG,
 };
 
 use crate::key;
@@ -49,12 +49,23 @@ pub(crate) struct SignArgs {
     /// Comma-separated covered components (overrides the default set).
     #[arg(long)]
     cover: Option<String>,
-    /// The `keyid` signature parameter.
+    /// The audience the request is for (`wimse-aud`); defaults to the request's
+    /// target URI.
     #[arg(long)]
-    keyid: String,
+    aud: String,
+    /// The `nonce` signature parameter; a random 128-bit value if omitted.
+    #[arg(long)]
+    nonce: Option<String>,
     /// The `created` time (Unix seconds); defaults to now.
     #[arg(long)]
     created: Option<u64>,
+    /// Seconds until the signature expires. The draft requires a tight window,
+    /// on the order of minutes.
+    #[arg(long, default_value_t = 300)]
+    expires_in: u64,
+    /// Require the peer to sign its response (`wimse-sign-response`).
+    #[arg(long)]
+    sign_response: bool,
     /// The signature label.
     #[arg(long, default_value = "wimse")]
     label: String,
@@ -92,6 +103,10 @@ pub(crate) struct VerifyArgs {
     /// The `Signature` field value.
     #[arg(long)]
     signature: String,
+    /// The audience this service answers to; the signature's `wimse-aud` must
+    /// match it.
+    #[arg(long)]
+    aud: String,
     /// Comma-separated components that must be covered (overrides the default).
     #[arg(long)]
     require: Option<String>,
@@ -261,19 +276,29 @@ fn has_header(headers: &[(String, String)], name: &str) -> bool {
     headers.iter().any(|(n, _)| n.eq_ignore_ascii_case(name))
 }
 
-/// The components a WIMSE signature must cover so it cannot be replayed against a
-/// different target: always the request method, authority and path; the query
-/// when one is present; the WIT; and the content digest when a body is present.
-fn mandatory_components(has_query: bool, has_body: bool, has_wit: bool) -> Vec<Component> {
-    let mut components = vec![Component::Method, Component::Authority, Component::Path];
-    if has_query {
-        components.push(Component::Query);
-    }
-    if has_wit {
-        components.push(Component::header("workload-identity-token"));
-    }
-    if has_body {
-        components.push(Component::header("content-digest"));
+/// Headers a WIMSE signature MUST cover whenever the message carries them
+/// (Section 3 of `draft-ietf-wimse-http-signature`).
+const CONDITIONAL_HEADERS: &[&str] = &[
+    "content-type",
+    "content-digest",
+    "authorization",
+    "txn-token",
+    "workload-identity-token",
+];
+
+/// The components a WIMSE request signature must cover.
+///
+/// The draft names exactly two derived components — `@method` and
+/// `@request-target` — plus every header in [`CONDITIONAL_HEADERS`] that the
+/// message actually carries. Note that `@authority` is deliberately *not* in the
+/// set: the target service is bound by the `wimse-aud` signature parameter
+/// instead, so requiring `@authority` here would reject conforming peers.
+fn mandatory_components(headers: &[(String, String)]) -> Vec<Component> {
+    let mut components = vec![Component::Method, Component::RequestTarget];
+    for name in CONDITIONAL_HEADERS {
+        if has_header(headers, name) {
+            components.push(Component::header(name));
+        }
     }
     components
 }
@@ -339,11 +364,7 @@ fn run_sign(args: SignArgs) -> Result<()> {
 
     // Base the mandatory set on the headers actually present, so a WIT or
     // Content-Digest supplied via --header is covered like --wit/--body-file.
-    let mandatory = mandatory_components(
-        args.query.is_some(),
-        has_header(&request.headers, "content-digest"),
-        has_header(&request.headers, "workload-identity-token"),
-    );
+    let mandatory = mandatory_components(&request.headers);
     let components = if let Some(list) = args.cover {
         let components = parse_components(&list)?;
         ensure_covers(&components, &mandatory)?;
@@ -352,14 +373,24 @@ fn run_sign(args: SignArgs) -> Result<()> {
         mandatory
     };
 
-    let keyid = args.keyid.trim();
-    if keyid.is_empty() {
-        return Err("keyid must not be empty".into());
+    let aud = args.aud.trim();
+    if aud.is_empty() {
+        return Err("aud must not be empty".into());
     }
+    // `keyid` and `alg` are deliberately absent: the profile forbids them, since
+    // the key travels in the WIT and its `cnf` JWK pins the algorithm.
+    let created = args.created.unwrap_or_else(wimsey_wit::now_unix);
     let params = SignatureParams {
-        created: Some(args.created.unwrap_or_else(wimsey_wit::now_unix)),
-        keyid: Some(keyid.to_owned()),
-        alg: Some(ALG.to_owned()),
+        created: Some(created),
+        expires: Some(
+            created
+                .checked_add(args.expires_in)
+                .ok_or("expires-in overflows the expiry time")?,
+        ),
+        nonce: Some(args.nonce.map_or_else(crate::random_id, Ok)?),
+        tag: Some(WIMSE_TAG.to_owned()),
+        wimse_aud: Some(aud.to_owned()),
+        wimse_sign_response: args.sign_response.then_some(true),
         ..SignatureParams::default()
     };
 
@@ -416,9 +447,9 @@ fn run_verify(args: VerifyArgs) -> Result<()> {
         return Err("the supplied Workload-Identity-Token header does not match --wit".into());
     }
 
-    // Always required on verify: the target components, the WIT, the query when
-    // present, and the content digest when a body is present.
-    let mandatory = mandatory_components(args.query.is_some(), body.is_some(), true);
+    // Always required on verify: the draft's derived components plus every
+    // conditional header this message actually carries.
+    let mandatory = mandatory_components(&request.headers);
     let required = if let Some(list) = args.require {
         let required = parse_components(&list)?;
         ensure_covers(&required, &mandatory)?;
@@ -433,6 +464,8 @@ fn run_verify(args: VerifyArgs) -> Result<()> {
         required_components: required,
         max_age: args.max_age,
         label: Some(checked_label(&args.label)?),
+        wimse_profile: true,
+        expected_audience: Some(args.aud.trim().to_owned()),
     };
     let verified = verify(
         &request,

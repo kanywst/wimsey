@@ -118,6 +118,18 @@ pub enum ErrorCode {
     CreatedInFuture,
     /// The `Content-Digest` header did not match the body.
     ContentDigestMismatch,
+    /// A signature parameter the WIMSE profile requires was absent.
+    MissingParameter,
+    /// A signature parameter the WIMSE profile forbids was present.
+    ForbiddenParameter,
+    /// The signature's `tag` was not `wimse-workload-to-workload`.
+    WrongTag,
+    /// The `cnf` JWK omitted the required `alg` member.
+    MissingConfirmationAlg,
+    /// The `cnf` JWK named `none`, a symmetric, or an encryption algorithm.
+    ForbiddenConfirmationAlg,
+    /// The `cnf` JWK named a legal algorithm the implementation cannot use.
+    UnsupportedConfirmationAlg,
     /// The implementation rejected the input for a reason this table does not
     /// name.
     ///
@@ -141,6 +153,9 @@ impl From<&WitError> for ErrorCode {
             WitError::IssuedInFuture => Self::IssuedInFuture,
             WitError::IssuerMismatch => Self::IssuerMismatch,
             WitError::InvalidKey => Self::InvalidKey,
+            WitError::MissingConfirmationAlg => Self::MissingConfirmationAlg,
+            WitError::ForbiddenConfirmationAlg { .. } => Self::ForbiddenConfirmationAlg,
+            WitError::UnsupportedConfirmationAlg { .. } => Self::UnsupportedConfirmationAlg,
             // `WitError` is `#[non_exhaustive]`; a variant added upstream is a
             // gap in this table, not something to guess at.
             _ => Self::Unmapped,
@@ -184,6 +199,10 @@ impl From<&HttpSigError> for ErrorCode {
             HttpSigError::InvalidSignature => Self::InvalidSignature,
             HttpSigError::Expired => Self::Expired,
             HttpSigError::CreatedInFuture => Self::CreatedInFuture,
+            HttpSigError::MissingParameter(_) => Self::MissingParameter,
+            HttpSigError::ForbiddenParameter(_) => Self::ForbiddenParameter,
+            HttpSigError::WrongTag { .. } => Self::WrongTag,
+            HttpSigError::AudienceMismatch => Self::AudienceMismatch,
             _ => Self::Unmapped,
         }
     }
@@ -303,10 +322,21 @@ pub struct VectorRequest {
 pub struct VectorParams {
     /// The `created` parameter, in seconds since the Unix epoch.
     pub created: u64,
-    /// The `keyid` parameter.
-    pub keyid: String,
-    /// The `alg` parameter; always `ed25519` for WIMSE.
-    pub alg: String,
+    /// The `expires` parameter, in seconds since the Unix epoch.
+    pub expires: u64,
+    /// The `nonce` parameter, unique per recipient.
+    pub nonce: String,
+    /// The `tag` parameter; always `wimse-workload-to-workload`.
+    pub tag: String,
+    /// The `wimse-aud` parameter: the audience the request is intended for.
+    pub wimse_aud: String,
+    /// The `wimse-sign-response` Boolean parameter, when the client requires a
+    /// signed response.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wimse_sign_response: Option<bool>,
+    /// The `wimse-req-nonce` parameter, carried on a response signature.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wimse_req_nonce: Option<String>,
 }
 
 /// An RFC 9421 signing and verification vector carrying a WIT.
@@ -373,6 +403,9 @@ pub struct HttpSigNegative {
     /// The only label the verifier accepts.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub accept_label: Option<String>,
+    /// The only audience the verifier answers to, instead of the vector's.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub accept_audience: Option<String>,
     /// The verifier's maximum signature age, in seconds.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_age: Option<u64>,

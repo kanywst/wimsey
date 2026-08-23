@@ -8,9 +8,9 @@ use crate::error::HttpSigError;
 
 /// A covered component of an HTTP message signature.
 ///
-/// This crate supports the derived components `@method`, `@authority`, `@path`
-/// and `@query`, plus plain header fields. `@target-uri` and component
-/// parameters (for example `;sf` or `;key`) are not modeled.
+/// This crate supports the derived components `@method`, `@authority`, `@path`,
+/// `@query` and `@request-target`, plus plain header fields. `@target-uri` and
+/// component parameters (for example `;sf` or `;key`) are not modeled.
 #[derive(Debug, Clone)]
 pub enum Component {
     /// The request method (`@method`).
@@ -21,6 +21,10 @@ pub enum Component {
     Path,
     /// The query string including the leading `?` (`@query`).
     Query,
+    /// The request target (`@request-target`): the absolute path followed by
+    /// `?` and the query when one is present (RFC 9421 Section 2.2.5,
+    /// origin-form). The WIMSE profile requires this component to be signed.
+    RequestTarget,
     /// A header field, identified by its lowercase name.
     Header(String),
 }
@@ -34,7 +38,8 @@ impl PartialEq for Component {
             (Self::Method, Self::Method)
             | (Self::Authority, Self::Authority)
             | (Self::Path, Self::Path)
-            | (Self::Query, Self::Query) => true,
+            | (Self::Query, Self::Query)
+            | (Self::RequestTarget, Self::RequestTarget) => true,
             (Self::Header(a), Self::Header(b)) => a.eq_ignore_ascii_case(b),
             _ => false,
         }
@@ -59,6 +64,7 @@ impl Component {
             Self::Authority => "\"@authority\"".to_owned(),
             Self::Path => "\"@path\"".to_owned(),
             Self::Query => "\"@query\"".to_owned(),
+            Self::RequestTarget => "\"@request-target\"".to_owned(),
             Self::Header(name) => format!("\"{name}\""),
         }
     }
@@ -80,6 +86,7 @@ impl Component {
             "@authority" => Ok(Self::Authority),
             "@path" => Ok(Self::Path),
             "@query" => Ok(Self::Query),
+            "@request-target" => Ok(Self::RequestTarget),
             name if name.starts_with('@') => {
                 Err(HttpSigError::UnsupportedComponent(inner.to_owned()))
             }
@@ -123,7 +130,26 @@ impl HttpRequest {
                 self.path.clone()
             }),
             Component::Query => Ok(format!("?{}", self.query.as_deref().unwrap_or(""))),
+            Component::RequestTarget => Ok(self.request_target()),
             Component::Header(name) => self.header_value(name),
+        }
+    }
+
+    /// The origin-form request target: the absolute path, with `?` and the query
+    /// appended only when a query component is present.
+    ///
+    /// Unlike `@query` — which derives as a bare `?` when there is no query —
+    /// `@request-target` omits the delimiter entirely, so `/foo` and `/foo?`
+    /// stay distinguishable.
+    fn request_target(&self) -> String {
+        let path = if self.path.is_empty() {
+            "/"
+        } else {
+            &self.path
+        };
+        match &self.query {
+            Some(query) => format!("{path}?{query}"),
+            None => path.to_owned(),
         }
     }
 
@@ -199,6 +225,51 @@ mod tests {
             "example.com"
         );
         assert_eq!(request.component_value(&Component::Path).unwrap(), "/");
+    }
+
+    // `@request-target` is origin-form: path plus `?query` only when a query is
+    // actually present, unlike `@query`, which always emits the `?`.
+    #[test]
+    fn derives_the_request_target() {
+        let mut request = HttpRequest {
+            method: "POST".to_owned(),
+            authority: "example.com".to_owned(),
+            path: "/foo".to_owned(),
+            query: Some("param=Value&Pet=dog".to_owned()),
+            headers: vec![],
+        };
+        assert_eq!(
+            request.component_value(&Component::RequestTarget).unwrap(),
+            "/foo?param=Value&Pet=dog"
+        );
+
+        request.query = None;
+        assert_eq!(
+            request.component_value(&Component::RequestTarget).unwrap(),
+            "/foo"
+        );
+
+        request.path = String::new();
+        assert_eq!(
+            request.component_value(&Component::RequestTarget).unwrap(),
+            "/"
+        );
+
+        // An empty-but-present query keeps its delimiter.
+        request.query = Some(String::new());
+        assert_eq!(
+            request.component_value(&Component::RequestTarget).unwrap(),
+            "/?"
+        );
+    }
+
+    #[test]
+    fn parses_the_request_target_identifier() {
+        assert_eq!(
+            Component::from_quoted_id("\"@request-target\"").unwrap(),
+            Component::RequestTarget
+        );
+        assert_eq!(Component::RequestTarget.quoted_id(), "\"@request-target\"");
     }
 
     #[test]

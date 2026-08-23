@@ -8,7 +8,9 @@
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use ed25519_dalek::{Signer, SigningKey};
-use wimsey_httpsig::{content_digest_sha256, sign, Component, HttpRequest, SignatureParams, ALG};
+use wimsey_httpsig::{
+    content_digest_sha256, sign, Component, HttpRequest, SignatureParams, WIMSE_TAG,
+};
 use wimsey_identifier::WorkloadIdentifier;
 use wimsey_wit::{issue as issue_wit, Confirmation, Jwk, WitClaims};
 use wimsey_wpt::{issue as issue_wpt, wit_thumbprint, WptClaims};
@@ -32,10 +34,15 @@ const SUBJECT: &str = "spiffe://example.org/workload/api";
 const KID: &str = "issuer-key-1";
 const IAT: u64 = 1_700_000_000;
 const EXP: u64 = 1_700_003_600;
+/// The fixed `nonce` for the httpsig vector. A real sender MUST generate a
+/// unique one per recipient; it is pinned here so the vector reproduces.
+const NONCE: &str = "abcd1111";
+/// The fixed `wimse-aud` for the httpsig vector.
+const AUDIENCE: &str = "https://service.example/transfer";
 
-const WIT_SPEC: &str = "draft-ietf-wimse-workload-creds-01";
+const WIT_SPEC: &str = "draft-ietf-wimse-workload-creds-02";
 const WPT_SPEC: &str = "draft-ietf-wimse-wpt-01";
-const HTTPSIG_SPEC: &str = "draft-ietf-wimse-http-signature-03";
+const HTTPSIG_SPEC: &str = "draft-ietf-wimse-http-signature-06";
 
 fn header(suite: &str, id: &str, spec: &str, description: &str) -> Header {
     Header {
@@ -49,15 +56,30 @@ fn header(suite: &str, id: &str, spec: &str, description: &str) -> Header {
 
 fn wit_claims(sub: &str, pop: &SigningKey) -> WitClaims {
     WitClaims {
-        iss: ISSUER.to_owned(),
+        iss: Some(ISSUER.to_owned()),
         sub: WorkloadIdentifier::parse(sub).expect("the fixed subject is a valid identifier"),
-        iat: IAT,
+        iat: Some(IAT),
         exp: EXP,
-        jti: "a1b2c3".to_owned(),
+        jti: Some("a1b2c3".to_owned()),
         cnf: Confirmation {
             jwk: Jwk::from_ed25519(&pop.verifying_key()),
         },
     }
+}
+
+/// Re-issues `claims` with the `cnf` JWK's `alg` member replaced (or removed).
+///
+/// The token is genuinely signed, so a verifier that rejects it is rejecting the
+/// confirmation algorithm and not a broken signature.
+fn reissue_with_cnf_alg(
+    claims: &WitClaims,
+    alg: Option<&str>,
+    kid: Option<&str>,
+    issuer_key: &SigningKey,
+) -> String {
+    let mut altered = claims.clone();
+    altered.cnf.jwk.alg = alg.map(ToOwned::to_owned);
+    issue_wit(&altered, kid, issuer_key).expect("the altered claims are still serializable")
 }
 
 /// A negative case with every override left unset; callers fill in the ones
@@ -97,6 +119,7 @@ fn httpsig_neg(id: &str, description: &str, expect: ErrorCode) -> HttpSigNegativ
         signature: None,
         verify_now: None,
         accept_label: None,
+        accept_audience: None,
         max_age: None,
         required_components: None,
     }
@@ -142,23 +165,15 @@ fn tamper_payload(token: &str, from: &str, to: &str) -> String {
     format!("{header}.{tampered}.{signature}")
 }
 
-/// Builds the WIT vector.
-///
-/// # Panics
-///
-/// Panics if the fixed inputs in this module stop being valid — which would
-/// mean the implementation can no longer issue its own reference credentials.
-#[must_use]
-pub fn wit_vector() -> WitVector {
-    let issuer_key = SigningKey::from_bytes(&ISSUER_SEED);
-    let other_issuer = SigningKey::from_bytes(&OTHER_ISSUER_SEED);
-    let pop_key = SigningKey::from_bytes(&WIT_POP_SEED);
-
-    let claims = wit_claims(SUBJECT, &pop_key);
-    let kid = Some(KID.to_owned());
-    let token = issue_wit(&claims, kid.as_deref(), &issuer_key).expect("issue");
-
-    let negative = vec![
+/// The inputs a WIT verifier must reject, given the positive case's token.
+fn wit_negatives(
+    claims: &WitClaims,
+    token: &str,
+    kid: Option<&str>,
+    issuer_key: &SigningKey,
+    other_issuer: &SigningKey,
+) -> Vec<WitNegative> {
+    vec![
         WitNegative {
             verify_now: Some(EXP + 1),
             ..wit_neg(
@@ -177,9 +192,9 @@ pub fn wit_vector() -> WitVector {
         },
         WitNegative {
             token: Some(resign_with_header(
-                &token,
+                token,
                 r#"{"typ":"jwt","alg":"EdDSA","kid":"issuer-key-1"}"#,
-                &issuer_key,
+                issuer_key,
             )),
             ..wit_neg(
                 "wrong-typ",
@@ -188,7 +203,7 @@ pub fn wit_vector() -> WitVector {
             )
         },
         WitNegative {
-            token: Some(tamper_payload(&token, "a1b2c3", "a1b2c4")),
+            token: Some(tamper_payload(token, "a1b2c3", "a1b2c4")),
             ..wit_neg(
                 "tampered-payload",
                 "`jti` was altered after signing; the payload is still valid JSON",
@@ -213,7 +228,57 @@ pub fn wit_vector() -> WitVector {
                 ErrorCode::IssuerMismatch,
             )
         },
-    ];
+        // The `alg` member of the `cnf` JWK pins the algorithm the proof must be
+        // produced with. Without it nothing constrains the proof, so a WIT that
+        // omits it must not verify.
+        WitNegative {
+            token: Some(reissue_with_cnf_alg(claims, None, kid, issuer_key)),
+            ..wit_neg(
+                "cnf-missing-alg",
+                "the `cnf` JWK omits the `alg` member the draft requires",
+                ErrorCode::MissingConfirmationAlg,
+            )
+        },
+        WitNegative {
+            token: Some(reissue_with_cnf_alg(claims, Some("HS256"), kid, issuer_key)),
+            ..wit_neg(
+                "cnf-symmetric-alg",
+                "the `cnf` JWK names a symmetric algorithm, which cannot prove possession",
+                ErrorCode::ForbiddenConfirmationAlg,
+            )
+        },
+        WitNegative {
+            token: Some(reissue_with_cnf_alg(claims, Some("none"), kid, issuer_key)),
+            ..wit_neg(
+                "cnf-unsecured-alg",
+                "the `cnf` JWK names `none`, which the draft forbids outright",
+                ErrorCode::ForbiddenConfirmationAlg,
+            )
+        },
+    ]
+}
+
+/// Builds the WIT vector.
+///
+/// # Panics
+///
+/// Panics if the fixed inputs in this module stop being valid — which would
+/// mean the implementation can no longer issue its own reference credentials.
+#[must_use]
+pub fn wit_vector() -> WitVector {
+    let issuer_key = SigningKey::from_bytes(&ISSUER_SEED);
+    let pop_key = SigningKey::from_bytes(&WIT_POP_SEED);
+
+    let claims = wit_claims(SUBJECT, &pop_key);
+    let kid = Some(KID.to_owned());
+    let token = issue_wit(&claims, kid.as_deref(), &issuer_key).expect("issue");
+    let negative = wit_negatives(
+        &claims,
+        &token,
+        kid.as_deref(),
+        &issuer_key,
+        &SigningKey::from_bytes(&OTHER_ISSUER_SEED),
+    );
 
     WitVector {
         header: header(
@@ -357,29 +422,34 @@ pub fn httpsig_vector() -> HttpSigVector {
             ("Workload-Identity-Token".to_owned(), wit.clone()),
         ],
     };
+    // Exactly the set Section 3 of the http-signature draft mandates: the two
+    // derived components, plus each listed header the message actually carries.
     let components = vec![
         Component::Method,
-        Component::Authority,
-        Component::Path,
+        Component::RequestTarget,
+        Component::header("content-type"),
         Component::header("content-digest"),
         Component::header("workload-identity-token"),
     ];
+    // No `keyid` and no `alg`: the profile forbids both.
     let params = SignatureParams {
         created: Some(IAT),
-        keyid: Some(KID.to_owned()),
-        alg: Some(ALG.to_owned()),
+        expires: Some(IAT + 300),
+        nonce: Some(NONCE.to_owned()),
+        tag: Some(WIMSE_TAG.to_owned()),
+        wimse_aud: Some(AUDIENCE.to_owned()),
         ..SignatureParams::default()
     };
     let signed = sign(&request, &components, &params, "wimse", &pop_key).expect("sign");
 
     let vector_request = VectorRequest {
-        method: request.method,
-        authority: request.authority,
-        path: request.path,
-        query: request.query,
-        headers: request.headers,
+        method: request.method.clone(),
+        authority: request.authority.clone(),
+        path: request.path.clone(),
+        query: request.query.clone(),
+        headers: request.headers.clone(),
     };
-    let negative = httpsig_negatives(&vector_request);
+    let negative = httpsig_negatives(&vector_request, &request, &components, &params, &pop_key);
 
     HttpSigVector {
         header: header(
@@ -395,8 +465,12 @@ pub fn httpsig_vector() -> HttpSigVector {
         components: components.iter().map(Component::quoted_id).collect(),
         params: VectorParams {
             created: IAT,
-            keyid: KID.to_owned(),
-            alg: ALG.to_owned(),
+            expires: IAT + 300,
+            nonce: NONCE.to_owned(),
+            tag: WIMSE_TAG.to_owned(),
+            wimse_aud: AUDIENCE.to_owned(),
+            wimse_sign_response: None,
+            wimse_req_nonce: None,
         },
         request: vector_request,
         body: String::from_utf8(body.to_vec()).expect("the fixed body is utf-8"),
@@ -407,18 +481,111 @@ pub fn httpsig_vector() -> HttpSigVector {
     }
 }
 
+/// The rejection cases that break one rule of the WIMSE profile each.
+///
+/// Every case is a *genuinely signed* message, so what the verifier turns away
+/// is the broken rule and not a bad signature.
+fn httpsig_profile_negatives(
+    request: &HttpRequest,
+    components: &[Component],
+    params: &SignatureParams,
+    pop_key: &SigningKey,
+) -> Vec<HttpSigNegative> {
+    let profile_case = |id: &str, description: &str, expect, altered: SignatureParams| {
+        let signed = sign(request, components, &altered, "wimse", pop_key)
+            .expect("the fixed profile-negative inputs are signable");
+        HttpSigNegative {
+            signature_input: Some(signed.signature_input),
+            signature: Some(signed.signature),
+            ..httpsig_neg(id, description, expect)
+        }
+    };
+
+    vec![
+        profile_case(
+            "forbidden-alg-parameter",
+            "the signature carries the `alg` parameter, which the profile forbids",
+            ErrorCode::ForbiddenParameter,
+            SignatureParams {
+                alg: Some("ed25519".to_owned()),
+                ..params.clone()
+            },
+        ),
+        profile_case(
+            "forbidden-keyid-parameter",
+            "the signature carries the `keyid` parameter, which the profile forbids",
+            ErrorCode::ForbiddenParameter,
+            SignatureParams {
+                keyid: Some(KID.to_owned()),
+                ..params.clone()
+            },
+        ),
+        profile_case(
+            "missing-nonce",
+            "the signature omits the mandatory `nonce` parameter",
+            ErrorCode::MissingParameter,
+            SignatureParams {
+                nonce: None,
+                ..params.clone()
+            },
+        ),
+        profile_case(
+            "missing-expires",
+            "the signature omits the mandatory `expires` parameter",
+            ErrorCode::MissingParameter,
+            SignatureParams {
+                expires: None,
+                ..params.clone()
+            },
+        ),
+        profile_case(
+            "missing-wimse-aud",
+            "the request signature omits the mandatory `wimse-aud` parameter",
+            ErrorCode::MissingParameter,
+            SignatureParams {
+                wimse_aud: None,
+                ..params.clone()
+            },
+        ),
+        profile_case(
+            "wrong-tag",
+            "the signature's `tag` is not `wimse-workload-to-workload`",
+            ErrorCode::WrongTag,
+            SignatureParams {
+                tag: Some("some-other-protocol".to_owned()),
+                ..params.clone()
+            },
+        ),
+    ]
+}
+
 /// The inputs an httpsig verifier must reject, given the signed request.
 ///
 /// Note that `accept_label`, `max_age` and `required_components` describe how
 /// strict the *receiver* is rather than anything about the message: the case
 /// asserts that a receiver configured that way turns the request away.
-fn httpsig_negatives(signed_request: &VectorRequest) -> Vec<HttpSigNegative> {
+fn httpsig_negatives(
+    signed_request: &VectorRequest,
+    request: &HttpRequest,
+    components: &[Component],
+    params: &SignatureParams,
+    pop_key: &SigningKey,
+) -> Vec<HttpSigNegative> {
     let rerouted = VectorRequest {
         path: "/admin".to_owned(),
         ..signed_request.clone()
     };
 
-    vec![
+    let mut cases = httpsig_profile_negatives(request, components, params, pop_key);
+    cases.extend([
+        HttpSigNegative {
+            accept_audience: Some("https://other.example/inbox".to_owned()),
+            ..httpsig_neg(
+                "audience-mismatch",
+                "the signature was minted for a different service than the one verifying it",
+                ErrorCode::AudienceMismatch,
+            )
+        },
         HttpSigNegative {
             body: Some(r#"{"amount":999}"#.to_owned()),
             ..httpsig_neg(
@@ -444,11 +611,13 @@ fn httpsig_negatives(signed_request: &VectorRequest) -> Vec<HttpSigNegative> {
             )
         },
         HttpSigNegative {
-            verify_now: Some(IAT + 3600),
+            // Inside the signature's own `expires` window, so what rejects this
+            // is the verifier's stricter `max_age` and not plain expiry.
+            verify_now: Some(IAT + 120),
             max_age: Some(30),
             ..httpsig_neg(
                 "too-old",
-                "the signature is older than the verifier's `max_age`",
+                "the signature is still unexpired but older than the verifier's `max_age`",
                 ErrorCode::TooOld,
             )
         },
@@ -468,7 +637,8 @@ fn httpsig_negatives(signed_request: &VectorRequest) -> Vec<HttpSigNegative> {
                 ErrorCode::MissingRequiredComponent,
             )
         },
-    ]
+    ]);
+    cases
 }
 
 /// Builds the manifest that indexes every vector.
