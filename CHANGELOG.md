@@ -41,7 +41,10 @@ behaviour and the recorded conformance vectors, so tokens and signatures from
 - `wimsey-identifier` supports the `wimse://` scheme defined in Section 4.4 of
   identifier -03 alongside `spiffe://`, and enforces the generic rules of
   Section 4.1: no query, fragment, user-information or port component.
-  `WorkloadIdentifier::scheme` and `::origin` are new.
+  `WorkloadIdentifier::scheme` and `::origin` are new. Percent-escapes in a
+  `wimse` path must be in RFC 3986 Section 6.2.2 normalized form — uppercase
+  hex, and never encoding an unreserved character — so that an identifier has
+  exactly one spelling and Section 4.3 whole-URI comparison is sound.
 - `wimsey-httpsig` models the `@request-target` derived component, which the
   profile requires, and the `wimse-aud`, `wimse-sign-response` and
   `wimse-req-nonce` signature parameters.
