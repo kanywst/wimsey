@@ -1,6 +1,7 @@
 [package]
 name = "wimsey-httpsig"
 description = "WIMSE workload-to-workload auth using HTTP Message Signatures (RFC 9421)."
+readme = "README.md"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

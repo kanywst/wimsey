@@ -1,6 +1,7 @@
 [package]
 name = "wimsey-issuer"
 description = "Experimental WIMSE credential issuer with a SPIFFE Workload API shim."
+readme = "README.md"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

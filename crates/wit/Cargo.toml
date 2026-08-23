@@ -1,6 +1,7 @@
 [package]
 name = "wimsey-wit"
 description = "WIMSE Workload Identity Token (WIT) and Workload Identity Certificate (WIC)."
+readme = "README.md"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

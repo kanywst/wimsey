@@ -1,6 +1,7 @@
 [package]
 name = "wimsey-mtls"
 description = "WIMSE workload authentication using mutual TLS (client cert = WIC)."
+readme = "README.md"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

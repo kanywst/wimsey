@@ -1,6 +1,7 @@
 [package]
 name = "wimsey-cli"
 description = "The wimsey command-line tool: issue, verify and inspect WIMSE credentials."
+readme = "README.md"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
