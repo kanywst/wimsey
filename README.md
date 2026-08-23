@@ -41,7 +41,7 @@ The proof of possession is one of three interchangeable bindings:
 
 | Crate | Role | Spec |
 | --- | --- | --- |
-| `wimsey-identifier` | Workload identifier URI scheme | `draft-ietf-wimse-identifier` |
+| `wimsey-identifier` | Workload identifier URI (`spiffe` and `wimse`) | `draft-ietf-wimse-identifier` |
 | `wimsey-wit` | Workload Identity Token (WIT / WIC) | `draft-ietf-wimse-workload-creds` |
 | `wimsey-wpt` | Workload Proof Token | `draft-ietf-wimse-wpt` |
 | `wimsey-httpsig` | HTTP Message Signatures binding | `draft-ietf-wimse-http-signature` |
@@ -71,9 +71,17 @@ wimsey wpt verify --issuer-jwk issuer.jwk --wit "$(cat wit.txt)" \
   --aud https://service.example/transfer --proof "$(cat wpt.txt)"
 ```
 
-The same WIT can instead be carried in an RFC 9421 HTTP signature
-(`wimsey httpsig sign|verify`) or an mTLS client certificate. Run
-`wimsey --help`, or start the issuer with `cargo run -p wimsey-issuer`.
+The same WIT can instead be carried in an RFC 9421 HTTP signature, where the
+audience is a signature parameter rather than a claim:
+
+```bash
+wimsey httpsig sign --pop-key pop.jwk --authority service.example \
+  --path /transfer --wit "$(cat wit.txt)" \
+  --aud https://service.example/transfer
+```
+
+Or in an mTLS client certificate. Run `wimsey --help`, or start the issuer with
+`cargo run -p wimsey-issuer`.
 
 ## Documentation
 

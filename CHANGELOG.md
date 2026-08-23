@@ -7,6 +7,55 @@ reaches a first release.
 
 ## [Unreleased]
 
+Every draft pin is brought up to the current revision. This changes protocol
+behaviour and the recorded conformance vectors, so tokens and signatures from
+0.2.0 will not verify against this revision and vice versa.
+
+### Changed
+
+- **Breaking:** draft pins advanced — `http-signature` -03 → -06,
+  `workload-creds` -01 → -02, `identifier` -02 → -03, `mutual-tls` -01 → -02.
+  See [`SPEC-MAP.md`](SPEC-MAP.md).
+- **Breaking:** `wimsey-httpsig` now implements the profile in Section 3 of the
+  http-signature draft. `keyid` and `alg` are forbidden signature parameters;
+  `created`, `expires`, `nonce`, `tag` (`wimse-workload-to-workload`) and
+  `wimse-aud` are mandatory. Enforcement is opt-in via
+  `VerifyConfig::wimse_profile`, so the crate still works as a plain RFC 9421
+  implementation.
+- **Breaking:** `wimsey-wit` requires the `alg` member inside the `cnf` JWK,
+  which pins the algorithm the proof of possession must be produced with. A WIT
+  without it no longer verifies.
+- **Breaking:** `WitClaims.iss`, `.iat` and `.jti` are now `Option`, matching
+  workload-creds -02, where only `sub`, `exp` and `cnf` are mandatory. They are
+  omitted from the serialization when unset.
+- **Breaking:** `ParseError::MissingScheme` is replaced by
+  `ParseError::UnsupportedScheme`.
+- **Breaking:** `wimsey httpsig sign` drops `--keyid` and gains `--aud`,
+  `--nonce`, `--expires-in` and `--sign-response`; `wimsey httpsig verify` gains
+  a required `--aud`. `wimsey wit issue --iss` is now optional.
+- `wimsey-mtls` issues WICs with the `id-kp-clientAuth` and `id-kp-serverAuth`
+  extended key usages the mutual-TLS draft asks for.
+
+### Added
+
+- `wimsey-identifier` supports the `wimse://` scheme defined in Section 4.4 of
+  identifier -03 alongside `spiffe://`, and enforces the generic rules of
+  Section 4.1: no query, fragment, user-information or port component.
+  `WorkloadIdentifier::scheme` and `::origin` are new.
+- `wimsey-httpsig` models the `@request-target` derived component, which the
+  profile requires, and the `wimse-aud`, `wimse-sign-response` and
+  `wimse-req-nonce` signature parameters.
+- Ten new conformance cases covering the profile's parameter rules and the
+  `cnf` JWK algorithm rules: 35 assertions, up from 25.
+
+### Known gaps
+
+- Response signing (`@status`, `;req` components, `wimse-req-nonce` on a
+  response) is parsed and carried but not yet produced or verified.
+- ES256, which workload-creds -02 requires general-purpose implementations to
+  support, is recognised and reported as unsupported rather than implemented.
+  This crate remains Ed25519-only so that signing stays deterministic.
+
 ## [0.2.0] - 2026-08-16
 
 No protocol behaviour changed in this release: token and signature encodings are
