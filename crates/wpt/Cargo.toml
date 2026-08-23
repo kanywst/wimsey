@@ -1,6 +1,7 @@
 [package]
 name = "wimsey-wpt"
 description = "WIMSE Workload Proof Token (WPT), a DPoP-style proof of possession."
+readme = "README.md"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

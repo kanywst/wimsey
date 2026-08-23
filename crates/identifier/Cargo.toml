@@ -1,6 +1,7 @@
 [package]
 name = "wimsey-identifier"
 description = "WIMSE Workload Identifier URI scheme (SPIFFE-ID compatible)."
+readme = "README.md"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
