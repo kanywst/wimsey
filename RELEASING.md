@@ -28,6 +28,8 @@ Determine the bump from the [Conventional Commits](https://www.conventionalcommi
 
 3. Update `[workspace.package] version` in the root `Cargo.toml`. Every crate inherits it with `version.workspace = true`, so this is the only version to edit — but the `wimsey-*` entries under `[workspace.dependencies]` pin a `version` too, and those must move in step.
 
+   Every internal dependency belongs in that one table. A crate that pins a sibling inline, as `{ path = "../mtls", version = "0.2.0" }`, is a version that will be missed on some future release and only surface as a publish failure.
+
 4. Add the section to `CHANGELOG.md` and update the link definitions at the bottom. Say what changed *for a caller*; if nothing observable changed, say that explicitly and say what drove the bump.
 
 5. Refresh `Cargo.lock` and verify:
@@ -84,4 +86,26 @@ Signing is keyless, so there is no release key anywhere — the Sigstore certifi
 
 This is worth revisiting — but by trialling one of them on a branch and watching what it does to the root manifest, not by adopting it and finding out during a release.
 
-**Publishing to crates.io.** Nothing is published yet. When that changes, `cargo publish` has to walk the workspace in dependency order, and `wimsey-conformance` stays unpublished (`publish = false`) because it is a harness, not a library.
+**Publishing to crates.io.** Deliberately manual, and done *after* the tag, so a release that fails to build never reaches a registry it cannot be withdrawn from. A version can be yanked but never deleted, and the name is taken forever.
+
+`cargo publish` walks one crate at a time in dependency order, because each has to exist on the index before the next can resolve it:
+
+```bash
+for c in wimsey-identifier wimsey-wpt wimsey-httpsig wimsey-wit \
+         wimsey-mtls wimsey-issuer wimsey-cli; do
+  cargo publish -p "$c" || break
+  # The index is eventually consistent; the next crate cannot resolve this one
+  # until it lands.
+  until cargo search "$c" | grep -q "^$c "; do sleep 5; done
+done
+```
+
+`wimsey-conformance` and `wimsey-demo` stay unpublished (`publish = false`): one is a harness and the other a demo, and neither is a library anyone should depend on.
+
+Before publishing, confirm the packages actually contain what they claim to:
+
+```bash
+cargo package -p wimsey-identifier --list   # README.md and LICENSE must be present
+```
+
+Both are easy to lose. `readme` has to be set per crate, and `LICENSE` has to sit *inside* each crate directory — a copy at the workspace root is outside every package, which means shipping an Apache-2.0 crate with no licence text.

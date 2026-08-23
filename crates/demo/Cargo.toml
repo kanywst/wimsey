@@ -21,7 +21,7 @@ wimsey-identifier = { workspace = true }
 wimsey-wit = { workspace = true }
 wimsey-wpt = { workspace = true }
 wimsey-httpsig = { workspace = true }
-wimsey-mtls = { path = "../mtls", version = "0.2.0" }
+wimsey-mtls = { workspace = true }
 ed25519-dalek = { workspace = true }
 
 [lints]

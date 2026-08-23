@@ -1,15 +1,23 @@
 # Changelog
 
 All notable changes to this project are documented here. The format is based on
-[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims
-to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) once it
-reaches a first release.
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the versioning on
+[Semantic Versioning](https://semver.org/spec/v2.0.0.html). The project is
+pre-1.0, so per SemVer clause 4 the public API is not yet stable: a breaking
+change bumps the **minor** and everything else bumps the **patch**. Cargo treats
+`0.2` and `0.3` as incompatible, so a breaking release never reaches a caller
+silently.
 
 ## [Unreleased]
 
-Every draft pin is brought up to the current revision. This changes protocol
-behaviour and the recorded conformance vectors, so tokens and signatures from
-0.2.0 will not verify against this revision and vice versa.
+## [0.3.0] - 2026-08-23
+
+The first release published to crates.io, and the one that brings every draft
+pin up to the current revision.
+
+Breaking throughout: tokens, signatures and certificates produced by 0.2.0 will
+not verify against 0.3.0, and vice versa. Nothing was published before this, so
+nothing outside the repository can be relying on the old behaviour.
 
 ### Changed
 
@@ -120,6 +128,7 @@ public API.
 - Project governance, security policy, contributing guide (DCO), and OpenSSF
   Scorecard automation.
 
-[Unreleased]: https://github.com/kanywst/wimsey/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/kanywst/wimsey/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/kanywst/wimsey/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/kanywst/wimsey/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/kanywst/wimsey/releases/tag/v0.1.0

@@ -1135,7 +1135,7 @@ checksum = "ccf3ec651a847eb01de73ccad15eb7d99f80485de043efb2f370cd654f4ea44b"
 
 [[package]]
 name = "wimsey-cli"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "base64",
  "clap",
@@ -1151,7 +1151,7 @@ dependencies = [
 
 [[package]]
 name = "wimsey-conformance"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "base64",
  "clap",
@@ -1167,7 +1167,7 @@ dependencies = [
 
 [[package]]
 name = "wimsey-demo"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "ed25519-dalek",
  "wimsey-httpsig",
@@ -1179,7 +1179,7 @@ dependencies = [
 
 [[package]]
 name = "wimsey-httpsig"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "base64",
  "ed25519-dalek",
@@ -1189,7 +1189,7 @@ dependencies = [
 
 [[package]]
 name = "wimsey-identifier"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -1198,7 +1198,7 @@ dependencies = [
 
 [[package]]
 name = "wimsey-issuer"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "axum",
  "base64",
@@ -1217,7 +1217,7 @@ dependencies = [
 
 [[package]]
 name = "wimsey-mtls"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "ed25519-dalek",
  "rcgen",
@@ -1229,7 +1229,7 @@ dependencies = [
 
 [[package]]
 name = "wimsey-wit"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "base64",
  "ed25519-dalek",
@@ -1241,7 +1241,7 @@ dependencies = [
 
 [[package]]
 name = "wimsey-wpt"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "base64",
  "ed25519-dalek",
