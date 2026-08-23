@@ -16,11 +16,13 @@ use wimsey_httpsig::{
     sign, verify as verify_httpsig, verify_content_digest, Component, HttpRequest, SignatureParams,
     VerifyConfig, VerifyingKey,
 };
+use wimsey_identifier::WorkloadIdentifier;
 use wimsey_wit::{issue as issue_wit, verify as verify_wit, Validation as WitValidation};
 use wimsey_wpt::{issue as issue_wpt, verify as verify_wpt, wit_thumbprint, Validation};
 
 use crate::vectors::{
-    ErrorCode, HttpSigVector, Manifest, VectorRequest, WitVector, WptVector, FORMAT,
+    ErrorCode, HttpSigVector, IdentifierVector, Manifest, VectorRequest, WitVector, WptVector,
+    FORMAT,
 };
 
 /// Something that stopped the runner before it could reach a verdict.
@@ -175,6 +177,52 @@ fn content_digest(request: &VectorRequest) -> Option<&str> {
         .iter()
         .find(|(name, _)| name.eq_ignore_ascii_case("content-digest"))
         .map(|(_, value)| value.as_str())
+}
+
+/// Runs the workload identifier vector.
+///
+/// There is nothing to re-sign here, so the two checks are the whole contract:
+/// an `accept` case must parse *and decompose* exactly as recorded, and a
+/// `reject` case must be refused for the recorded reason.
+pub fn run_identifier(vector: &IdentifierVector, report: &mut Report) {
+    let name = format!("{}/{}", vector.header.suite, vector.header.id);
+
+    for case in &vector.accept {
+        let outcome = match WorkloadIdentifier::parse(&case.identifier) {
+            Err(e) => Err(format!("must parse, but was rejected: {e}")),
+            Ok(parsed) => {
+                let got = (
+                    parsed.scheme().as_str(),
+                    parsed.trust_domain(),
+                    parsed.path(),
+                    parsed.origin(),
+                );
+                let want = (
+                    case.scheme.as_str(),
+                    case.trust_domain.as_str(),
+                    case.path.as_str(),
+                    case.origin.as_str(),
+                );
+                if got == want {
+                    Ok(())
+                } else {
+                    Err(format!("decomposed as {got:?}, expected {want:?}"))
+                }
+            }
+        };
+        report.record(&name, &format!("accept/{}", case.id), outcome);
+    }
+
+    for case in &vector.reject {
+        let actual = WorkloadIdentifier::parse(&case.identifier)
+            .map(|_| ())
+            .map_err(|e| ErrorCode::from(&e));
+        report.record(
+            &name,
+            &format!("reject/{}", case.id),
+            expect_reject(case.expect, actual),
+        );
+    }
 }
 
 /// Runs the WIT vector: reproducibility, acceptance, and every rejection.
@@ -507,6 +555,11 @@ pub fn run_dir(dir: &Path) -> Result<Report, Error> {
     for entry in &manifest.vectors {
         let path = dir.join(&entry.path);
         match entry.suite.as_str() {
+            "identifier" => {
+                let vector: IdentifierVector = read_json(&path)?;
+                check_format(&path, &vector.header.format)?;
+                run_identifier(&vector, &mut report);
+            }
             "wit" => {
                 let vector: WitVector = read_json(&path)?;
                 check_format(&path, &vector.header.format)?;

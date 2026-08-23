@@ -2,6 +2,11 @@
   "format": "wimse-conformance/v1",
   "vectors": [
     {
+      "suite": "identifier",
+      "path": "identifier/parse-basic.json",
+      "spec": "draft-ietf-wimse-identifier-03"
+    },
+    {
       "suite": "wit",
       "path": "wit/issue-basic.json",
       "spec": "draft-ietf-wimse-workload-creds-02"

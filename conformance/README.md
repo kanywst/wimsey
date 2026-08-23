@@ -14,10 +14,11 @@ Everything here is EdDSA over Ed25519 (RFC 8037), which is deterministic, so the
 
 ```text
 conformance/
-  manifest.json                 index of every vector
-  wit/issue-basic.json          draft-ietf-wimse-workload-creds-01
-  wpt/proof-basic.json          draft-ietf-wimse-wpt-01
-  httpsig/sign-basic.json       draft-ietf-wimse-http-signature-03
+  manifest.json                    index of every vector
+  identifier/parse-basic.json      draft-ietf-wimse-identifier-03
+  wit/issue-basic.json             draft-ietf-wimse-workload-creds-02
+  wpt/proof-basic.json             draft-ietf-wimse-wpt-01
+  httpsig/sign-basic.json          draft-ietf-wimse-http-signature-06
 ```
 
 Start at `manifest.json`. Do not glob the directories — the manifest is the list, and a runner that globs will silently skip a vector whose suite it does not recognise.
@@ -94,10 +95,33 @@ Every vector has a `negative` array. Each entry records **only the fields it ove
 | `missing_confirmation_alg` | The `cnf` JWK omitted the required `alg` member |
 | `forbidden_confirmation_alg` | The `cnf` JWK named `none`, a symmetric, or an encryption algorithm |
 | `unsupported_confirmation_alg` | The `cnf` JWK named a legal algorithm the implementation cannot use |
+| `identifier_too_long` | A workload identifier exceeded the maximum length |
+| `unsupported_scheme` | The identifier used a scheme the implementation does not know |
+| `has_query` / `has_fragment` | Section 4.1 forbids a query and a fragment component |
+| `has_user_info` / `has_port` | Section 4.1 forbids user information and a port |
+| `empty_trust_domain` | The authority component was empty |
+| `trust_domain_too_long` | The trust domain exceeded the length its scheme allows |
+| `invalid_trust_domain_char` | The trust domain held a character its scheme disallows |
+| `empty_path_segment` | A path segment was empty, including a trailing slash |
+| `dot_segment` | A path held a `.` or `..` segment |
+| `invalid_path_char` | A path segment held a character its scheme disallows |
+| `bad_percent_encoding` | A percent-escape was not `%` plus two hex digits |
+| `non_normalized_percent_encoding` | A percent-escape was lowercase, or encoded an unreserved character |
 
 No vector records `unmapped`. The runner reports that code when an implementation rejects an input for a reason the table does not name, so an unrecognised failure shows up as a mismatch instead of being folded into a plausible-looking neighbour.
 
 ## What to check per suite
+
+### `identifier`
+
+There is nothing to re-sign here, so the two checks are the whole contract.
+
+- Every entry in `accept` must parse **and decompose** into the recorded `scheme`, `trust_domain`, `path` and `origin`. Parsing without checking the decomposition would let a parser that silently normalizes still pass.
+- Every entry in `reject` must be refused for the recorded reason.
+
+Most of the reject cases are not malformed URIs at all — they are *second spellings*. `spiffe://Example.org/x`, `spiffe://example.org/a/../b`, `wimse://example.org/%2E%2E/api` and `wimse://example.org/%61pi` each denote something an accepted identifier already denotes, once RFC 3986 Section 6.2.2 normalization is applied. Section 4.3 tells consumers to compare complete URIs, which is only sound if an identifier has exactly one spelling, so a conforming parser has to either normalize or refuse. This suite requires refusing, because a parser that normalizes silently will disagree with one that does not, and the disagreement will be about who is authorized.
+
+Note `wimse://example.org/a%2Fb` in `accept`: `%2F` encodes a **reserved** character, which normalization does *not* decode, so it is a legitimate identifier rather than a second spelling of `/a/b`. An implementation that percent-decodes indiscriminately will wrongly reject it — or worse, wrongly equate it with `a/b`.
 
 ### `wit`
 

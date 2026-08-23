@@ -16,8 +16,9 @@ use wimsey_wit::{issue as issue_wit, Confirmation, Jwk, WitClaims};
 use wimsey_wpt::{issue as issue_wpt, wit_thumbprint, WptClaims};
 
 use crate::vectors::{
-    ErrorCode, Header, HttpSigNegative, HttpSigVector, Manifest, ManifestEntry, VectorParams,
-    VectorRequest, WitNegative, WitVector, WptNegative, WptVector, FORMAT,
+    ErrorCode, Header, HttpSigNegative, HttpSigVector, IdentifierAccept, IdentifierReject,
+    IdentifierVector, Manifest, ManifestEntry, VectorParams, VectorRequest, WitNegative, WitVector,
+    WptNegative, WptVector, FORMAT,
 };
 
 /// The issuer's Ed25519 seed. Fixed so the vectors are reproducible.
@@ -648,6 +649,11 @@ pub fn manifest() -> Manifest {
         format: FORMAT.to_owned(),
         vectors: vec![
             ManifestEntry {
+                suite: "identifier".to_owned(),
+                path: "identifier/parse-basic.json".to_owned(),
+                spec: IDENTIFIER_SPEC.to_owned(),
+            },
+            ManifestEntry {
                 suite: "wit".to_owned(),
                 path: "wit/issue-basic.json".to_owned(),
                 spec: WIT_SPEC.to_owned(),
@@ -664,4 +670,191 @@ pub fn manifest() -> Manifest {
             },
         ],
     }
+}
+
+const IDENTIFIER_SPEC: &str = "draft-ietf-wimse-identifier-03";
+
+fn accept(id: &str, description: &str, identifier: &str) -> IdentifierAccept {
+    let parsed =
+        WorkloadIdentifier::parse(identifier).expect("the fixed accept cases are all valid");
+    IdentifierAccept {
+        id: id.to_owned(),
+        description: description.to_owned(),
+        identifier: identifier.to_owned(),
+        scheme: parsed.scheme().as_str().to_owned(),
+        trust_domain: parsed.trust_domain().to_owned(),
+        path: parsed.path().to_owned(),
+        origin: parsed.origin().to_owned(),
+    }
+}
+
+fn reject(id: &str, description: &str, identifier: &str, expect: ErrorCode) -> IdentifierReject {
+    IdentifierReject {
+        id: id.to_owned(),
+        description: description.to_owned(),
+        identifier: identifier.to_owned(),
+        expect,
+    }
+}
+
+/// Builds the workload identifier vector.
+///
+/// # Panics
+///
+/// Panics if an identifier listed under `accept` stops parsing, which would mean
+/// the implementation no longer accepts its own reference identifiers.
+#[must_use]
+pub fn identifier_vector() -> IdentifierVector {
+    IdentifierVector {
+        header: header(
+            "identifier",
+            "parse-basic",
+            IDENTIFIER_SPEC,
+            "Workload identifier syntax for the spiffe and wimse schemes, plus the inputs a parser must reject",
+        ),
+        accept: identifier_accepts(),
+        reject: identifier_rejects(),
+    }
+}
+
+/// The identifiers that must parse, with the decomposition each must yield.
+fn identifier_accepts() -> Vec<IdentifierAccept> {
+    vec![
+        accept(
+            "spiffe-basic",
+            "the SPIFFE scheme the architecture draft cites as a conforming identifier",
+            "spiffe://example.org/workload/api",
+        ),
+        accept(
+            "wimse-basic",
+            "the wimse scheme defined in Section 4.4",
+            "wimse://trust.example.com/service/payment",
+        ),
+        accept(
+            "trust-domain-only",
+            "the path is optional; an identifier may be a bare trust domain",
+            "spiffe://prod.trust.domain",
+        ),
+        accept(
+            "wimse-pchar-path",
+            "Section 4.4 leaves the wimse path to the generic RFC 3986 pchar set",
+            "wimse://example.org/a~b!c$d&e'f(g)h*i+j,k;l=m:n@o",
+        ),
+        accept(
+            "wimse-encoded-reserved",
+            "a reserved character stays encodable: %2F is a `/` that is data, not a delimiter",
+            "wimse://example.org/a%2Fb",
+        ),
+        accept(
+            "deep-path",
+            "the path may encode structured information within the trust domain",
+            "spiffe://prod.trust.domain/ns/prod-01/sa/foo-service",
+        ),
+    ]
+}
+
+/// The identifiers a parser must refuse, and the reason for each.
+fn identifier_rejects() -> Vec<IdentifierReject> {
+    vec![
+        reject(
+            "unsupported-scheme",
+            "an https URI is not a workload identifier",
+            "https://example.org/x",
+            ErrorCode::UnsupportedScheme,
+        ),
+        // Section 4.1: no query, fragment, user information or port.
+        reject(
+            "has-query",
+            "Section 4.1 forbids a query component",
+            "wimse://example.org/a?b=c",
+            ErrorCode::HasQuery,
+        ),
+        reject(
+            "has-fragment",
+            "Section 4.1 forbids a fragment component",
+            "wimse://example.org/a#frag",
+            ErrorCode::HasFragment,
+        ),
+        reject(
+            "has-user-info",
+            "Section 4.1 forbids user information",
+            "wimse://user@example.org/a",
+            ErrorCode::HasUserInfo,
+        ),
+        reject(
+            "has-port",
+            "Section 4.1 forbids a port component",
+            "wimse://example.org:8443/a",
+            ErrorCode::HasPort,
+        ),
+        reject(
+            "empty-trust-domain",
+            "Section 4.1 requires a non-empty authority",
+            "spiffe:///path",
+            ErrorCode::EmptyTrustDomain,
+        ),
+        // The rest are spellings that RFC 3986 normalization would rewrite.
+        // Accepting any of them would break the Section 4.3 rule that
+        // consumers compare complete URIs.
+        reject(
+            "uppercase-trust-domain",
+            "the authority is case-insensitive, so mixed case is a second spelling",
+            "spiffe://Example.org/x",
+            ErrorCode::InvalidTrustDomainChar,
+        ),
+        reject(
+            "trailing-slash",
+            "a trailing slash is an empty final segment",
+            "spiffe://example.org/x/",
+            ErrorCode::EmptyPathSegment,
+        ),
+        reject(
+            "empty-path-segment",
+            "`//` in a path is an empty segment normalization would collapse",
+            "spiffe://example.org/x//y",
+            ErrorCode::EmptyPathSegment,
+        ),
+        reject(
+            "dot-segment",
+            "`..` is removed by RFC 3986 Section 6 dot-segment removal",
+            "spiffe://example.org/a/../b",
+            ErrorCode::DotSegment,
+        ),
+        reject(
+            "encoded-dot-segment",
+            "%2E%2E decodes to `..`, so it must not slip past the dot-segment check",
+            "wimse://example.org/%2E%2E/api",
+            ErrorCode::NonNormalizedPercentEncoding,
+        ),
+        reject(
+            "encoded-unreserved",
+            "%61 decodes to `a`, making this a second spelling of /api",
+            "wimse://example.org/%61pi",
+            ErrorCode::NonNormalizedPercentEncoding,
+        ),
+        reject(
+            "lowercase-escape-hex",
+            "RFC 3986 Section 6.2.2.1 uppercases the hex digits of an escape",
+            "wimse://example.org/a%2fb",
+            ErrorCode::NonNormalizedPercentEncoding,
+        ),
+        reject(
+            "malformed-escape",
+            "a percent-escape must be `%` followed by two hex digits",
+            "wimse://example.org/a%zz",
+            ErrorCode::BadPercentEncoding,
+        ),
+        reject(
+            "invalid-path-char",
+            "a space is outside the pchar set",
+            "wimse://example.org/a b",
+            ErrorCode::InvalidPathChar,
+        ),
+        reject(
+            "spiffe-path-charset-is-narrower",
+            "`~` is a legal pchar but outside the SPIFFE ID path charset",
+            "spiffe://example.org/a~b",
+            ErrorCode::InvalidPathChar,
+        ),
+    ]
 }
