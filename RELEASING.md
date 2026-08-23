@@ -53,7 +53,7 @@ Determine the bump from the [Conventional Commits](https://www.conventionalcommi
    git push origin vX.Y.Z
    ```
 
-Pushing the tag is the trigger; everything after it is automated.
+Pushing the tag is the trigger; everything after it is automated, including the crates.io publish.
 
 ## What the tag triggers
 
@@ -64,6 +64,7 @@ Pushing the tag is the trigger; everything after it is automated.
 | `guard` | Refuses to go further unless the tag, `[workspace.package] version` and a `## [X.Y.Z]` section in `CHANGELOG.md` all agree |
 | `build` | Builds `wimsey` natively for four targets: x86-64 and arm64 Linux, x86-64 and Apple-silicon macOS |
 | `publish` | SPDX SBOM, `SHA256SUMS`, a cosign keyless Sigstore bundle for every asset, SLSA build provenance for the tarballs, then creates the release and uploads it all |
+| `crates-io` | Publishes the workspace to crates.io, only if `publish` succeeded |
 
 The guard exists because the failure it prevents is silent: a tag that says `v0.3.0` on a tree that still says `0.2.0` produces a release whose binaries report the wrong version, and nobody notices until someone files a confusing bug.
 
@@ -86,29 +87,30 @@ Signing is keyless, so there is no release key anywhere — the Sigstore certifi
 
 This is worth revisiting — but by trialling one of them on a branch and watching what it does to the root manifest, not by adopting it and finding out during a release.
 
-**Publishing to crates.io.** Deliberately manual, and done *after* the tag, so a release that fails to build never reaches a registry it cannot be withdrawn from. A version can be yanked but never deleted, and the name is taken forever.
+**Publishing to crates.io.** Automated, but gated. The `crates-io` job in `release.yml` runs after the signed release succeeds, so nothing reaches a registry it cannot be withdrawn from until the tag has produced verified artifacts. A version can be yanked but never deleted, and the name is taken forever.
 
-`cargo publish` walks one crate at a time in dependency order, because each has to exist on the index before the next can resolve it:
+It runs one command:
 
 ```bash
-for c in wimsey-identifier wimsey-wpt wimsey-httpsig wimsey-wit \
-         wimsey-mtls wimsey-issuer wimsey-cli; do
-  cargo publish -p "$c" || break
-  # The index is eventually consistent; the next crate cannot resolve this one
-  # until it lands.
-  until cargo search "$c" | grep -q "^$c "; do sleep 5; done
-done
+cargo publish --workspace --locked
 ```
 
-Three crates stay unpublished, each marked `publish = false` so the decision lives in the manifest rather than in whoever is running the release:
+`--workspace` walks the crates in dependency order and waits for each to land on the index before the next resolves it — the tedious part, and the part that is easy to get wrong by hand. Crates marked `publish = false` are skipped by cargo itself, so those decisions live in the manifests rather than in a list inside the workflow:
 
-| Crate | Why |
+| Crate | Why it is not published |
 | --- | --- |
 | `wimsey-conformance` | A harness, not a library |
 | `wimsey-demo` | A demo, not a library |
-| `wimsey-issuer` | Performs no workload attestation — it mints a WIT for anyone who asks. Publishing it puts `cargo install wimsey-issuer` one command away from a running, unauthenticated credential minter for someone who never read the warning |
+| `wimsey-issuer` | Performs no workload attestation — it mints a WIT for anyone who asks. Publishing it puts `cargo install wimsey-issuer` one command away from a running, unauthenticated credential minter, for someone who never read the warning |
 
-Before publishing, confirm the packages actually contain what they claim to:
+Two things have to be set up once:
+
+- **`CARGO_REGISTRY_TOKEN`** as a repository secret, from <https://crates.io/settings/tokens>. The first publish needs the `publish-new` scope, which cannot be restricted to crates that do not exist yet; afterwards the token can be rotated for one scoped to `publish-update` on the `wimsey-*` crates only.
+- **A `crates-io` environment** with a required reviewer, under Settings → Environments. The job names that environment, so adding the rule turns the one irreversible step in the release into something a human has to approve. Without the rule the job still runs, just unattended.
+
+A partial failure — some crates uploaded, then an error — is the one case needing hands. Re-running the job will fail on the versions already published, so finish the remainder with `cargo publish -p <crate>` in dependency order.
+
+Before releasing, confirm the packages actually contain what they claim to:
 
 ```bash
 cargo package -p wimsey-identifier --list   # README.md and LICENSE must be present
