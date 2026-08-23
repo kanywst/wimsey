@@ -79,8 +79,10 @@ pub struct VerifiedSignature {
 ///
 /// A bare successful [`verify`] proves only that *some* set of components was
 /// signed with the key. To bind the request, set `required_components` to the
-/// components that must be covered (for the WIMSE profile: `@method`,
-/// `@authority`, `@path`, `content-digest`, and the WIT header).
+/// components that must be covered — under the WIMSE profile that is `@method`
+/// and `@request-target`, plus `content-type`, `content-digest`,
+/// `authorization`, `txn-token` and `workload-identity-token` whenever the
+/// message carries them.
 #[derive(Debug, Clone, Default)]
 pub struct VerifyConfig {
     /// The current time, in seconds since the Unix epoch. When set, `created`
@@ -492,13 +494,6 @@ pub fn verify(
             return Err(HttpSigError::UnsupportedAlg { found: alg.clone() });
         }
     }
-    // The audience is checked before the signature so an unparsable or
-    // misdirected signature costs no verification work; both checks must pass.
-    if let Some(expected) = &config.expected_audience {
-        if params.wimse_aud.as_ref() != Some(expected) {
-            return Err(HttpSigError::AudienceMismatch);
-        }
-    }
 
     let base = signature_base_from_params_str(request, &components, &params_value)?;
     let signature = Signature::from_bytes(&sig_bytes);
@@ -509,6 +504,15 @@ pub fn verify(
     for required in &config.required_components {
         if !components.contains(required) {
             return Err(HttpSigError::MissingRequiredComponent(required.quoted_id()));
+        }
+    }
+    // Only now, with the parameters proven authentic, is `wimse-aud` worth
+    // acting on. Checking it earlier would decide authorization from data an
+    // attacker still controls, and would let a forged message be told apart by
+    // whether it guessed the audience.
+    if let Some(expected) = &config.expected_audience {
+        if params.wimse_aud.as_ref() != Some(expected) {
+            return Err(HttpSigError::AudienceMismatch);
         }
     }
 
@@ -952,7 +956,7 @@ mod tests {
         assert!(matches!(err, Err(HttpSigError::Parse(_))));
     }
 
-    // --- The WIMSE profile (draft-ietf-wimse-http-signature Section 3) ---
+    use base64::{engine::general_purpose::STANDARD, Engine};
 
     use super::{check_request_profile, WIMSE_TAG};
 
@@ -1115,6 +1119,39 @@ mod tests {
         assert!(matches!(err, Err(HttpSigError::AudienceMismatch)));
     }
 
+    // The audience must be judged only after the signature proves the parameters
+    // authentic. A forged message must report the forgery, not whether it
+    // happened to guess the audience — otherwise an attacker who cannot sign
+    // anything can still probe for the audience a service answers to.
+    #[test]
+    fn reports_a_forgery_as_invalid_regardless_of_audience() {
+        let key = SigningKey::from_bytes(&[5u8; 32]);
+        let request = rfc_request();
+        let (_, _, signed) = sign_with(&wimse_params());
+        let forged = format!("wimse=:{}:", STANDARD.encode([0u8; 64]));
+
+        for audience in [
+            "https://svcb.example.com/gimme-ice-cream",
+            "https://wrong.example/inbox",
+        ] {
+            let config = VerifyConfig {
+                expected_audience: Some(audience.to_owned()),
+                ..wimse_config()
+            };
+            let err = verify(
+                &request,
+                &signed.signature_input,
+                &forged,
+                &key.verifying_key(),
+                &config,
+            );
+            assert!(
+                matches!(err, Err(HttpSigError::InvalidSignature)),
+                "expected InvalidSignature for audience {audience}, got {err:?}"
+            );
+        }
+    }
+
     #[test]
     fn accepts_the_matching_audience() {
         let (key, request, signed) = sign_with(&wimse_params());
@@ -1132,7 +1169,6 @@ mod tests {
         .is_ok());
     }
 
-    // RFC 8941: a Boolean `true` parameter is written bare, with no value.
     #[test]
     fn serializes_sign_response_as_a_bare_boolean() {
         let params = SignatureParams {

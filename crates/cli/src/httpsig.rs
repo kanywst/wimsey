@@ -447,8 +447,6 @@ fn run_verify(args: VerifyArgs) -> Result<()> {
         return Err("the supplied Workload-Identity-Token header does not match --wit".into());
     }
 
-    // Always required on verify: the draft's derived components plus every
-    // conditional header this message actually carries.
     let mandatory = mandatory_components(&request.headers);
     let required = if let Some(list) = args.require {
         let required = parse_components(&list)?;

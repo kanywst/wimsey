@@ -226,9 +226,6 @@ mod tests {
         assert_eq!(verified, id());
     }
 
-    // The mutual-TLS draft asks a WIC used for client authentication to carry
-    // `id-kp-clientAuth`, and one used for server authentication
-    // `id-kp-serverAuth`; a workload is typically both.
     #[test]
     fn issues_with_both_extended_key_usages() {
         use x509_parser::certificate::X509Certificate;
