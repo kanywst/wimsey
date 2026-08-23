@@ -1165,6 +1165,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "wimsey-demo"
+version = "0.2.0"
+dependencies = [
+ "ed25519-dalek",
+ "wimsey-httpsig",
+ "wimsey-identifier",
+ "wimsey-mtls",
+ "wimsey-wit",
+ "wimsey-wpt",
+]
+
+[[package]]
 name = "wimsey-httpsig"
 version = "0.2.0"
 dependencies = [

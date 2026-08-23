@@ -51,6 +51,17 @@ behaviour and the recorded conformance vectors, so tokens and signatures from
 - Ten new conformance cases covering the profile's parameter rules and the
   `cnf` JWK algorithm rules: 35 assertions, up from 25.
 
+- `wimsey-demo`, an end-to-end demo of the whole trust chain — a WIT is issued,
+  a request is signed, a middlebox forwards it, the far end verifies, and the
+  same middlebox is then refused when it reroutes the request. Every step
+  asserts and CI runs it, which closes the Phase 4 roadmap gate.
+- Conformance vectors for the workload identifier: 22 cases covering both
+  schemes, the Section 4.1 prohibitions, and the spellings normalization would
+  rewrite. The suite is now 57 assertions, up from 25 before this release.
+- A README for every published crate, so the crates.io page is not blank, and
+  the Apache-2.0 licence text now ships inside each package as Section 4(a)
+  requires.
+
 ### Known gaps
 
 - Response signing (`@status`, `;req` components, `wimse-req-nonce` on a
