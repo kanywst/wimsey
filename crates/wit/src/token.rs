@@ -166,8 +166,7 @@ pub fn verify(
     if validation.now >= claims.exp.saturating_add(validation.leeway) {
         return Err(WitError::Expired);
     }
-    // `iat` is not a required claim, so it is only checked when the issuer set
-    // it.
+    // `iat` is not a required claim in -02, so it is only checked when set.
     if let Some(iat) = claims.iat {
         if iat > validation.now.saturating_add(validation.leeway) {
             return Err(WitError::IssuedInFuture);
