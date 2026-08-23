@@ -62,6 +62,21 @@ behaviour and the recorded conformance vectors, so tokens and signatures from
   the Apache-2.0 licence text now ships inside each package as Section 4(a)
   requires.
 
+- **Breaking:** `wimsey-mtls` no longer generates the workload's private key.
+  `WorkloadCa::issue` takes the workload's *public* key and returns just the
+  certificate; `IssuedWic` and `issue_wic` are gone. A CA that mints the key it
+  certifies can impersonate every workload it ever issued to, which is the
+  opposite of what a workload identity CA is for.
+- **Breaking:** a CA is now loaded from a key the caller keeps —
+  `WorkloadCa::from_ed25519` or `::from_pkcs8_der` — so it survives a restart
+  with the same certificate. `WorkloadCa::generate` remains for tests and demos
+  and now takes a validity window, as does every other certificate this crate
+  mints; the previous default ran to the year 4096.
+- Conformance vectors for the WIC: 8 cases, including a validly signed
+  certificate that carries no workload identifier. Byte-exact re-issuance is
+  possible precisely because issuance no longer invents a key. Every protocol
+  element now has vectors, and the suite is 65 assertions.
+
 ### Known gaps
 
 - Response signing (`@status`, `;req` components, `wimse-req-nonce` on a

@@ -19,6 +19,7 @@ conformance/
   wit/issue-basic.json             draft-ietf-wimse-workload-creds-02
   wpt/proof-basic.json             draft-ietf-wimse-wpt-01
   httpsig/sign-basic.json          draft-ietf-wimse-http-signature-06
+  mtls/wic-basic.json              draft-ietf-wimse-mutual-tls-02
 ```
 
 Start at `manifest.json`. Do not glob the directories — the manifest is the list, and a runner that globs will silently skip a vector whose suite it does not recognise.
@@ -107,6 +108,10 @@ Every vector has a `negative` array. Each entry records **only the fields it ove
 | `invalid_path_char` | A path segment held a character its scheme disallows |
 | `bad_percent_encoding` | A percent-escape was not `%` plus two hex digits |
 | `non_normalized_percent_encoding` | A percent-escape was lowercase, or encoded an unreserved character |
+| `certificate_parse_error` | The presented bytes were not DER X.509 |
+| `certificate_not_valid` | The certificate is outside its validity window |
+| `missing_identifier` | The certificate carries no URI SAN workload identifier |
+| `multiple_identifiers` | The certificate carries more than one URI SAN |
 
 No vector records `unmapped`. The runner reports that code when an implementation rejects an input for a reason the table does not name, so an unrecognised failure shows up as a mismatch instead of being folded into a plausible-looking neighbour.
 
@@ -149,6 +154,17 @@ Note `wit-binding-mismatch`: the substituted WIT is itself perfectly valid and s
 The `tampered-body` case is deliberately not a signature failure. The signature covers the `Content-Digest` **header string**, which is untouched, so the signature still verifies — the body is caught by the digest check alone. An implementation that only verifies signatures and never re-hashes the body will accept a swapped payload.
 
 The six profile cases (`forbidden-alg-parameter`, `forbidden-keyid-parameter`, `missing-nonce`, `missing-expires`, `missing-wimse-aud`, `wrong-tag`) each carry their own `signature_input` and `signature`, and each one is a genuinely valid signature. What must reject them is the profile rule, not a broken signature — an implementation that verifies the signature and stops will accept all six.
+
+### `mtls`
+
+- Rebuild the CA from `ca_signing_key_seed_b64u` and its validity window; the result must equal `ca_certificate_der_b64u`.
+- Re-issue the WIC for the workload's **public** key — derived from `workload_signing_key_seed_b64u` — over `identifier` and the recorded window. It must equal `wic_der_b64u` byte for byte.
+- Verify `wic_der_b64u` against `ca_certificate_der_b64u` at `verify_now`; the URI SAN must decode to `identifier`.
+- Run every negative case.
+
+Certificates are usually a poor fit for byte-exact vectors, because issuing one normally invents a key and a serial. Neither happens here. The workload generates its own key pair and sends only the public half, so there is no per-issuance secret, and the serial is derived from that public key rather than drawn at random. That leaves nothing non-deterministic, so a consumer can re-issue from seeds instead of taking a frozen blob on trust.
+
+The `no-uri-san` case is the one worth reading twice: the input is the CA's own certificate, which is validly signed by the CA it is checked against and entirely well-formed. It simply carries no workload identifier. An implementation that verifies the signature and stops will accept it and then have nothing to authorize.
 
 ## Running them
 

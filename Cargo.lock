@@ -1160,6 +1160,7 @@ dependencies = [
  "serde_json",
  "wimsey-httpsig",
  "wimsey-identifier",
+ "wimsey-mtls",
  "wimsey-wit",
  "wimsey-wpt",
 ]

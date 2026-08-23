@@ -48,8 +48,8 @@ has a verification gate that must be green before the next begins.
 
 ## Phase 5 — Interop and conformance
 
-- `conformance/`: JSON test vectors and a runner, covering the identifier, WIT,
-  WPT and HTTP-signature elements.
+- `conformance/`: JSON test vectors and a runner, covering every protocol
+  element — identifier, WIT, WPT, HTTP signature and WIC.
 - Cross-implementation interop in CI against a Go implementation (e.g. Cofide
   `minispire`).
 - Publish the vectors for other implementers.

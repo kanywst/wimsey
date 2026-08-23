@@ -17,12 +17,13 @@ use wimsey_httpsig::{
     VerifyConfig, VerifyingKey,
 };
 use wimsey_identifier::WorkloadIdentifier;
+use wimsey_mtls::{verify as verify_mtls, SigningKey, WorkloadCa};
 use wimsey_wit::{issue as issue_wit, verify as verify_wit, Validation as WitValidation};
 use wimsey_wpt::{issue as issue_wpt, verify as verify_wpt, wit_thumbprint, Validation};
 
 use crate::vectors::{
-    ErrorCode, HttpSigVector, IdentifierVector, Manifest, VectorRequest, WitVector, WptVector,
-    FORMAT,
+    ErrorCode, HttpSigVector, IdentifierVector, Manifest, MtlsVector, VectorRequest, WitVector,
+    WptVector, FORMAT,
 };
 
 /// Something that stopped the runner before it could reach a verdict.
@@ -223,6 +224,114 @@ pub fn run_identifier(vector: &IdentifierVector, report: &mut Report) {
             expect_reject(case.expect, actual),
         );
     }
+}
+
+/// Runs the WIC vector: reproducibility, acceptance, and every rejection.
+///
+/// The reproduce check is the interesting one. The vector records seeds rather
+/// than a finished certificate, so an implementation has to re-issue the WIC and
+/// match it byte for byte — which is only a fair demand because issuance takes
+/// the workload's public key and has no per-issuance secret to differ on.
+pub fn run_mtls(vector: &MtlsVector, report: &mut Report) {
+    let name = format!("{}/{}", vector.header.suite, vector.header.id);
+
+    let inputs = seed(&vector.ca_signing_key_seed_b64u).and_then(|ca_seed| {
+        let workload = seed(&vector.workload_signing_key_seed_b64u)?;
+        let identifier = WorkloadIdentifier::parse(&vector.identifier)
+            .map_err(|e| format!("the recorded identifier does not parse: {e}"))?;
+        Ok((
+            SigningKey::from_bytes(&ca_seed),
+            SigningKey::from_bytes(&workload),
+            identifier,
+        ))
+    });
+    let (ca_key, workload_key, identifier) = match inputs {
+        Ok(inputs) => inputs,
+        Err(detail) => {
+            report.fail(&name, "load the recorded inputs", detail);
+            return;
+        }
+    };
+
+    let ca = match WorkloadCa::from_ed25519(&ca_key, vector.ca_not_before, vector.ca_not_after) {
+        Ok(ca) => ca,
+        Err(e) => {
+            report.fail(&name, "rebuild the CA", format!("{e}"));
+            return;
+        }
+    };
+
+    report.record(
+        &name,
+        "reproduce",
+        ca.issue(
+            &identifier,
+            &workload_key.verifying_key(),
+            vector.not_before,
+            vector.not_after,
+        )
+        .map_err(|e| format!("re-issuing failed: {e}"))
+        .and_then(|reissued| {
+            if URL_SAFE_NO_PAD.encode(&reissued) == vector.wic_der_b64u {
+                Ok(())
+            } else {
+                Err("the re-issued certificate differs from the recorded one".to_owned())
+            }
+        }),
+    );
+
+    report.record(
+        &name,
+        "ca-certificate",
+        if URL_SAFE_NO_PAD.encode(ca.certificate_der()) == vector.ca_certificate_der_b64u {
+            Ok(())
+        } else {
+            Err("the rebuilt CA certificate differs from the recorded one".to_owned())
+        },
+    );
+
+    let recorded = der(&vector.wic_der_b64u).and_then(|wic| {
+        let ca_der = der(&vector.ca_certificate_der_b64u)?;
+        let got = verify_mtls(&wic, &ca_der, vector.verify_now).map_err(|e| format!("{e}"))?;
+        if got == identifier {
+            Ok(())
+        } else {
+            Err(format!("verified as {got}, expected {identifier}"))
+        }
+    });
+    report.record(&name, "verify", recorded);
+
+    for case in &vector.negative {
+        let outcome =
+            der(case.wic_der_b64u.as_ref().unwrap_or(&vector.wic_der_b64u)).and_then(|wic| {
+                let ca_der = der(case
+                    .ca_certificate_der_b64u
+                    .as_ref()
+                    .unwrap_or(&vector.ca_certificate_der_b64u))?;
+                let actual =
+                    verify_mtls(&wic, &ca_der, case.verify_now.unwrap_or(vector.verify_now))
+                        .map(|_| ())
+                        .map_err(|e| ErrorCode::from(&e));
+                expect_reject(case.expect, actual)
+            });
+        report.record(&name, &format!("reject/{}", case.id), outcome);
+    }
+}
+
+/// Decodes a recorded base64url seed into 32 bytes.
+fn seed(b64u: &str) -> Result<[u8; 32], String> {
+    URL_SAFE_NO_PAD
+        .decode(b64u)
+        .map_err(|e| format!("seed is not base64url: {e}"))?
+        .try_into()
+        .map_err(|_| "seed is not 32 bytes".to_owned())
+}
+
+/// Decodes a recorded base64url DER blob.
+fn der(b64u: &str) -> Result<Vec<u8>, String> {
+    URL_SAFE_NO_PAD
+        .decode(b64u)
+        .map_err(|e| format!("DER is not base64url: {e}"))
 }
 
 /// Runs the WIT vector: reproducibility, acceptance, and every rejection.
@@ -559,6 +668,11 @@ pub fn run_dir(dir: &Path) -> Result<Report, Error> {
                 let vector: IdentifierVector = read_json(&path)?;
                 check_format(&path, &vector.header.format)?;
                 run_identifier(&vector, &mut report);
+            }
+            "mtls" => {
+                let vector: MtlsVector = read_json(&path)?;
+                check_format(&path, &vector.header.format)?;
+                run_mtls(&vector, &mut report);
             }
             "wit" => {
                 let vector: WitVector = read_json(&path)?;

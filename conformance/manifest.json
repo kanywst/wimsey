@@ -20,6 +20,11 @@
       "suite": "httpsig",
       "path": "httpsig/sign-basic.json",
       "spec": "draft-ietf-wimse-http-signature-06"
+    },
+    {
+      "suite": "mtls",
+      "path": "mtls/wic-basic.json",
+      "spec": "draft-ietf-wimse-mutual-tls-02"
     }
   ]
 }
