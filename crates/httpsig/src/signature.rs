@@ -11,23 +11,48 @@ use crate::message::{Component, HttpRequest};
 
 /// The signature algorithm name this crate emits and accepts (RFC 9421
 /// Section 3.3.6).
+///
+/// The WIMSE profile forbids the `alg` parameter outright — the algorithm is
+/// pinned by the `cnf` JWK in the WIT — so this is only used when the crate is
+/// driven as a plain RFC 9421 implementation.
 pub const ALG: &str = "ed25519";
 
+/// The `tag` value identifying a WIMSE workload-to-workload signature.
+pub const WIMSE_TAG: &str = "wimse-workload-to-workload";
+
+/// The signature label the draft recommends when a message carries a single
+/// signature.
+pub const WIMSE_LABEL: &str = "wimse";
+
 /// RFC 9421 signature parameters, serialized after the covered-component list.
+///
+/// The last three are the signature metadata parameters registered by
+/// `draft-ietf-wimse-http-signature`; the rest are the RFC 9421 originals. Field
+/// order is the serialization order, which keeps a signature base reproducible.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct SignatureParams {
     /// Creation time, in seconds since the Unix epoch (`created`).
     pub created: Option<u64>,
     /// Expiry time, in seconds since the Unix epoch (`expires`).
     pub expires: Option<u64>,
-    /// The key identifier (`keyid`).
+    /// The key identifier (`keyid`). Forbidden by the WIMSE profile.
     pub keyid: Option<String>,
-    /// The signature algorithm (`alg`); `ed25519` for this crate.
+    /// The signature algorithm (`alg`). Forbidden by the WIMSE profile.
     pub alg: Option<String>,
     /// A unique nonce (`nonce`).
     pub nonce: Option<String>,
-    /// An application-specific tag (`tag`).
+    /// An application-specific tag (`tag`); [`WIMSE_TAG`] under the profile.
     pub tag: Option<String>,
+    /// The audience the request is intended for (`wimse-aud`). Required on a
+    /// WIMSE request signature.
+    pub wimse_aud: Option<String>,
+    /// Whether the client requires the response to be signed
+    /// (`wimse-sign-response`). A Boolean parameter: `true` serializes as a bare
+    /// parameter name, per RFC 8941 Section 4.1.1.2.
+    pub wimse_sign_response: Option<bool>,
+    /// On a response signature, the `nonce` from the request being answered
+    /// (`wimse-req-nonce`), which binds the response to that request.
+    pub wimse_req_nonce: Option<String>,
 }
 
 /// The header field values produced by [`sign`].
@@ -71,6 +96,59 @@ pub struct VerifyConfig {
     /// If set (together with `now`), the signature's `created` must be present
     /// and within this many seconds of `now`.
     pub max_age: Option<u64>,
+    /// Enforce the WIMSE request-signature profile on the received parameters:
+    /// `created`, `expires`, `nonce`, `tag` and `wimse-aud` must all be present,
+    /// `tag` must be [`WIMSE_TAG`], and `keyid` and `alg` must be absent.
+    ///
+    /// Off by default so the crate can also be driven as a plain RFC 9421
+    /// implementation.
+    pub wimse_profile: bool,
+    /// If set, the signature's `wimse-aud` must equal this value. A signature
+    /// is only bound to *this* service if the audience it names is checked.
+    pub expected_audience: Option<String>,
+}
+
+/// Errors unless `params` satisfies the WIMSE profile for a **request**
+/// signature (Section 3 of `draft-ietf-wimse-http-signature`).
+///
+/// The profile makes `created`, `expires`, `nonce` and `tag` mandatory on every
+/// message and `wimse-aud` mandatory on requests, and forbids `keyid` and `alg`
+/// — the signing key travels in the WIT and the algorithm is pinned by that
+/// WIT's `cnf` JWK, so repeating either here would only invite confusion.
+///
+/// # Errors
+///
+/// Returns [`HttpSigError::MissingParameter`], [`HttpSigError::ForbiddenParameter`]
+/// or [`HttpSigError::WrongTag`] for the first rule the parameters break.
+pub fn check_request_profile(params: &SignatureParams) -> Result<(), HttpSigError> {
+    if params.keyid.is_some() {
+        return Err(HttpSigError::ForbiddenParameter("keyid"));
+    }
+    if params.alg.is_some() {
+        return Err(HttpSigError::ForbiddenParameter("alg"));
+    }
+    if params.created.is_none() {
+        return Err(HttpSigError::MissingParameter("created"));
+    }
+    if params.expires.is_none() {
+        return Err(HttpSigError::MissingParameter("expires"));
+    }
+    if params.nonce.is_none() {
+        return Err(HttpSigError::MissingParameter("nonce"));
+    }
+    match params.tag.as_deref() {
+        None => return Err(HttpSigError::MissingParameter("tag")),
+        Some(tag) if tag != WIMSE_TAG => {
+            return Err(HttpSigError::WrongTag {
+                found: tag.to_owned(),
+            })
+        }
+        Some(_) => {}
+    }
+    if params.wimse_aud.is_none() {
+        return Err(HttpSigError::MissingParameter("wimse-aud"));
+    }
+    Ok(())
 }
 
 fn sf_string(value: &str) -> String {
@@ -110,6 +188,21 @@ fn serialize_params_value(components: &[Component], params: &SignatureParams) ->
     }
     if let Some(tag) = &params.tag {
         let _ = write!(s, ";tag={}", sf_string(tag));
+    }
+    if let Some(aud) = &params.wimse_aud {
+        let _ = write!(s, ";wimse-aud={}", sf_string(aud));
+    }
+    if let Some(sign_response) = params.wimse_sign_response {
+        // RFC 8941 Section 4.1.1.2: a Boolean `true` parameter MUST omit its
+        // value, so it serializes as the bare parameter name.
+        if sign_response {
+            s.push_str(";wimse-sign-response");
+        } else {
+            s.push_str(";wimse-sign-response=?0");
+        }
+    }
+    if let Some(req_nonce) = &params.wimse_req_nonce {
+        let _ = write!(s, ";wimse-req-nonce={}", sf_string(req_nonce));
     }
     s
 }
@@ -261,7 +354,11 @@ fn parse_params(rest: &str, params: &mut SignatureParams) -> Result<(), HttpSigE
             continue;
         }
         let Some((name, raw)) = part.split_once('=') else {
-            // A valueless (boolean) parameter, per RFC 8941; not used here.
+            // A valueless parameter is Boolean `true`, per RFC 8941
+            // Section 4.1.1.2. Unknown ones are still ignored.
+            if part == "wimse-sign-response" {
+                params.wimse_sign_response = Some(true);
+            }
             continue;
         };
         let name = name.trim();
@@ -277,11 +374,23 @@ fn parse_params(rest: &str, params: &mut SignatureParams) -> Result<(), HttpSigE
             "alg" => params.alg = Some(parse_sf_string(raw)?),
             "nonce" => params.nonce = Some(parse_sf_string(raw)?),
             "tag" => params.tag = Some(parse_sf_string(raw)?),
+            "wimse-aud" => params.wimse_aud = Some(parse_sf_string(raw)?),
+            "wimse-sign-response" => params.wimse_sign_response = Some(parse_sf_boolean(raw)?),
+            "wimse-req-nonce" => params.wimse_req_nonce = Some(parse_sf_string(raw)?),
             // Unknown parameters are ignored, per structured-field extensibility.
             _ => {}
         }
     }
     Ok(())
+}
+
+/// Parses an RFC 8941 Boolean (`?0` or `?1`) given explicitly.
+fn parse_sf_boolean(raw: &str) -> Result<bool, HttpSigError> {
+    match raw {
+        "?1" => Ok(true),
+        "?0" => Ok(false),
+        other => Err(HttpSigError::Parse(format!("not a boolean: {other}"))),
+    }
 }
 
 fn parse_int(raw: &str) -> Result<u64, HttpSigError> {
@@ -375,9 +484,19 @@ pub fn verify(
             return Err(HttpSigError::LabelMismatch);
         }
     }
+    if config.wimse_profile {
+        check_request_profile(&params)?;
+    }
     if let Some(alg) = &params.alg {
         if alg != ALG {
             return Err(HttpSigError::UnsupportedAlg { found: alg.clone() });
+        }
+    }
+    // The audience is checked before the signature so an unparsable or
+    // misdirected signature costs no verification work; both checks must pass.
+    if let Some(expected) = &config.expected_audience {
+        if params.wimse_aud.as_ref() != Some(expected) {
+            return Err(HttpSigError::AudienceMismatch);
         }
     }
 
@@ -831,6 +950,260 @@ mod tests {
             &VerifyConfig::default(),
         );
         assert!(matches!(err, Err(HttpSigError::Parse(_))));
+    }
+
+    // --- The WIMSE profile (draft-ietf-wimse-http-signature Section 3) ---
+
+    use super::{check_request_profile, WIMSE_TAG};
+
+    /// A parameter set that satisfies every rule of the profile.
+    fn wimse_params() -> SignatureParams {
+        SignatureParams {
+            created: Some(1_700_000_000),
+            expires: Some(1_700_000_300),
+            nonce: Some("abcd1111".to_owned()),
+            tag: Some(WIMSE_TAG.to_owned()),
+            wimse_aud: Some("https://svcb.example.com/gimme-ice-cream".to_owned()),
+            ..SignatureParams::default()
+        }
+    }
+
+    fn wimse_config() -> VerifyConfig {
+        VerifyConfig {
+            wimse_profile: true,
+            ..VerifyConfig::default()
+        }
+    }
+
+    fn sign_with(params: &SignatureParams) -> (SigningKey, HttpRequest, super::SignedSignature) {
+        let key = SigningKey::from_bytes(&[5u8; 32]);
+        let request = rfc_request();
+        let signed = sign(&request, &rfc_components(), params, "wimse", &key).unwrap();
+        (key, request, signed)
+    }
+
+    #[test]
+    fn accepts_a_profile_conforming_signature() {
+        let (key, request, signed) = sign_with(&wimse_params());
+        let verified = verify(
+            &request,
+            &signed.signature_input,
+            &signed.signature,
+            &key.verifying_key(),
+            &wimse_config(),
+        )
+        .unwrap();
+        assert_eq!(verified.params.tag.as_deref(), Some(WIMSE_TAG));
+    }
+
+    // `keyid` and `alg` MUST NOT be used: the key travels in the WIT and the
+    // algorithm is pinned by that WIT's `cnf` JWK.
+    #[test]
+    fn profile_rejects_keyid_and_alg() {
+        for (label, params) in [
+            (
+                "keyid",
+                SignatureParams {
+                    keyid: Some("k".to_owned()),
+                    ..wimse_params()
+                },
+            ),
+            (
+                "alg",
+                SignatureParams {
+                    alg: Some(ALG.to_owned()),
+                    ..wimse_params()
+                },
+            ),
+        ] {
+            let (key, request, signed) = sign_with(&params);
+            let err = verify(
+                &request,
+                &signed.signature_input,
+                &signed.signature,
+                &key.verifying_key(),
+                &wimse_config(),
+            );
+            assert!(
+                matches!(err, Err(HttpSigError::ForbiddenParameter(p)) if p == label),
+                "expected `{label}` to be rejected, got {err:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn profile_requires_the_mandatory_parameters() {
+        let cases: [(&str, SignatureParams); 5] = [
+            (
+                "created",
+                SignatureParams {
+                    created: None,
+                    ..wimse_params()
+                },
+            ),
+            (
+                "expires",
+                SignatureParams {
+                    expires: None,
+                    ..wimse_params()
+                },
+            ),
+            (
+                "nonce",
+                SignatureParams {
+                    nonce: None,
+                    ..wimse_params()
+                },
+            ),
+            (
+                "tag",
+                SignatureParams {
+                    tag: None,
+                    ..wimse_params()
+                },
+            ),
+            (
+                "wimse-aud",
+                SignatureParams {
+                    wimse_aud: None,
+                    ..wimse_params()
+                },
+            ),
+        ];
+        for (name, params) in cases {
+            let err = check_request_profile(&params);
+            assert!(
+                matches!(err, Err(HttpSigError::MissingParameter(p)) if p == name),
+                "expected `{name}` to be required, got {err:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn profile_rejects_a_foreign_tag() {
+        let params = SignatureParams {
+            tag: Some("something-else".to_owned()),
+            ..wimse_params()
+        };
+        let (key, request, signed) = sign_with(&params);
+        let err = verify(
+            &request,
+            &signed.signature_input,
+            &signed.signature,
+            &key.verifying_key(),
+            &wimse_config(),
+        );
+        assert!(matches!(err, Err(HttpSigError::WrongTag { .. })));
+    }
+
+    // A signature is only bound to this service if its `wimse-aud` is checked;
+    // one minted for a peer must not verify here.
+    #[test]
+    fn rejects_a_signature_minted_for_another_audience() {
+        let (key, request, signed) = sign_with(&wimse_params());
+        let config = VerifyConfig {
+            expected_audience: Some("https://svcc.example.com/other".to_owned()),
+            ..wimse_config()
+        };
+        let err = verify(
+            &request,
+            &signed.signature_input,
+            &signed.signature,
+            &key.verifying_key(),
+            &config,
+        );
+        assert!(matches!(err, Err(HttpSigError::AudienceMismatch)));
+    }
+
+    #[test]
+    fn accepts_the_matching_audience() {
+        let (key, request, signed) = sign_with(&wimse_params());
+        let config = VerifyConfig {
+            expected_audience: Some("https://svcb.example.com/gimme-ice-cream".to_owned()),
+            ..wimse_config()
+        };
+        assert!(verify(
+            &request,
+            &signed.signature_input,
+            &signed.signature,
+            &key.verifying_key(),
+            &config,
+        )
+        .is_ok());
+    }
+
+    // RFC 8941: a Boolean `true` parameter is written bare, with no value.
+    #[test]
+    fn serializes_sign_response_as_a_bare_boolean() {
+        let params = SignatureParams {
+            wimse_sign_response: Some(true),
+            ..wimse_params()
+        };
+        let (key, request, signed) = sign_with(&params);
+        assert!(signed.signature_input.ends_with(";wimse-sign-response"));
+
+        let verified = verify(
+            &request,
+            &signed.signature_input,
+            &signed.signature,
+            &key.verifying_key(),
+            &wimse_config(),
+        )
+        .unwrap();
+        assert_eq!(verified.params.wimse_sign_response, Some(true));
+    }
+
+    #[test]
+    fn round_trips_an_explicit_false_sign_response() {
+        let params = SignatureParams {
+            wimse_sign_response: Some(false),
+            ..wimse_params()
+        };
+        let (key, request, signed) = sign_with(&params);
+        assert!(signed.signature_input.ends_with(";wimse-sign-response=?0"));
+
+        let verified = verify(
+            &request,
+            &signed.signature_input,
+            &signed.signature,
+            &key.verifying_key(),
+            &wimse_config(),
+        )
+        .unwrap();
+        assert_eq!(verified.params.wimse_sign_response, Some(false));
+    }
+
+    #[test]
+    fn round_trips_the_response_nonce_binding() {
+        let params = SignatureParams {
+            wimse_req_nonce: Some("abcd1111".to_owned()),
+            ..wimse_params()
+        };
+        let (key, request, signed) = sign_with(&params);
+        let verified = verify(
+            &request,
+            &signed.signature_input,
+            &signed.signature,
+            &key.verifying_key(),
+            &wimse_config(),
+        )
+        .unwrap();
+        assert_eq!(verified.params.wimse_req_nonce.as_deref(), Some("abcd1111"));
+    }
+
+    // The profile is opt-in: a plain RFC 9421 signature must still verify with
+    // the default config, which is what the known-answer test above relies on.
+    #[test]
+    fn profile_is_off_by_default() {
+        let (key, request, signed) = sign_with(&ed25519_params());
+        assert!(verify(
+            &request,
+            &signed.signature_input,
+            &signed.signature,
+            &key.verifying_key(),
+            &VerifyConfig::default(),
+        )
+        .is_ok());
     }
 
     #[test]

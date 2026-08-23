@@ -179,11 +179,11 @@ async fn issue_wit(
         .ok_or_else(|| IssueError::BadRequest("ttl overflows the expiry time".to_owned()))?;
 
     let claims = WitClaims {
-        iss: issuer.iss.clone(),
+        iss: Some(issuer.iss.clone()),
         sub,
-        iat,
+        iat: Some(iat),
         exp,
-        jti: random_id().map_err(|e| IssueError::Internal(e.to_string()))?,
+        jti: Some(random_id().map_err(|e| IssueError::Internal(e.to_string()))?),
         cnf: Confirmation {
             jwk: request.cnf_jwk,
         },

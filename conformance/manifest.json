@@ -4,7 +4,7 @@
     {
       "suite": "wit",
       "path": "wit/issue-basic.json",
-      "spec": "draft-ietf-wimse-workload-creds-01"
+      "spec": "draft-ietf-wimse-workload-creds-02"
     },
     {
       "suite": "wpt",
@@ -14,7 +14,7 @@
     {
       "suite": "httpsig",
       "path": "httpsig/sign-basic.json",
-      "spec": "draft-ietf-wimse-http-signature-03"
+      "spec": "draft-ietf-wimse-http-signature-06"
     }
   ]
 }

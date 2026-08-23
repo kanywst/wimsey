@@ -48,4 +48,20 @@ pub enum HttpSigError {
     /// The signature's `created` parameter is in the future.
     #[error("signature created in the future")]
     CreatedInFuture,
+    /// The WIMSE profile requires a signature parameter that is absent.
+    #[error("the WIMSE profile requires the `{0}` signature parameter")]
+    MissingParameter(&'static str),
+    /// The WIMSE profile forbids a signature parameter that is present.
+    #[error("the WIMSE profile forbids the `{0}` signature parameter")]
+    ForbiddenParameter(&'static str),
+    /// The signature's `tag` is not the WIMSE workload-to-workload tag.
+    #[error("unexpected signature tag `{found}`, expected `wimse-workload-to-workload`")]
+    WrongTag {
+        /// The `tag` value that was found.
+        found: String,
+    },
+    /// The signature's `wimse-aud` did not match the audience the verifier
+    /// expected — the signature was minted for a different service.
+    #[error("audience mismatch")]
+    AudienceMismatch,
 }

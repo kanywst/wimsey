@@ -2,7 +2,7 @@
   "format": "wimse-conformance/v1",
   "suite": "wit",
   "id": "issue-basic",
-  "spec": "draft-ietf-wimse-workload-creds-01",
+  "spec": "draft-ietf-wimse-workload-creds-02",
   "description": "WIT issuance with EdDSA (Ed25519), plus the inputs a verifier must reject",
   "alg": "EdDSA",
   "issuer_signing_key_seed_b64u": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
@@ -16,13 +16,14 @@
     "jti": "a1b2c3",
     "cnf": {
       "jwk": {
+        "alg": "EdDSA",
         "kty": "OKP",
         "crv": "Ed25519",
         "x": "6kpsY-KcUgq-9VB7Ey7F-ZVHdq6-vnuSQh7qaRRG0iw"
       }
     }
   },
-  "token": "eyJ0eXAiOiJ3aXQrand0IiwiYWxnIjoiRWREU0EiLCJraWQiOiJpc3N1ZXIta2V5LTEifQ.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvYXBpIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDM2MDAsImp0aSI6ImExYjJjMyIsImNuZiI6eyJqd2siOnsia3R5IjoiT0tQIiwiY3J2IjoiRWQyNTUxOSIsIngiOiI2a3BzWS1LY1VncS05VkI3RXk3Ri1aVkhkcTYtdm51U1FoN3FhUlJHMGl3In19fQ.cZdOOzjoMG85kBab1w8ZnJwVDFmwZE_SbeSIhsuyDG0pWDR8VBme2Mqf5H4CNCF4fMt3AsPviKRiLwzcsPbNBQ",
+  "token": "eyJ0eXAiOiJ3aXQrand0IiwiYWxnIjoiRWREU0EiLCJraWQiOiJpc3N1ZXIta2V5LTEifQ.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvYXBpIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDM2MDAsImp0aSI6ImExYjJjMyIsImNuZiI6eyJqd2siOnsiYWxnIjoiRWREU0EiLCJrdHkiOiJPS1AiLCJjcnYiOiJFZDI1NTE5IiwieCI6IjZrcHNZLUtjVWdxLTlWQjdFeTdGLVpWSGRxNi12bnVTUWg3cWFSUkcwaXcifX19.bhfvHPQMFOaF6uck50TQJHrsEOpHrL5zKBrHJuipigZcbk9hnXEOu48cw6QJPT54C8rjwO0g2tmTFJDk4u7DBg",
   "negative": [
     {
       "id": "expired",
@@ -40,13 +41,13 @@
       "id": "wrong-typ",
       "description": "validly signed, but the JOSE `typ` is `jwt` and not `wit+jwt`",
       "expect": "wrong_type",
-      "token": "eyJ0eXAiOiJqd3QiLCJhbGciOiJFZERTQSIsImtpZCI6Imlzc3Vlci1rZXktMSJ9.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvYXBpIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDM2MDAsImp0aSI6ImExYjJjMyIsImNuZiI6eyJqd2siOnsia3R5IjoiT0tQIiwiY3J2IjoiRWQyNTUxOSIsIngiOiI2a3BzWS1LY1VncS05VkI3RXk3Ri1aVkhkcTYtdm51U1FoN3FhUlJHMGl3In19fQ.OAozXBux37CX9Vgi2ixRznuHd0YqYl8gHzya9ESgNHCTDoNxZUIXnh4UKJpXMo8JMRnzgNE-mjGWymOwMWLzBw"
+      "token": "eyJ0eXAiOiJqd3QiLCJhbGciOiJFZERTQSIsImtpZCI6Imlzc3Vlci1rZXktMSJ9.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvYXBpIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDM2MDAsImp0aSI6ImExYjJjMyIsImNuZiI6eyJqd2siOnsiYWxnIjoiRWREU0EiLCJrdHkiOiJPS1AiLCJjcnYiOiJFZDI1NTE5IiwieCI6IjZrcHNZLUtjVWdxLTlWQjdFeTdGLVpWSGRxNi12bnVTUWg3cWFSUkcwaXcifX19.OkOFZgmxMgqWJQpuoBalRGdJ7xzR3ZLXZhfnj_sl6eDFAVZMXWNTCOrLwzk5gjuYeUdLZf9Hp0Q4nD_zulZrAA"
     },
     {
       "id": "tampered-payload",
       "description": "`jti` was altered after signing; the payload is still valid JSON",
       "expect": "invalid_signature",
-      "token": "eyJ0eXAiOiJ3aXQrand0IiwiYWxnIjoiRWREU0EiLCJraWQiOiJpc3N1ZXIta2V5LTEifQ.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvYXBpIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDM2MDAsImp0aSI6ImExYjJjNCIsImNuZiI6eyJqd2siOnsia3R5IjoiT0tQIiwiY3J2IjoiRWQyNTUxOSIsIngiOiI2a3BzWS1LY1VncS05VkI3RXk3Ri1aVkhkcTYtdm51U1FoN3FhUlJHMGl3In19fQ.cZdOOzjoMG85kBab1w8ZnJwVDFmwZE_SbeSIhsuyDG0pWDR8VBme2Mqf5H4CNCF4fMt3AsPviKRiLwzcsPbNBQ"
+      "token": "eyJ0eXAiOiJ3aXQrand0IiwiYWxnIjoiRWREU0EiLCJraWQiOiJpc3N1ZXIta2V5LTEifQ.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvYXBpIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDM2MDAsImp0aSI6ImExYjJjNCIsImNuZiI6eyJqd2siOnsiYWxnIjoiRWREU0EiLCJrdHkiOiJPS1AiLCJjcnYiOiJFZDI1NTE5IiwieCI6IjZrcHNZLUtjVWdxLTlWQjdFeTdGLVpWSGRxNi12bnVTUWg3cWFSUkcwaXcifX19.bhfvHPQMFOaF6uck50TQJHrsEOpHrL5zKBrHJuipigZcbk9hnXEOu48cw6QJPT54C8rjwO0g2tmTFJDk4u7DBg"
     },
     {
       "id": "wrong-issuer-key",
@@ -59,6 +60,24 @@
       "description": "the verifier expects a different `iss` than the token carries",
       "expect": "issuer_mismatch",
       "expected_iss": "https://other-issuer.example"
+    },
+    {
+      "id": "cnf-missing-alg",
+      "description": "the `cnf` JWK omits the `alg` member the draft requires",
+      "expect": "missing_confirmation_alg",
+      "token": "eyJ0eXAiOiJ3aXQrand0IiwiYWxnIjoiRWREU0EiLCJraWQiOiJpc3N1ZXIta2V5LTEifQ.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvYXBpIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDM2MDAsImp0aSI6ImExYjJjMyIsImNuZiI6eyJqd2siOnsia3R5IjoiT0tQIiwiY3J2IjoiRWQyNTUxOSIsIngiOiI2a3BzWS1LY1VncS05VkI3RXk3Ri1aVkhkcTYtdm51U1FoN3FhUlJHMGl3In19fQ.cZdOOzjoMG85kBab1w8ZnJwVDFmwZE_SbeSIhsuyDG0pWDR8VBme2Mqf5H4CNCF4fMt3AsPviKRiLwzcsPbNBQ"
+    },
+    {
+      "id": "cnf-symmetric-alg",
+      "description": "the `cnf` JWK names a symmetric algorithm, which cannot prove possession",
+      "expect": "forbidden_confirmation_alg",
+      "token": "eyJ0eXAiOiJ3aXQrand0IiwiYWxnIjoiRWREU0EiLCJraWQiOiJpc3N1ZXIta2V5LTEifQ.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvYXBpIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDM2MDAsImp0aSI6ImExYjJjMyIsImNuZiI6eyJqd2siOnsiYWxnIjoiSFMyNTYiLCJrdHkiOiJPS1AiLCJjcnYiOiJFZDI1NTE5IiwieCI6IjZrcHNZLUtjVWdxLTlWQjdFeTdGLVpWSGRxNi12bnVTUWg3cWFSUkcwaXcifX19.cy71C2trG3I3Uqc807RgeiDcN3QJmt3dS2Mj0YxrPyEdxkRy8GH7jKsiky8I5DAGDfWtxHCfuCGrakwkFLgMDg"
+    },
+    {
+      "id": "cnf-unsecured-alg",
+      "description": "the `cnf` JWK names `none`, which the draft forbids outright",
+      "expect": "forbidden_confirmation_alg",
+      "token": "eyJ0eXAiOiJ3aXQrand0IiwiYWxnIjoiRWREU0EiLCJraWQiOiJpc3N1ZXIta2V5LTEifQ.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvYXBpIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDM2MDAsImp0aSI6ImExYjJjMyIsImNuZiI6eyJqd2siOnsiYWxnIjoibm9uZSIsImt0eSI6Ik9LUCIsImNydiI6IkVkMjU1MTkiLCJ4IjoiNmtwc1ktS2NVZ3EtOVZCN0V5N0YtWlZIZHE2LXZudVNRaDdxYVJSRzBpdyJ9fX0.J1YKsWESVcC7VQDXjxyqmipAW3PJ7II5K0TZz6SzCuUGTwliN8c8_xoUMG0YHQUa5cW3ifgAJ25WV2Z_DVWQCA"
     }
   ]
 }

@@ -9,14 +9,14 @@
   "issuer_verifying_key_b64u": "iojj3XQJ8ZX9UtstPLpdcspnCb8dlBIb83SIAbQPb1w",
   "verify_now": 1700000000,
   "audience": "https://workload.example.com/path",
-  "wit": "eyJ0eXAiOiJ3aXQrand0IiwiYWxnIjoiRWREU0EiLCJraWQiOiJpc3N1ZXIta2V5LTEifQ.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvYXBpIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDM2MDAsImp0aSI6ImExYjJjMyIsImNuZiI6eyJqd2siOnsia3R5IjoiT0tQIiwiY3J2IjoiRWQyNTUxOSIsIngiOiJfUmNrT0ZxZ3gxdGstM2pOWUMtaDJaSDk2X2RyRThXTzF3THF5RFhwOWhnIn19fQ.VSUTP7VJTKt7hWfJfxe9humGbZcgzsvpJo2rysWE9x71UQjo1bp_1ObsziGoE4yDY5egRskzbQwG-fAD6ncOCQ",
+  "wit": "eyJ0eXAiOiJ3aXQrand0IiwiYWxnIjoiRWREU0EiLCJraWQiOiJpc3N1ZXIta2V5LTEifQ.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvYXBpIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDM2MDAsImp0aSI6ImExYjJjMyIsImNuZiI6eyJqd2siOnsiYWxnIjoiRWREU0EiLCJrdHkiOiJPS1AiLCJjcnYiOiJFZDI1NTE5IiwieCI6Il9SY2tPRnFneDF0ay0zak5ZQy1oMlpIOTZfZHJFOFdPMXdMcXlEWHA5aGcifX19.gEOIwRVXNwJTSXRGBDPV4CQLRUFeKYx-oK_nwSxaxegepaEEcKbn1TIPacMI0rWR2M8kRikyzB4jkcudkUtXCA",
   "claims": {
     "aud": "https://workload.example.com/path",
     "exp": 1700000300,
     "jti": "0123456789abcdef",
-    "wth": "TRzlmgZv5aMYE0q73gJ9q-__veS02QqWOYm7SO_6AbM"
+    "wth": "ojfPvM1RFUWAdlg8QNkxc5h2DmJ8Ottdz0dl9Z3HVy4"
   },
-  "proof": "eyJ0eXAiOiJ3cHQrand0IiwiYWxnIjoiRWREU0EifQ.eyJhdWQiOiJodHRwczovL3dvcmtsb2FkLmV4YW1wbGUuY29tL3BhdGgiLCJleHAiOjE3MDAwMDAzMDAsImp0aSI6IjAxMjM0NTY3ODlhYmNkZWYiLCJ3dGgiOiJUUnpsbWdadjVhTVlFMHE3M2dKOXEtX192ZVMwMlFxV09ZbTdTT182QWJNIn0.CRKiKlk97Tz0PH2wSWwrhSHgzZEkG5OOG01t-zy7Dl5g4tUMUploOH1OLF_ut58um9ySglvJHzrD23TSLSg3BQ",
+  "proof": "eyJ0eXAiOiJ3cHQrand0IiwiYWxnIjoiRWREU0EifQ.eyJhdWQiOiJodHRwczovL3dvcmtsb2FkLmV4YW1wbGUuY29tL3BhdGgiLCJleHAiOjE3MDAwMDAzMDAsImp0aSI6IjAxMjM0NTY3ODlhYmNkZWYiLCJ3dGgiOiJvamZQdk0xUkZVV0FkbGc4UU5reGM1aDJEbUo4T3R0ZHowZGw5WjNIVnk0In0.PYshB5e4E-1-H4PNUm2wH2WUEpAHw-qa-1FTeTKcE7-41xkf4jGQCeJRYr6_AwS5txnjot2A3U0h8097Q4DcAg",
   "negative": [
     {
       "id": "expired",
@@ -34,19 +34,19 @@
       "id": "wit-binding-mismatch",
       "description": "replayed alongside a different, otherwise valid WIT",
       "expect": "wit_binding_mismatch",
-      "wit": "eyJ0eXAiOiJ3aXQrand0IiwiYWxnIjoiRWREU0EiLCJraWQiOiJpc3N1ZXIta2V5LTEifQ.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvb3RoZXIiLCJpYXQiOjE3MDAwMDAwMDAsImV4cCI6MTcwMDAwMzYwMCwianRpIjoiYTFiMmMzIiwiY25mIjp7Imp3ayI6eyJrdHkiOiJPS1AiLCJjcnYiOiJFZDI1NTE5IiwieCI6Il9SY2tPRnFneDF0ay0zak5ZQy1oMlpIOTZfZHJFOFdPMXdMcXlEWHA5aGcifX19.TN9gxhW8vpQoVzeavtUZkUmSIV3AE9iW0TXytqC0uQQgP-H-zt9G-pRAyb8zSplMtCH84XXiNqbv5T1ikXCLDA"
+      "wit": "eyJ0eXAiOiJ3aXQrand0IiwiYWxnIjoiRWREU0EiLCJraWQiOiJpc3N1ZXIta2V5LTEifQ.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvb3RoZXIiLCJpYXQiOjE3MDAwMDAwMDAsImV4cCI6MTcwMDAwMzYwMCwianRpIjoiYTFiMmMzIiwiY25mIjp7Imp3ayI6eyJhbGciOiJFZERTQSIsImt0eSI6Ik9LUCIsImNydiI6IkVkMjU1MTkiLCJ4IjoiX1Jja09GcWd4MXRrLTNqTllDLWgyWkg5Nl9kckU4V08xd0xxeURYcDloZyJ9fX0.93FtdGCOU4BUMmtJhLoCxAzIAGD-4e2xv6tWV_0WGPXIsKBsNkOvFXeBBvX280MjIXgSVThxJtRdo07-W6eZAw"
     },
     {
       "id": "wrong-typ",
       "description": "validly signed, but the JOSE `typ` is `jwt` and not `wpt+jwt`",
       "expect": "wrong_type",
-      "proof": "eyJ0eXAiOiJqd3QiLCJhbGciOiJFZERTQSJ9.eyJhdWQiOiJodHRwczovL3dvcmtsb2FkLmV4YW1wbGUuY29tL3BhdGgiLCJleHAiOjE3MDAwMDAzMDAsImp0aSI6IjAxMjM0NTY3ODlhYmNkZWYiLCJ3dGgiOiJUUnpsbWdadjVhTVlFMHE3M2dKOXEtX192ZVMwMlFxV09ZbTdTT182QWJNIn0.wdTnDauGlhtfkxwfcwxU3wE27QZN7jILYMJYeSha3bgkkKSv7efNJ4npxqdYW2T_Jl4gCfUCN3klebRP0qkHCA"
+      "proof": "eyJ0eXAiOiJqd3QiLCJhbGciOiJFZERTQSJ9.eyJhdWQiOiJodHRwczovL3dvcmtsb2FkLmV4YW1wbGUuY29tL3BhdGgiLCJleHAiOjE3MDAwMDAzMDAsImp0aSI6IjAxMjM0NTY3ODlhYmNkZWYiLCJ3dGgiOiJvamZQdk0xUkZVV0FkbGc4UU5reGM1aDJEbUo4T3R0ZHowZGw5WjNIVnk0In0.U0V4NFDvBbpWSosZXCmNPxwS8NDU44Mh03cCg7qgmaf4zIbrGQrfkds7EPsjAxS2HrtkJTghY8BB7ENOSeyCCw"
     },
     {
       "id": "tampered-payload",
       "description": "`jti` was altered after signing; the payload is still valid JSON",
       "expect": "invalid_signature",
-      "proof": "eyJ0eXAiOiJ3cHQrand0IiwiYWxnIjoiRWREU0EifQ.eyJhdWQiOiJodHRwczovL3dvcmtsb2FkLmV4YW1wbGUuY29tL3BhdGgiLCJleHAiOjE3MDAwMDAzMDAsImp0aSI6IjAxMjM0NTY3ODlhYmNkZWUiLCJ3dGgiOiJUUnpsbWdadjVhTVlFMHE3M2dKOXEtX192ZVMwMlFxV09ZbTdTT182QWJNIn0.CRKiKlk97Tz0PH2wSWwrhSHgzZEkG5OOG01t-zy7Dl5g4tUMUploOH1OLF_ut58um9ySglvJHzrD23TSLSg3BQ"
+      "proof": "eyJ0eXAiOiJ3cHQrand0IiwiYWxnIjoiRWREU0EifQ.eyJhdWQiOiJodHRwczovL3dvcmtsb2FkLmV4YW1wbGUuY29tL3BhdGgiLCJleHAiOjE3MDAwMDAzMDAsImp0aSI6IjAxMjM0NTY3ODlhYmNkZWUiLCJ3dGgiOiJvamZQdk0xUkZVV0FkbGc4UU5reGM1aDJEbUo4T3R0ZHowZGw5WjNIVnk0In0.PYshB5e4E-1-H4PNUm2wH2WUEpAHw-qa-1FTeTKcE7-41xkf4jGQCeJRYr6_AwS5txnjot2A3U0h8097Q4DcAg"
     }
   ]
 }

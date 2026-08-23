@@ -166,11 +166,17 @@ pub fn verify(
     if validation.now >= claims.exp.saturating_add(validation.leeway) {
         return Err(WitError::Expired);
     }
-    if claims.iat > validation.now.saturating_add(validation.leeway) {
-        return Err(WitError::IssuedInFuture);
+    // `iat` is not a required claim, so it is only checked when the issuer set
+    // it.
+    if let Some(iat) = claims.iat {
+        if iat > validation.now.saturating_add(validation.leeway) {
+            return Err(WitError::IssuedInFuture);
+        }
     }
+    // `iss` is optional, so a caller that demands a specific issuer must reject
+    // a token that names none at all rather than let it through unchecked.
     if let Some(expected) = &validation.expected_issuer {
-        if &claims.iss != expected {
+        if claims.iss.as_ref() != Some(expected) {
             return Err(WitError::IssuerMismatch);
         }
     }
@@ -198,11 +204,11 @@ mod tests {
     fn sample_claims() -> WitClaims {
         let cnf_key = SigningKey::from_bytes(&[7u8; 32]);
         WitClaims {
-            iss: "https://issuer.example".to_owned(),
+            iss: Some("https://issuer.example".to_owned()),
             sub: WorkloadIdentifier::parse("spiffe://example.org/workload/api").unwrap(),
-            iat: 1_700_000_000,
+            iat: Some(1_700_000_000),
             exp: 1_700_003_600,
-            jti: "a1b2c3".to_owned(),
+            jti: Some("a1b2c3".to_owned()),
             cnf: Confirmation {
                 jwk: Jwk::from_ed25519(&cnf_key.verifying_key()),
             },
@@ -339,6 +345,7 @@ mod tests {
         let key = SigningKey::from_bytes(&[1u8; 32]);
         let mut claims = sample_claims();
         claims.cnf.jwk = Jwk {
+            alg: Some("EdDSA".to_owned()),
             kty: "OKP".to_owned(),
             crv: "Ed25519".to_owned(),
             x: "not-a-valid-key".to_owned(),
@@ -347,6 +354,67 @@ mod tests {
 
         let err = verify(&token, &key.verifying_key(), &Validation::at(1_700_000_000));
         assert!(matches!(err, Err(WitError::InvalidKey)));
+    }
+
+    // Section 5.1 requires `alg` inside the `cnf` JWK; a WIT without it must not
+    // verify, because nothing then pins the algorithm the proof is produced with.
+    #[test]
+    fn rejects_a_confirmation_key_without_alg() {
+        let key = SigningKey::from_bytes(&[1u8; 32]);
+        let mut claims = sample_claims();
+        claims.cnf.jwk.alg = None;
+        let token = issue(&claims, None, &key).unwrap();
+
+        let err = verify(&token, &key.verifying_key(), &Validation::at(1_700_000_000));
+        assert!(matches!(err, Err(WitError::MissingConfirmationAlg)));
+    }
+
+    #[test]
+    fn rejects_a_forbidden_confirmation_alg() {
+        let key = SigningKey::from_bytes(&[1u8; 32]);
+        let mut claims = sample_claims();
+        claims.cnf.jwk.alg = Some("HS256".to_owned());
+        let token = issue(&claims, None, &key).unwrap();
+
+        let err = verify(&token, &key.verifying_key(), &Validation::at(1_700_000_000));
+        assert!(matches!(
+            err,
+            Err(WitError::ForbiddenConfirmationAlg { .. })
+        ));
+    }
+
+    // `iss`, `iat` and `jti` are all optional in -02; a WIT carrying only the
+    // mandatory claims must verify.
+    #[test]
+    fn verifies_a_token_with_only_the_mandatory_claims() {
+        let key = SigningKey::from_bytes(&[1u8; 32]);
+        let claims = WitClaims {
+            iss: None,
+            iat: None,
+            jti: None,
+            ..sample_claims()
+        };
+        let token = issue(&claims, None, &key).unwrap();
+
+        let verified =
+            verify(&token, &key.verifying_key(), &Validation::at(1_700_000_000)).unwrap();
+        assert_eq!(verified.claims, claims);
+    }
+
+    // A caller that demands an issuer must not be satisfied by a token that
+    // names none.
+    #[test]
+    fn rejects_an_absent_issuer_when_one_is_expected() {
+        let key = SigningKey::from_bytes(&[1u8; 32]);
+        let claims = WitClaims {
+            iss: None,
+            ..sample_claims()
+        };
+        let token = issue(&claims, None, &key).unwrap();
+
+        let validation = Validation::at(1_700_000_000).expect_issuer("https://issuer.example");
+        let err = verify(&token, &key.verifying_key(), &validation);
+        assert!(matches!(err, Err(WitError::IssuerMismatch)));
     }
 
     #[test]

@@ -51,8 +51,10 @@ enum Command {
     },
     /// HTTP Message Signature (RFC 9421) operations.
     Httpsig {
+        // Boxed: the httpsig arguments are by far the widest of any subcommand,
+        // and inlining them would size every `Command` to fit them.
         #[command(subcommand)]
-        cmd: httpsig::HttpsigCmd,
+        cmd: Box<httpsig::HttpsigCmd>,
     },
 }
 
@@ -89,9 +91,10 @@ enum WitCmd {
         /// The workload identifier, e.g. `spiffe://example.org/api`.
         #[arg(long)]
         sub: String,
-        /// The issuer identifier.
+        /// The issuer identifier. RECOMMENDED but optional per the draft; the
+        /// `iss` claim is omitted when this is not given.
         #[arg(long)]
-        iss: String,
+        iss: Option<String>,
         /// The confirmation (proof-of-possession) key file; its public half
         /// goes in the `cnf` claim.
         #[arg(long, value_name = "FILE")]
@@ -198,7 +201,7 @@ fn run(cli: Cli) -> Result<()> {
         Command::Key { cmd } => run_key(cmd),
         Command::Wit { cmd } => run_wit(cmd),
         Command::Wpt { cmd } => run_wpt(cmd),
-        Command::Httpsig { cmd } => httpsig::run(cmd),
+        Command::Httpsig { cmd } => httpsig::run(*cmd),
     }
 }
 
@@ -255,11 +258,11 @@ fn run_wit(cmd: WitCmd) -> Result<()> {
                 .checked_add(ttl)
                 .ok_or("ttl overflows the expiry time")?;
             let claims = WitClaims {
-                iss: iss.trim().to_owned(),
+                iss: iss.map(|s| s.trim().to_owned()),
                 sub: WorkloadIdentifier::parse(sub.trim())?,
-                iat,
+                iat: Some(iat),
                 exp,
-                jti: jti.map_or_else(random_id, Ok)?,
+                jti: Some(jti.map_or_else(random_id, Ok)?),
                 cnf: Confirmation {
                     jwk: Jwk::from_ed25519(&cnf),
                 },
