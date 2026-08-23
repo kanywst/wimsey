@@ -241,4 +241,34 @@ jobs:
         # that is tedious and easy to get wrong by hand. The three crates marked
         # `publish = false` are skipped by cargo itself, so the decision to hold
         # `wimsey-issuer` back lives in its manifest and cannot be lost here.
-        run: cargo publish --workspace --locked
+        #
+        # What cargo will not do is skip a member it has already uploaded, so a
+        # run that dies partway — crates.io rate-limits *new* crates, and the
+        # first release of a workspace walks straight into that — cannot simply
+        # be re-run. Excluding what is already on the index makes the job
+        # idempotent, so finishing an interrupted release is one re-run rather
+        # than a hand-driven sequence of `cargo publish -p`.
+        run: |
+          set -euo pipefail
+          excludes=()
+          pending=0
+          while read -r name version; do
+            code=$(curl -sS -o /dev/null -w '%{http_code}' \
+              -H 'User-Agent: wimsey-release (https://github.com/kanywst/wimsey)' \
+              "https://crates.io/api/v1/crates/$name/$version")
+            case "$code" in
+              200) echo "already published: $name $version"
+                   excludes+=(--exclude "$name") ;;
+              404) echo "to publish:        $name $version"
+                   pending=$((pending + 1)) ;;
+              *)   echo "::error::crates.io returned $code for $name $version"
+                   exit 1 ;;
+            esac
+          done < <(cargo metadata --no-deps --format-version 1 \
+            | jq -r '.packages[] | select(.publish == null) | "\(.name) \(.version)"')
+
+          if [ "$pending" -eq 0 ]; then
+            echo "every publishable crate is already on crates.io; nothing to do"
+            exit 0
+          fi
+          cargo publish --workspace --locked "${excludes[@]}"
