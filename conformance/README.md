@@ -88,6 +88,12 @@ Every vector has a `negative` array. Each entry records **only the fields it ove
 | `malformed_signature` | Not valid Base64, or not 64 bytes |
 | `created_in_future` | `created` is ahead of the verifier's clock |
 | `content_digest_mismatch` | `Content-Digest` did not match the body |
+| `missing_parameter` | A signature parameter the WIMSE profile requires was absent |
+| `forbidden_parameter` | A signature parameter the WIMSE profile forbids was present |
+| `wrong_tag` | `tag` was not `wimse-workload-to-workload` |
+| `missing_confirmation_alg` | The `cnf` JWK omitted the required `alg` member |
+| `forbidden_confirmation_alg` | The `cnf` JWK named `none`, a symmetric, or an encryption algorithm |
+| `unsupported_confirmation_alg` | The `cnf` JWK named a legal algorithm the implementation cannot use |
 
 No vector records `unmapped`. The runner reports that code when an implementation rejects an input for a reason the table does not name, so an unrecognised failure shows up as a mismatch instead of being folded into a plausible-looking neighbour.
 
@@ -112,10 +118,13 @@ Note `wit-binding-mismatch`: the substituted WIT is itself perfectly valid and s
 
 - Re-sign `request` with `components`, `params`, `label` and the proof-of-possession seed; both `signature_input` and `signature` must match byte for byte. The signature base is byte-exact (RFC 9421 section 2.5); whitespace and quoting are not free choices.
 - Verify the full chain: verify `wit`, take the proof-of-possession key from its `cnf`, then verify the signature over `request`, requiring every component in `components` to be covered.
+- Enforce the profile in Section 3 of the http-signature draft: `created`, `expires`, `nonce` and `tag` must be present, `tag` must be `wimse-workload-to-workload`, `wimse-aud` must be present and must equal the audience the verifier answers to, and `keyid` and `alg` must be absent.
 - Check `verify_content_digest(Content-Digest header, body)`.
-- Run every negative case. `required_components`, `accept_label` and `max_age` are verifier configuration, not message content: they describe how strict the receiver is, and the case asserts that a receiver configured that way rejects the message.
+- Run every negative case. `required_components`, `accept_label`, `accept_audience` and `max_age` are verifier configuration, not message content: they describe how strict the receiver is, and the case asserts that a receiver configured that way rejects the message.
 
 The `tampered-body` case is deliberately not a signature failure. The signature covers the `Content-Digest` **header string**, which is untouched, so the signature still verifies — the body is caught by the digest check alone. An implementation that only verifies signatures and never re-hashes the body will accept a swapped payload.
+
+The six profile cases (`forbidden-alg-parameter`, `forbidden-keyid-parameter`, `missing-nonce`, `missing-expires`, `missing-wimse-aud`, `wrong-tag`) each carry their own `signature_input` and `signature`, and each one is a genuinely valid signature. What must reject them is the profile rule, not a broken signature — an implementation that verifies the signature and stops will accept all six.
 
 ## Running them
 
