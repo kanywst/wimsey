@@ -1,10 +1,10 @@
 //! Workload Identity Certificate (WIC): an X.509 certificate carrying the
 //! workload identifier in a URI subjectAltName, signed by a workload CA.
 
-use ed25519_dalek::{Signature, VerifyingKey};
+use ed25519_dalek::{Signature, SigningKey, VerifyingKey};
 use rcgen::{
     BasicConstraints, CertificateParams, ExtendedKeyUsagePurpose, IsCa, Issuer, KeyPair, SanType,
-    PKCS_ED25519,
+    SubjectPublicKeyInfo, PKCS_ED25519,
 };
 use wimsey_identifier::WorkloadIdentifier;
 use x509_parser::certificate::X509Certificate;
@@ -16,30 +16,119 @@ use x509_parser::time::ASN1Time;
 use crate::error::MtlsError;
 
 /// A workload certificate authority: it holds the CA certificate and its
-/// signing key, and issues WICs.
+/// signing key, and certifies public keys that workloads generated themselves.
 pub struct WorkloadCa {
     issuer: Issuer<'static, KeyPair>,
     der: Vec<u8>,
 }
 
-/// A freshly issued WIC and the private key the workload keeps.
-pub struct IssuedWic {
-    /// The certificate, DER-encoded.
-    pub certificate_der: Vec<u8>,
-    /// The workload's private key, PKCS#8 DER-encoded.
-    pub private_key_pkcs8_der: Vec<u8>,
+/// The DER prefix of an Ed25519 `SubjectPublicKeyInfo` (RFC 8410 Section 4).
+///
+/// A full SPKI is this prefix followed by the 32-byte public key: a SEQUENCE
+/// wrapping the `id-Ed25519` OID (1.3.101.112) and a BIT STRING with no unused
+/// bits.
+const ED25519_SPKI_PREFIX: [u8; 12] = [
+    0x30, 0x2a, // SEQUENCE, 42 bytes
+    0x30, 0x05, // SEQUENCE, 5 bytes (AlgorithmIdentifier)
+    0x06, 0x03, 0x2b, 0x65, 0x70, // OID 1.3.101.112
+    0x03, 0x21, 0x00, // BIT STRING, 33 bytes, 0 unused
+];
+
+/// The DER prefix of a PKCS#8 v1 Ed25519 private key (RFC 8410 Section 7).
+///
+/// A full PKCS#8 key is this prefix followed by the 32-byte seed.
+const ED25519_PKCS8_PREFIX: [u8; 16] = [
+    0x30, 0x2e, // SEQUENCE, 46 bytes
+    0x02, 0x01, 0x00, // INTEGER version 0
+    0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, // AlgorithmIdentifier: 1.3.101.112
+    0x04, 0x22, 0x04, 0x20, // OCTET STRING wrapping a 32-byte OCTET STRING
+];
+
+/// Encodes an Ed25519 signing key as PKCS#8, the form rcgen loads.
+fn ed25519_pkcs8(signing_key: &SigningKey) -> Vec<u8> {
+    let mut der = Vec::with_capacity(ED25519_PKCS8_PREFIX.len() + 32);
+    der.extend_from_slice(&ED25519_PKCS8_PREFIX);
+    der.extend_from_slice(&signing_key.to_bytes());
+    der
+}
+
+/// Wraps an Ed25519 public key as the `SubjectPublicKeyInfo` rcgen certifies.
+fn spki(public_key: &VerifyingKey) -> Result<SubjectPublicKeyInfo, MtlsError> {
+    let mut der = Vec::with_capacity(ED25519_SPKI_PREFIX.len() + 32);
+    der.extend_from_slice(&ED25519_SPKI_PREFIX);
+    der.extend_from_slice(public_key.as_bytes());
+    SubjectPublicKeyInfo::from_der(&der).map_err(|_| MtlsError::InvalidKey)
 }
 
 impl WorkloadCa {
-    /// Generates a new Ed25519 workload CA.
+    /// Generates a new Ed25519 workload CA valid between the two Unix
+    /// timestamps.
+    ///
+    /// The window is explicit because the underlying default is a certificate
+    /// valid until the year 4096, which is not a lifetime anyone would choose
+    /// for a CA on purpose.
+    ///
+    /// The key exists only for the lifetime of the returned value. To run a CA
+    /// that outlives one process — which is to say, any real one — keep the key
+    /// yourself and use [`WorkloadCa::from_pkcs8_der`].
     ///
     /// # Errors
     ///
-    /// Returns [`MtlsError::Generate`] if key or certificate generation fails.
-    pub fn generate() -> Result<Self, MtlsError> {
+    /// Returns [`MtlsError::Generate`] if key or certificate generation fails,
+    /// or [`MtlsError::Time`] if a timestamp is out of range.
+    pub fn generate(not_before: u64, not_after: u64) -> Result<Self, MtlsError> {
+        Self::from_key(KeyPair::generate_for(&PKCS_ED25519)?, not_before, not_after)
+    }
+
+    /// Loads a workload CA from an existing PKCS#8-encoded Ed25519 private key.
+    ///
+    /// This is how a CA survives a restart: the same key yields the same CA
+    /// certificate, so peers that already trust it keep trusting it.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`MtlsError::InvalidKey`] if `pkcs8_der` is not a PKCS#8 Ed25519
+    /// private key, [`MtlsError::Generate`] if certificate generation fails, or
+    /// [`MtlsError::Time`] if a timestamp is out of range.
+    pub fn from_pkcs8_der(
+        pkcs8_der: &[u8],
+        not_before: u64,
+        not_after: u64,
+    ) -> Result<Self, MtlsError> {
+        let key = KeyPair::try_from(pkcs8_der).map_err(|_| MtlsError::InvalidKey)?;
+        // This crate signs with Ed25519 only, and `verify` rejects anything else
+        // anyway. Refusing here means a caller finds out when it loads the key,
+        // not when the first peer turns its certificate away.
+        if key.algorithm() != &PKCS_ED25519 {
+            return Err(MtlsError::UnsupportedAlgorithm);
+        }
+        Self::from_key(key, not_before, not_after)
+    }
+
+    /// Loads a workload CA from an Ed25519 signing key.
+    ///
+    /// The convenient form of [`WorkloadCa::from_pkcs8_der`] for callers already
+    /// holding an `ed25519-dalek` key — for example one unsealed from a KMS or
+    /// read from a key file. The same key always yields the same CA
+    /// certificate.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`MtlsError::Generate`] if certificate generation fails, or
+    /// [`MtlsError::Time`] if a timestamp is out of range.
+    pub fn from_ed25519(
+        signing_key: &SigningKey,
+        not_before: u64,
+        not_after: u64,
+    ) -> Result<Self, MtlsError> {
+        Self::from_pkcs8_der(&ed25519_pkcs8(signing_key), not_before, not_after)
+    }
+
+    fn from_key(key: KeyPair, not_before: u64, not_after: u64) -> Result<Self, MtlsError> {
         let mut params = CertificateParams::new(Vec::new())?;
         params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
-        let key = KeyPair::generate_for(&PKCS_ED25519)?;
+        params.not_before = to_time(not_before)?;
+        params.not_after = to_time(not_after)?;
         let cert = params.self_signed(&key)?;
         let der = cert.der().to_vec();
         Ok(Self {
@@ -54,18 +143,28 @@ impl WorkloadCa {
         &self.der
     }
 
-    /// Issues a WIC for `identifier`, valid between the two Unix timestamps.
+    /// Issues a WIC binding `identifier` to `public_key`, valid between the two
+    /// Unix timestamps. Returns the certificate, DER-encoded.
+    ///
+    /// Only the workload's *public* key is passed in. The workload generates its
+    /// own key pair and never hands the private half to the CA, so a compromised
+    /// CA cannot impersonate a workload it has already certified — it can only
+    /// mint new certificates. This is the same custody model SPIFFE uses, and
+    /// the reason this crate has no way to ask a CA for a private key.
     ///
     /// # Errors
     ///
-    /// Returns [`MtlsError`] if the identifier cannot be encoded, the validity
-    /// times are out of range, or signing fails.
-    pub fn issue_wic(
+    /// Returns [`MtlsError::MissingIdentifier`] if the identifier cannot be
+    /// encoded as a URI SAN, [`MtlsError::InvalidKey`] if `public_key` cannot be
+    /// encoded, [`MtlsError::Time`] if a timestamp is out of range, or
+    /// [`MtlsError::Generate`] if signing fails.
+    pub fn issue(
         &self,
         identifier: &WorkloadIdentifier,
+        public_key: &VerifyingKey,
         not_before: u64,
         not_after: u64,
-    ) -> Result<IssuedWic, MtlsError> {
+    ) -> Result<Vec<u8>, MtlsError> {
         let mut params = CertificateParams::new(Vec::new())?;
         params.subject_alt_names = vec![SanType::URI(
             identifier
@@ -84,12 +183,8 @@ impl WorkloadCa {
             ExtendedKeyUsagePurpose::ServerAuth,
         ];
 
-        let leaf_key = KeyPair::generate_for(&PKCS_ED25519)?;
-        let cert = params.signed_by(&leaf_key, &self.issuer)?;
-        Ok(IssuedWic {
-            certificate_der: cert.der().to_vec(),
-            private_key_pkcs8_der: leaf_key.serialize_der(),
-        })
+        let cert = params.signed_by(&spki(public_key)?, &self.issuer)?;
+        Ok(cert.der().to_vec())
     }
 }
 
@@ -207,22 +302,41 @@ fn uri_san(cert: &X509Certificate) -> Result<WorkloadIdentifier, MtlsError> {
 mod tests {
     use wimsey_identifier::WorkloadIdentifier;
 
+    use ed25519_dalek::SigningKey;
+
     use super::{verify, workload_identifier, WorkloadCa};
     use crate::error::MtlsError;
 
     const NBF: u64 = 1_700_000_000;
     const NAF: u64 = 1_700_086_400;
+    /// The CA's validity, which outlives the certificates it issues.
+    const CA_NBF: u64 = 1_600_000_000;
+    const CA_NAF: u64 = 1_900_000_000;
 
     fn id() -> WorkloadIdentifier {
         WorkloadIdentifier::parse("spiffe://example.org/workload/api").unwrap()
     }
 
+    fn ca() -> WorkloadCa {
+        WorkloadCa::generate(CA_NBF, CA_NAF).unwrap()
+    }
+
+    /// A key pair the *workload* owns. Only its public half reaches the CA.
+    fn workload_key() -> SigningKey {
+        SigningKey::from_bytes(&[7u8; 32])
+    }
+
+    fn issue(ca: &WorkloadCa) -> Vec<u8> {
+        ca.issue(&id(), &workload_key().verifying_key(), NBF, NAF)
+            .unwrap()
+    }
+
     #[test]
     fn issue_verify_round_trip() {
-        let ca = WorkloadCa::generate().unwrap();
-        let wic = ca.issue_wic(&id(), NBF, NAF).unwrap();
+        let ca = ca();
+        let wic = issue(&ca);
 
-        let verified = verify(&wic.certificate_der, ca.certificate_der(), NBF + 100).unwrap();
+        let verified = verify(&wic, ca.certificate_der(), NBF + 100).unwrap();
         assert_eq!(verified, id());
     }
 
@@ -231,10 +345,10 @@ mod tests {
         use x509_parser::certificate::X509Certificate;
         use x509_parser::prelude::FromDer;
 
-        let ca = WorkloadCa::generate().unwrap();
-        let wic = ca.issue_wic(&id(), NBF, NAF).unwrap();
+        let ca = ca();
+        let wic = issue(&ca);
 
-        let (_, cert) = X509Certificate::from_der(&wic.certificate_der).unwrap();
+        let (_, cert) = X509Certificate::from_der(&wic).unwrap();
         let eku = cert
             .extended_key_usage()
             .unwrap()
@@ -244,36 +358,95 @@ mod tests {
         assert!(eku.server_auth, "id-kp-serverAuth must be set");
     }
 
+    // A CA that cannot outlive its process is not a CA. Reloading the same key
+    // must reproduce the same certificate, or every restart silently breaks
+    // every peer that already trusts it.
+    #[test]
+    fn a_reloaded_ca_is_the_same_ca() {
+        let key = SigningKey::from_bytes(&[3u8; 32]);
+        let first = WorkloadCa::from_ed25519(&key, CA_NBF, CA_NAF).unwrap();
+        let restarted = WorkloadCa::from_ed25519(&key, CA_NBF, CA_NAF).unwrap();
+        assert_eq!(first.certificate_der(), restarted.certificate_der());
+
+        // And a certificate issued before the restart still verifies after it.
+        let wic = issue(&first);
+        assert_eq!(
+            verify(&wic, restarted.certificate_der(), NBF + 100).unwrap(),
+            id()
+        );
+    }
+
+    #[test]
+    fn loads_a_ca_from_pkcs8() {
+        let key = SigningKey::from_bytes(&[3u8; 32]);
+        let from_key = WorkloadCa::from_ed25519(&key, CA_NBF, CA_NAF).unwrap();
+        let from_der =
+            WorkloadCa::from_pkcs8_der(&super::ed25519_pkcs8(&key), CA_NBF, CA_NAF).unwrap();
+        assert_eq!(from_key.certificate_der(), from_der.certificate_der());
+    }
+
+    #[test]
+    fn rejects_a_ca_key_that_is_not_ed25519() {
+        let err = WorkloadCa::from_pkcs8_der(b"not a key at all", CA_NBF, CA_NAF);
+        assert!(matches!(err, Err(MtlsError::InvalidKey)));
+    }
+
+    // Issuance takes only the workload's public key, so the same inputs must
+    // produce the same certificate — there is no per-issuance secret to vary.
+    #[test]
+    fn issuance_is_reproducible() {
+        let ca =
+            WorkloadCa::from_ed25519(&SigningKey::from_bytes(&[3u8; 32]), CA_NBF, CA_NAF).unwrap();
+        assert_eq!(issue(&ca), issue(&ca));
+    }
+
+    // The certificate must bind the key the workload actually holds. A WIC
+    // issued for one key must not be usable by the holder of another.
+    #[test]
+    fn certifies_the_public_key_it_was_given() {
+        use x509_parser::certificate::X509Certificate;
+        use x509_parser::prelude::FromDer;
+
+        let ca = ca();
+        let wic = issue(&ca);
+        let (_, cert) = X509Certificate::from_der(&wic).unwrap();
+        assert_eq!(
+            cert.public_key().subject_public_key.data.as_ref(),
+            workload_key().verifying_key().as_bytes(),
+            "the WIC must carry the workload's own public key"
+        );
+    }
+
     #[test]
     fn extracts_identifier_without_verifying() {
-        let ca = WorkloadCa::generate().unwrap();
-        let wic = ca.issue_wic(&id(), NBF, NAF).unwrap();
-        assert_eq!(workload_identifier(&wic.certificate_der).unwrap(), id());
+        let ca = ca();
+        let wic = issue(&ca);
+        assert_eq!(workload_identifier(&wic).unwrap(), id());
     }
 
     #[test]
     fn rejects_a_different_ca() {
-        let ca = WorkloadCa::generate().unwrap();
-        let other = WorkloadCa::generate().unwrap();
-        let wic = ca.issue_wic(&id(), NBF, NAF).unwrap();
+        let ca = ca();
+        let wic = issue(&ca);
+        let other = WorkloadCa::generate(CA_NBF, CA_NAF).unwrap();
 
-        let err = verify(&wic.certificate_der, other.certificate_der(), NBF + 100);
+        let err = verify(&wic, other.certificate_der(), NBF + 100);
         assert!(matches!(err, Err(MtlsError::InvalidSignature)));
     }
 
     #[test]
     fn rejects_an_expired_certificate() {
-        let ca = WorkloadCa::generate().unwrap();
-        let wic = ca.issue_wic(&id(), NBF, NAF).unwrap();
+        let ca = ca();
+        let wic = issue(&ca);
 
-        let err = verify(&wic.certificate_der, ca.certificate_der(), NAF + 1);
+        let err = verify(&wic, ca.certificate_der(), NAF + 1);
         assert!(matches!(err, Err(MtlsError::NotValid)));
     }
 
     #[test]
     fn rejects_a_certificate_without_a_uri_san() {
         // The CA certificate carries no subjectAltName.
-        let ca = WorkloadCa::generate().unwrap();
+        let ca = ca();
         let err = workload_identifier(ca.certificate_der());
         assert!(matches!(err, Err(MtlsError::MissingIdentifier)));
     }
