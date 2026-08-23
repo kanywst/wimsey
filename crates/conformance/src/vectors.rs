@@ -9,6 +9,7 @@
 use serde::{Deserialize, Serialize};
 use wimsey_httpsig::HttpSigError;
 use wimsey_identifier::ParseError;
+use wimsey_mtls::MtlsError;
 use wimsey_wit::{WitClaims, WitError};
 use wimsey_wpt::{WptClaims, WptError};
 
@@ -160,6 +161,14 @@ pub enum ErrorCode {
     /// A percent-escape was well-formed but not in RFC 3986 normalized form:
     /// lowercase hex, or encoding an unreserved character.
     NonNormalizedPercentEncoding,
+    /// A certificate could not be parsed as DER X.509.
+    CertificateParseError,
+    /// A certificate is outside its validity window at the given time.
+    CertificateNotValid,
+    /// A certificate carries no URI SAN workload identifier.
+    MissingIdentifier,
+    /// A certificate carries more than one URI SAN.
+    MultipleIdentifiers,
     /// The implementation rejected the input for a reason this table does not
     /// name.
     ///
@@ -210,6 +219,22 @@ impl From<&ParseError> for ErrorCode {
             ParseError::InvalidPathChar(_) => Self::InvalidPathChar,
             ParseError::BadPercentEncoding => Self::BadPercentEncoding,
             ParseError::NonNormalizedPercentEncoding(_) => Self::NonNormalizedPercentEncoding,
+            _ => Self::Unmapped,
+        }
+    }
+}
+
+impl From<&MtlsError> for ErrorCode {
+    fn from(error: &MtlsError) -> Self {
+        match error {
+            MtlsError::Parse => Self::CertificateParseError,
+            MtlsError::UnsupportedAlgorithm => Self::UnsupportedAlg,
+            MtlsError::InvalidKey => Self::InvalidKey,
+            MtlsError::InvalidSignature => Self::InvalidSignature,
+            MtlsError::NotValid => Self::CertificateNotValid,
+            MtlsError::MissingIdentifier => Self::MissingIdentifier,
+            MtlsError::MultipleIdentifiers => Self::MultipleIdentifiers,
+            MtlsError::Identifier(e) => Self::from(e),
             _ => Self::Unmapped,
         }
     }
@@ -513,4 +538,60 @@ pub struct IdentifierReject {
     pub identifier: String,
     /// The reason parsing must report.
     pub expect: ErrorCode,
+}
+
+/// A Workload Identity Certificate vector.
+///
+/// Both keys are recorded as seeds rather than as finished certificates, so a
+/// consumer can re-issue the WIC from scratch and compare bytes. That is only
+/// possible because issuance takes the workload's *public* key: there is no
+/// per-issuance secret for an implementation to disagree about.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct MtlsVector {
+    /// The common header fields.
+    #[serde(flatten)]
+    pub header: Header,
+    /// The CA's Ed25519 seed, so the CA certificate can be rebuilt.
+    pub ca_signing_key_seed_b64u: String,
+    /// The CA certificate's validity window, in seconds since the Unix epoch.
+    pub ca_not_before: u64,
+    /// The end of the CA certificate's validity window.
+    pub ca_not_after: u64,
+    /// The workload's Ed25519 seed. Only its public half is certified; it is
+    /// recorded in full so a consumer can derive that public half.
+    pub workload_signing_key_seed_b64u: String,
+    /// The workload identifier the WIC must carry in its URI SAN.
+    pub identifier: String,
+    /// The WIC's validity window, in seconds since the Unix epoch.
+    pub not_before: u64,
+    /// The end of the WIC's validity window.
+    pub not_after: u64,
+    /// The expected CA certificate, DER-encoded.
+    pub ca_certificate_der_b64u: String,
+    /// The expected WIC, DER-encoded, byte for byte.
+    pub wic_der_b64u: String,
+    /// The time at which the positive case must verify.
+    pub verify_now: u64,
+    /// Inputs that MUST be rejected, and why.
+    pub negative: Vec<MtlsNegative>,
+}
+
+/// A WIC verification input that must fail, and the reason it must fail with.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct MtlsNegative {
+    /// A stable identifier, unique within the file.
+    pub id: String,
+    /// What makes this input invalid, in prose.
+    pub description: String,
+    /// The reason verification must report.
+    pub expect: ErrorCode,
+    /// Replaces the positive case's WIC.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wic_der_b64u: Option<String>,
+    /// Replaces the positive case's CA certificate.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ca_certificate_der_b64u: Option<String>,
+    /// Replaces the positive case's `verify_now`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub verify_now: Option<u64>,
 }

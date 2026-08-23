@@ -66,7 +66,8 @@ fn write_vectors(out: &Path) -> std::io::Result<()> {
     write_json(
         &out.join("httpsig/sign-basic.json"),
         &generate::httpsig_vector(),
-    )
+    )?;
+    write_json(&out.join("mtls/wic-basic.json"), &generate::mtls_vector())
 }
 
 fn main() -> ExitCode {

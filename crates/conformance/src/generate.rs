@@ -12,13 +12,14 @@ use wimsey_httpsig::{
     content_digest_sha256, sign, Component, HttpRequest, SignatureParams, WIMSE_TAG,
 };
 use wimsey_identifier::WorkloadIdentifier;
+use wimsey_mtls::WorkloadCa;
 use wimsey_wit::{issue as issue_wit, Confirmation, Jwk, WitClaims};
 use wimsey_wpt::{issue as issue_wpt, wit_thumbprint, WptClaims};
 
 use crate::vectors::{
     ErrorCode, Header, HttpSigNegative, HttpSigVector, IdentifierAccept, IdentifierReject,
-    IdentifierVector, Manifest, ManifestEntry, VectorParams, VectorRequest, WitNegative, WitVector,
-    WptNegative, WptVector, FORMAT,
+    IdentifierVector, Manifest, ManifestEntry, MtlsNegative, MtlsVector, VectorParams,
+    VectorRequest, WitNegative, WitVector, WptNegative, WptVector, FORMAT,
 };
 
 /// The issuer's Ed25519 seed. Fixed so the vectors are reproducible.
@@ -668,6 +669,11 @@ pub fn manifest() -> Manifest {
                 path: "httpsig/sign-basic.json".to_owned(),
                 spec: HTTPSIG_SPEC.to_owned(),
             },
+            ManifestEntry {
+                suite: "mtls".to_owned(),
+                path: "mtls/wic-basic.json".to_owned(),
+                spec: MTLS_SPEC.to_owned(),
+            },
         ],
     }
 }
@@ -857,4 +863,116 @@ fn identifier_rejects() -> Vec<IdentifierReject> {
             ErrorCode::InvalidPathChar,
         ),
     ]
+}
+
+const MTLS_SPEC: &str = "draft-ietf-wimse-mutual-tls-02";
+/// The workload CA's seed. Fixed so the CA certificate is reproducible.
+const CA_SEED: [u8; 32] = [3u8; 32];
+/// A second CA, used only as the wrong trust anchor in a negative case.
+const OTHER_CA_SEED: [u8; 32] = [4u8; 32];
+/// The CA certificate outlives the WICs it issues.
+const CA_NBF: u64 = 1_600_000_000;
+const CA_NAF: u64 = 1_900_000_000;
+/// The WIC's own window.
+const WIC_NBF: u64 = IAT;
+const WIC_NAF: u64 = IAT + 86_400;
+
+fn mtls_neg(id: &str, description: &str, expect: ErrorCode) -> MtlsNegative {
+    MtlsNegative {
+        id: id.to_owned(),
+        description: description.to_owned(),
+        expect,
+        wic_der_b64u: None,
+        ca_certificate_der_b64u: None,
+        verify_now: None,
+    }
+}
+
+/// Builds the WIC vector.
+///
+/// # Panics
+///
+/// Panics if the fixed inputs stop being valid, which would mean the
+/// implementation can no longer issue its own reference certificates.
+#[must_use]
+pub fn mtls_vector() -> MtlsVector {
+    let ca_key = SigningKey::from_bytes(&CA_SEED);
+    let workload_key = SigningKey::from_bytes(&POP_SEED);
+    let identifier =
+        WorkloadIdentifier::parse(SUBJECT).expect("the fixed subject is a valid identifier");
+
+    let ca = WorkloadCa::from_ed25519(&ca_key, CA_NBF, CA_NAF).expect("load the fixed CA");
+    let wic = ca
+        .issue(&identifier, &workload_key.verifying_key(), WIC_NBF, WIC_NAF)
+        .expect("issue the fixed WIC");
+
+    let other_ca =
+        WorkloadCa::from_ed25519(&SigningKey::from_bytes(&OTHER_CA_SEED), CA_NBF, CA_NAF)
+            .expect("load the second CA");
+
+    let negative = vec![
+        MtlsNegative {
+            ca_certificate_der_b64u: Some(URL_SAFE_NO_PAD.encode(other_ca.certificate_der())),
+            ..mtls_neg(
+                "wrong-ca",
+                "verified against a CA that did not sign the certificate",
+                ErrorCode::InvalidSignature,
+            )
+        },
+        MtlsNegative {
+            verify_now: Some(WIC_NAF + 1),
+            ..mtls_neg(
+                "expired",
+                "verified one second after the certificate's notAfter",
+                ErrorCode::CertificateNotValid,
+            )
+        },
+        MtlsNegative {
+            verify_now: Some(WIC_NBF - 1),
+            ..mtls_neg(
+                "not-yet-valid",
+                "verified one second before the certificate's notBefore",
+                ErrorCode::CertificateNotValid,
+            )
+        },
+        // The CA certificate is a perfectly valid, correctly signed certificate
+        // that simply carries no URI SAN. An implementation that only checks the
+        // signature will accept it and then have no identifier to authorize.
+        MtlsNegative {
+            wic_der_b64u: Some(URL_SAFE_NO_PAD.encode(ca.certificate_der())),
+            ..mtls_neg(
+                "no-uri-san",
+                "a validly signed certificate that carries no workload identifier",
+                ErrorCode::MissingIdentifier,
+            )
+        },
+        MtlsNegative {
+            wic_der_b64u: Some(URL_SAFE_NO_PAD.encode(b"not a certificate")),
+            ..mtls_neg(
+                "not-a-certificate",
+                "the presented bytes are not DER X.509 at all",
+                ErrorCode::CertificateParseError,
+            )
+        },
+    ];
+
+    MtlsVector {
+        header: header(
+            "mtls",
+            "wic-basic",
+            MTLS_SPEC,
+            "Workload Identity Certificate issuance over a workload-supplied public key, plus the inputs a verifier must reject",
+        ),
+        ca_signing_key_seed_b64u: URL_SAFE_NO_PAD.encode(CA_SEED),
+        ca_not_before: CA_NBF,
+        ca_not_after: CA_NAF,
+        workload_signing_key_seed_b64u: URL_SAFE_NO_PAD.encode(POP_SEED),
+        identifier: SUBJECT.to_owned(),
+        not_before: WIC_NBF,
+        not_after: WIC_NAF,
+        ca_certificate_der_b64u: URL_SAFE_NO_PAD.encode(ca.certificate_der()),
+        wic_der_b64u: URL_SAFE_NO_PAD.encode(&wic),
+        verify_now: WIC_NBF + 100,
+        negative,
+    }
 }
