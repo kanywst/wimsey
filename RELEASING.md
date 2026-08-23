@@ -100,7 +100,13 @@ for c in wimsey-identifier wimsey-wpt wimsey-httpsig wimsey-wit \
 done
 ```
 
-`wimsey-conformance` and `wimsey-demo` stay unpublished (`publish = false`): one is a harness and the other a demo, and neither is a library anyone should depend on.
+Three crates stay unpublished, each marked `publish = false` so the decision lives in the manifest rather than in whoever is running the release:
+
+| Crate | Why |
+| --- | --- |
+| `wimsey-conformance` | A harness, not a library |
+| `wimsey-demo` | A demo, not a library |
+| `wimsey-issuer` | Performs no workload attestation — it mints a WIT for anyone who asks. Publishing it puts `cargo install wimsey-issuer` one command away from a running, unauthenticated credential minter for someone who never read the warning |
 
 Before publishing, confirm the packages actually contain what they claim to:
 

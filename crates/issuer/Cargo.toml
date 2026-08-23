@@ -2,6 +2,12 @@
 name = "wimsey-issuer"
 description = "Experimental WIMSE credential issuer with a SPIFFE Workload API shim."
 readme = "README.md"
+# Held back from crates.io deliberately. This issuer performs no workload
+# attestation at all — it mints a WIT for anyone who asks — so publishing it
+# would put `cargo install wimsey-issuer` one command away from a running,
+# unauthenticated credential minter, for someone who never read the warning.
+# The warning belongs in front of the reader, not behind an install.
+publish = false
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
