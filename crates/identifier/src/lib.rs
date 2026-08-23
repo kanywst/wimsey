@@ -23,10 +23,22 @@
 //! Section 4.3 requires consumers to "compare and authorize Workload
 //! Identifiers using the complete URI". Comparing whole URIs is only sound if
 //! each identifier has exactly one spelling, so this crate rejects the forms
-//! that would otherwise need normalizing before comparison — an uppercase trust
-//! domain, an empty path segment, and a `.` or `..` segment — rather than
-//! silently rewriting them. Parsing therefore fails closed on any input that
-//! could compare unequal to a semantically identical peer.
+//! that RFC 3986 Section 6.2.2 normalization would rewrite, rather than
+//! silently rewriting them:
+//!
+//! - an uppercase trust domain (the authority is case-insensitive);
+//! - an empty path segment, and a `.` or `..` segment;
+//! - a percent-escape with lowercase hex digits, or one encoding an
+//!   *unreserved* character — `%61pi` and `api` would otherwise be one path
+//!   under two names, and `%2E%2E` would slip past the dot-segment check while
+//!   still decoding to a parent-directory segment.
+//!
+//! Encoding a *reserved* character stays legal, because normalization does not
+//! decode it: `%2F` is a `/` that is data rather than a delimiter, and decoding
+//! it would change what the path means.
+//!
+//! Parsing therefore fails closed on any input that could compare unequal to a
+//! semantically identical peer.
 
 use std::fmt;
 use std::str::FromStr;
@@ -124,6 +136,11 @@ pub enum ParseError {
     /// A percent-escape in the path is not `%` followed by two hex digits.
     #[error("path contains a malformed percent-escape")]
     BadPercentEncoding,
+    /// A percent-escape in the path is well-formed but not in normalized form:
+    /// its hex digits are lowercase, or it encodes an unreserved character that
+    /// RFC 3986 normalization would decode.
+    #[error("path contains a percent-escape that is not in normalized form: %{0}")]
+    NonNormalizedPercentEncoding(String),
 }
 
 /// A validated WIMSE workload identifier.
@@ -292,6 +309,21 @@ fn validate_spiffe_segment(segment: &str) -> Result<(), ParseError> {
 
 /// The generic RFC 3986 `pchar` set, which Section 4.4 leaves the `wimse` path
 /// to: `unreserved / pct-encoded / sub-delims / ":" / "@"`.
+///
+/// Percent-escapes are held to RFC 3986 normalized form, because an escape that
+/// normalization would rewrite is another way to spell the same identifier. Two
+/// rules follow from Section 6.2.2:
+///
+/// - **§6.2.2.1** — hex digits must be uppercase, so `%2F` and `%2f` cannot both
+///   name one path.
+/// - **§6.2.2.2** — an escape must not encode an *unreserved* character, which
+///   normalization decodes. Without this, `%61pi` and `api` are the same path
+///   spelled two ways, and `%2E%2E` slips past the `.`/`..` check above while
+///   still decoding to a parent-directory segment.
+///
+/// A *reserved* character stays encodable: `%2F` is a `/` that is data rather
+/// than a delimiter, and decoding it would change what the path means, so
+/// normalization leaves it alone and so does this.
 fn validate_pchar_segment(segment: &str) -> Result<(), ParseError> {
     let bytes = segment.as_bytes();
     let mut i = 0;
@@ -303,6 +335,14 @@ fn validate_pchar_segment(segment: &str) -> Result<(), ParseError> {
                 .ok_or(ParseError::BadPercentEncoding)?;
             if !hex.iter().all(u8::is_ascii_hexdigit) {
                 return Err(ParseError::BadPercentEncoding);
+            }
+            let escape = || String::from_utf8_lossy(hex).into_owned();
+            if hex.iter().any(u8::is_ascii_lowercase) {
+                return Err(ParseError::NonNormalizedPercentEncoding(escape()));
+            }
+            let decoded = decode_hex(hex[0]) * 16 + decode_hex(hex[1]);
+            if is_unreserved_byte(decoded) {
+                return Err(ParseError::NonNormalizedPercentEncoding(escape()));
             }
             i += 3;
             continue;
@@ -319,6 +359,22 @@ fn validate_pchar_segment(segment: &str) -> Result<(), ParseError> {
         i += 1;
     }
     Ok(())
+}
+
+/// The value of one uppercase-or-digit ASCII hex digit.
+///
+/// The caller has already checked `b.is_ascii_hexdigit()` and rejected the
+/// lowercase forms, so no other input reaches this.
+const fn decode_hex(b: u8) -> u8 {
+    match b {
+        b'0'..=b'9' => b - b'0',
+        _ => b - b'A' + 10,
+    }
+}
+
+/// The RFC 3986 `unreserved` set — the characters normalization percent-decodes.
+const fn is_unreserved_byte(b: u8) -> bool {
+    matches!(b, b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~')
 }
 
 const fn is_pchar_byte(b: u8) -> bool {
@@ -542,10 +598,75 @@ mod tests {
         );
     }
 
+    // A reserved character stays encodable: `%2F` is a `/` that is data, not a
+    // delimiter, and normalization does not decode it.
     #[test]
-    fn wimse_path_accepts_percent_encoding() {
+    fn wimse_path_accepts_an_encoded_reserved_character() {
         let id = WorkloadIdentifier::parse("wimse://example.org/a%2Fb").unwrap();
         assert_eq!(id.path(), "/a%2Fb");
+    }
+
+    // A percent-escape that normalization would rewrite is a second spelling of
+    // an identifier that must have only one, so it is rejected rather than
+    // normalized. `%2E%2E` is the case that matters most: it decodes to `..`
+    // and would otherwise walk straight past the dot-segment check.
+    #[test]
+    fn rejects_an_encoded_dot_segment() {
+        for encoded in [
+            "wimse://example.org/%2E%2E/api",
+            "wimse://example.org/%2E/api",
+        ] {
+            assert!(
+                matches!(
+                    WorkloadIdentifier::parse(encoded),
+                    Err(ParseError::NonNormalizedPercentEncoding(_))
+                ),
+                "{encoded} must not parse"
+            );
+        }
+        // The literal spelling is still caught by the dot-segment check itself.
+        assert_eq!(
+            WorkloadIdentifier::parse("wimse://example.org/../api"),
+            Err(ParseError::DotSegment)
+        );
+    }
+
+    #[test]
+    fn rejects_an_encoded_unreserved_character() {
+        // `%61` is `a`, so this is `/api` wearing a disguise.
+        assert!(matches!(
+            WorkloadIdentifier::parse("wimse://example.org/%61pi"),
+            Err(ParseError::NonNormalizedPercentEncoding(_))
+        ));
+        assert!(WorkloadIdentifier::parse("wimse://example.org/api").is_ok());
+    }
+
+    #[test]
+    fn rejects_lowercase_percent_escape_hex() {
+        assert!(matches!(
+            WorkloadIdentifier::parse("wimse://example.org/a%2fb"),
+            Err(ParseError::NonNormalizedPercentEncoding(_))
+        ));
+    }
+
+    // Any two identifiers this crate accepts must be byte-equal exactly when
+    // they are semantically equal, which is what Section 4.3 comparison needs.
+    #[test]
+    fn accepted_identifiers_have_exactly_one_spelling() {
+        let canonical = "wimse://example.org/a%2Fb/api";
+        assert!(WorkloadIdentifier::parse(canonical).is_ok());
+        for alias in [
+            "wimse://EXAMPLE.org/a%2Fb/api",
+            "wimse://example.org/a%2fb/api",
+            "wimse://example.org/a%2Fb/%61pi",
+            "wimse://example.org/a%2Fb/./api",
+            "wimse://example.org//a%2Fb/api",
+        ] {
+            assert!(
+                WorkloadIdentifier::parse(alias).is_err(),
+                "{alias} is a second spelling of {canonical} and must be rejected"
+            );
+        }
     }
 
     #[test]
