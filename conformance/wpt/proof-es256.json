@@ -1,0 +1,65 @@
+{
+  "format": "wimse-conformance/v2",
+  "suite": "wpt",
+  "id": "proof-es256",
+  "spec": "draft-ietf-wimse-wpt-01",
+  "description": "WPT bound to a WIT via `wth`, plus the inputs a verifier must reject",
+  "alg": "EdDSA",
+  "pop_signing_key": {
+    "alg": "ES256",
+    "kty": "EC",
+    "crv": "P-256",
+    "x": "cTX6T9k6Cdzpi79oG0v89Q58DWNU5ir7C_8qNClheGU",
+    "y": "7UwfAt25Aj7lalV-UV1qncZsEfIglg3llDNN9Yh3ZyQ",
+    "d": "CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk"
+  },
+  "issuer_verifying_key": {
+    "alg": "ES256",
+    "kty": "EC",
+    "crv": "P-256",
+    "x": "b_A7lJJBzh2t1DUZ5pYOCoW0GmmgXDKBA6orzhWUyhY",
+    "y": "PE91OlW_AdxT9sCwx-7ni0DG_30lqW4igrmJzvccFEo"
+  },
+  "verify_now": 1700000000,
+  "audience": "https://workload.example.com/path",
+  "wit": "eyJ0eXAiOiJ3aXQrand0IiwiYWxnIjoiRVMyNTYiLCJraWQiOiJpc3N1ZXIta2V5LTEifQ.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvYXBpIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDM2MDAsImp0aSI6ImExYjJjMyIsImNuZiI6eyJqd2siOnsiYWxnIjoiRVMyNTYiLCJrdHkiOiJFQyIsImNydiI6IlAtMjU2IiwieCI6ImNUWDZUOWs2Q2R6cGk3OW9HMHY4OVE1OERXTlU1aXI3Q184cU5DbGhlR1UiLCJ5IjoiN1V3ZkF0MjVBajdsYWxWLVVWMXFuY1pzRWZJZ2xnM2xsRE5OOVloM1p5USJ9fX0.5hgKPe0utuP-jgVBlaXzEfWSWyU_cCmKUVGEO6q159Hs-cH-XogDwFVyl7qgKXf6uFTEmPtO2nQrY3G1jxyAiw",
+  "claims": {
+    "aud": "https://workload.example.com/path",
+    "exp": 1700000300,
+    "jti": "0123456789abcdef",
+    "wth": "YuJqcoT0EIZFXONz7tc3vSiB2TPBgu29KAjGnjuE5BY"
+  },
+  "proof": "eyJ0eXAiOiJ3cHQrand0IiwiYWxnIjoiRVMyNTYifQ.eyJhdWQiOiJodHRwczovL3dvcmtsb2FkLmV4YW1wbGUuY29tL3BhdGgiLCJleHAiOjE3MDAwMDAzMDAsImp0aSI6IjAxMjM0NTY3ODlhYmNkZWYiLCJ3dGgiOiJZdUpxY29UMEVJWkZYT056N3RjM3ZTaUIyVFBCZ3UyOUtBakduanVFNUJZIn0.Yq4x_DZEwZYq0v2GfkK_0b8r4NABVqEXBSKYrc7Lhtfoy1R9iicN6RX4YaDiEjEBN0z3nmbnD6SG-jjxdUJ4oA",
+  "negative": [
+    {
+      "id": "expired",
+      "description": "verified one second after `exp`",
+      "expect": "expired",
+      "verify_now": 1700000301
+    },
+    {
+      "id": "audience-mismatch",
+      "description": "presented to a service other than the one named in `aud`",
+      "expect": "audience_mismatch",
+      "audience": "https://other.example.com/path"
+    },
+    {
+      "id": "wit-binding-mismatch",
+      "description": "replayed alongside a different, otherwise valid WIT",
+      "expect": "wit_binding_mismatch",
+      "wit": "eyJ0eXAiOiJ3aXQrand0IiwiYWxnIjoiRVMyNTYiLCJraWQiOiJpc3N1ZXIta2V5LTEifQ.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvb3RoZXIiLCJpYXQiOjE3MDAwMDAwMDAsImV4cCI6MTcwMDAwMzYwMCwianRpIjoiYTFiMmMzIiwiY25mIjp7Imp3ayI6eyJhbGciOiJFUzI1NiIsImt0eSI6IkVDIiwiY3J2IjoiUC0yNTYiLCJ4IjoiY1RYNlQ5azZDZHpwaTc5b0cwdjg5UTU4RFdOVTVpcjdDXzhxTkNsaGVHVSIsInkiOiI3VXdmQXQyNUFqN2xhbFYtVVYxcW5jWnNFZklnbGczbGxETk45WWgzWnlRIn19fQ.2GAbYAi0pXLUS6yWId84ERPJfvSH4ca4cFLhXC1-fFX8L6597AeOZMQt_51YGorfLwEid73HWRPRA9vZC7D6Eg"
+    },
+    {
+      "id": "wrong-typ",
+      "description": "validly signed, but the JOSE `typ` is `jwt` and not `wpt+jwt`",
+      "expect": "wrong_type",
+      "proof": "eyJ0eXAiOiJqd3QiLCJhbGciOiJFZERTQSJ9.eyJhdWQiOiJodHRwczovL3dvcmtsb2FkLmV4YW1wbGUuY29tL3BhdGgiLCJleHAiOjE3MDAwMDAzMDAsImp0aSI6IjAxMjM0NTY3ODlhYmNkZWYiLCJ3dGgiOiJZdUpxY29UMEVJWkZYT056N3RjM3ZTaUIyVFBCZ3UyOUtBakduanVFNUJZIn0.sn6J-ed9Qf5Fd2oKU0Y3oiNFIu1ow7cXS7_W5WfH95s_YHqh38at2MebPBC4eaKCZ8lU-0R0NUhHBGwkc4ZPSw"
+    },
+    {
+      "id": "tampered-payload",
+      "description": "`jti` was altered after signing; the payload is still valid JSON",
+      "expect": "invalid_signature",
+      "proof": "eyJ0eXAiOiJ3cHQrand0IiwiYWxnIjoiRVMyNTYifQ.eyJhdWQiOiJodHRwczovL3dvcmtsb2FkLmV4YW1wbGUuY29tL3BhdGgiLCJleHAiOjE3MDAwMDAzMDAsImp0aSI6IjAxMjM0NTY3ODlhYmNkZWUiLCJ3dGgiOiJZdUpxY29UMEVJWkZYT056N3RjM3ZTaUIyVFBCZ3UyOUtBakduanVFNUJZIn0.Yq4x_DZEwZYq0v2GfkK_0b8r4NABVqEXBSKYrc7Lhtfoy1R9iicN6RX4YaDiEjEBN0z3nmbnD6SG-jjxdUJ4oA"
+    }
+  ]
+}

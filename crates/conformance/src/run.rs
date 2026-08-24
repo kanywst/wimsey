@@ -17,7 +17,7 @@ use wimsey_httpsig::{
     HttpResponse, SignatureParams, VerifyConfig, VerifyingKey,
 };
 use wimsey_identifier::WorkloadIdentifier;
-use wimsey_jose::{Algorithm, SigningKey};
+use wimsey_jose::{Jwk, PrivateJwk, SigningKey};
 use wimsey_mtls::{verify as verify_mtls, WorkloadCa};
 use wimsey_wit::{issue as issue_wit, verify as verify_wit, Validation as WitValidation};
 use wimsey_wpt::{issue as issue_wpt, verify as verify_wpt, wit_thumbprint, Validation};
@@ -128,27 +128,14 @@ impl Report {
     }
 }
 
-fn signing_key(seed_b64u: &str) -> Result<SigningKey, String> {
-    let seed = URL_SAFE_NO_PAD
-        .decode(seed_b64u)
-        .map_err(|e| format!("seed is not base64url: {e}"))?;
-    let seed: [u8; 32] = seed
-        .try_into()
-        .map_err(|_| "seed is not 32 bytes".to_owned())?;
-    Ok(SigningKey::from_ed25519_seed(&seed))
+fn signing_key(jwk: &PrivateJwk) -> Result<SigningKey, String> {
+    jwk.to_signing_key()
+        .map_err(|e| format!("private key: {e}"))
 }
 
-/// Decodes a recorded public key.
-///
-/// The v1 vector format records raw key bytes rather than a JWK, which only
-/// works because every v1 vector is Ed25519. Carrying the algorithm with the key
-/// is what a JWK is for, and is what an ES256 vector will need.
-fn verifying_key(b64u: &str) -> Result<VerifyingKey, String> {
-    let bytes = URL_SAFE_NO_PAD
-        .decode(b64u)
-        .map_err(|e| format!("key is not base64url: {e}"))?;
-    VerifyingKey::from_raw_bytes(Algorithm::EdDsa, &bytes)
-        .map_err(|e| format!("key is not a valid Ed25519 point: {e}"))
+fn verifying_key(jwk: &Jwk) -> Result<VerifyingKey, String> {
+    jwk.to_verifying_key()
+        .map_err(|e| format!("public key: {e}"))
 }
 
 fn expect_reject(expected: ErrorCode, actual: Result<(), ErrorCode>) -> Result<(), String> {
@@ -239,15 +226,11 @@ pub fn run_identifier(vector: &IdentifierVector, report: &mut Report) {
 pub fn run_mtls(vector: &MtlsVector, report: &mut Report) {
     let name = format!("{}/{}", vector.header.suite, vector.header.id);
 
-    let inputs = seed(&vector.ca_signing_key_seed_b64u).and_then(|ca_seed| {
-        let workload = seed(&vector.workload_signing_key_seed_b64u)?;
+    let inputs = signing_key(&vector.ca_signing_key).and_then(|ca_key| {
+        let workload_key = signing_key(&vector.workload_signing_key)?;
         let identifier = WorkloadIdentifier::parse(&vector.identifier)
             .map_err(|e| format!("the recorded identifier does not parse: {e}"))?;
-        Ok((
-            SigningKey::from_ed25519_seed(&ca_seed),
-            SigningKey::from_ed25519_seed(&workload),
-            identifier,
-        ))
+        Ok((ca_key, workload_key, identifier))
     });
     let (ca_key, workload_key, identifier) = match inputs {
         Ok(inputs) => inputs,
@@ -322,15 +305,6 @@ pub fn run_mtls(vector: &MtlsVector, report: &mut Report) {
     }
 }
 
-/// Decodes a recorded base64url seed into 32 bytes.
-fn seed(b64u: &str) -> Result<[u8; 32], String> {
-    URL_SAFE_NO_PAD
-        .decode(b64u)
-        .map_err(|e| format!("seed is not base64url: {e}"))?
-        .try_into()
-        .map_err(|_| "seed is not 32 bytes".to_owned())
-}
-
 /// Decodes a recorded base64url DER blob.
 fn der(b64u: &str) -> Result<Vec<u8>, String> {
     URL_SAFE_NO_PAD
@@ -341,7 +315,7 @@ fn der(b64u: &str) -> Result<Vec<u8>, String> {
 /// Runs the WIT vector: reproducibility, acceptance, and every rejection.
 pub fn run_wit(vector: &WitVector, report: &mut Report) {
     let name = format!("{}/{}", vector.header.suite, vector.header.id);
-    let key = match signing_key(&vector.issuer_signing_key_seed_b64u) {
+    let key = match signing_key(&vector.issuer_signing_key) {
         Ok(key) => key,
         Err(detail) => {
             report.fail(&name, "load issuer key", detail);
@@ -384,7 +358,7 @@ pub fn run_wit(vector: &WitVector, report: &mut Report) {
     for case in &vector.negative {
         let token = case.token.as_deref().unwrap_or(&vector.token);
         let now = case.verify_now.unwrap_or(vector.verify_now);
-        let key = match case.issuer_verifying_key_b64u.as_deref() {
+        let key = match case.issuer_verifying_key.as_ref() {
             Some(b64u) => verifying_key(b64u),
             None => Ok(key.verifying_key()),
         };
@@ -404,7 +378,7 @@ pub fn run_wit(vector: &WitVector, report: &mut Report) {
 /// rejection.
 pub fn run_wpt(vector: &WptVector, report: &mut Report) {
     let name = format!("{}/{}", vector.header.suite, vector.header.id);
-    let pop = match signing_key(&vector.pop_signing_key_seed_b64u) {
+    let pop = match signing_key(&vector.pop_signing_key) {
         Ok(key) => key,
         Err(detail) => {
             report.fail(&name, "load proof-of-possession key", detail);
@@ -438,7 +412,7 @@ pub fn run_wpt(vector: &WptVector, report: &mut Report) {
 
     // The full flow: recover the proof-of-possession key from the WIT rather
     // than from the vector, so a break in the WIT-to-WPT chain shows up here.
-    let flow = verifying_key(&vector.issuer_verifying_key_b64u).and_then(|issuer| {
+    let flow = verifying_key(&vector.issuer_verifying_key).and_then(|issuer| {
         let verified_wit = verify_wit(&vector.wit, &issuer, &WitValidation::at(vector.verify_now))
             .map_err(|e| format!("the bound WIT did not verify: {e}"))?;
         let validation = Validation::new(vector.verify_now, &vector.audience, &vector.wit);
@@ -473,7 +447,7 @@ pub fn run_wpt(vector: &WptVector, report: &mut Report) {
 /// Runs the httpsig vector: reproducibility, the full flow, and every rejection.
 pub fn run_httpsig(vector: &HttpSigVector, report: &mut Report) {
     let name = format!("{}/{}", vector.header.suite, vector.header.id);
-    let pop = match signing_key(&vector.pop_signing_key_seed_b64u) {
+    let pop = match signing_key(&vector.pop_signing_key) {
         Ok(key) => key,
         Err(detail) => {
             report.fail(&name, "load proof-of-possession key", detail);
@@ -516,7 +490,7 @@ pub fn run_httpsig(vector: &HttpSigVector, report: &mut Report) {
             }),
     );
 
-    let flow = verifying_key(&vector.issuer_verifying_key_b64u).and_then(|issuer| {
+    let flow = verifying_key(&vector.issuer_verifying_key).and_then(|issuer| {
         let verified_wit = verify_wit(&vector.wit, &issuer, &WitValidation::at(vector.verify_now))
             .map_err(|e| format!("the carried WIT did not verify: {e}"))?;
         let config = VerifyConfig {
@@ -570,7 +544,7 @@ fn run_httpsig_response(
     name: &str,
     report: &mut Report,
 ) {
-    let pop_key = match verifying_key(&vector.issuer_verifying_key_b64u).and_then(|issuer| {
+    let pop_key = match verifying_key(&vector.issuer_verifying_key).and_then(|issuer| {
         verify_wit(&vector.wit, &issuer, &WitValidation::at(vector.verify_now))
             .map(|verified| verified.pop_key)
             .map_err(|e| format!("the carried WIT did not verify: {e}"))
@@ -609,7 +583,7 @@ fn run_httpsig_response(
     };
     // Re-signing needs the private half; verification below uses the public half
     // recovered from the WIT, so the two checks stay independent.
-    let signing = match signing_key(&vector.pop_signing_key_seed_b64u) {
+    let signing = match signing_key(&vector.pop_signing_key) {
         Ok(key) => key,
         Err(detail) => {
             report.fail(name, "response/load the signing key", detail);
@@ -732,7 +706,7 @@ fn run_httpsig_negatives(
     // Section 3 requires validating the WIT before the message signature, so the
     // negatives recover the key from it rather than from the vector's seed —
     // otherwise an implementation could skip the WIT entirely and still pass.
-    let pop_key = match verifying_key(&vector.issuer_verifying_key_b64u).and_then(|issuer| {
+    let pop_key = match verifying_key(&vector.issuer_verifying_key).and_then(|issuer| {
         verify_wit(&vector.wit, &issuer, &WitValidation::at(vector.verify_now))
             .map(|verified| verified.pop_key)
             .map_err(|e| format!("the carried WIT did not verify: {e}"))

@@ -1,0 +1,97 @@
+{
+  "format": "wimse-conformance/v2",
+  "suite": "wit",
+  "id": "issue-es256",
+  "spec": "draft-ietf-wimse-workload-creds-02",
+  "description": "WIT issuance with EdDSA (Ed25519), plus the inputs a verifier must reject",
+  "alg": "ES256",
+  "issuer_signing_key": {
+    "alg": "ES256",
+    "kty": "EC",
+    "crv": "P-256",
+    "x": "b_A7lJJBzh2t1DUZ5pYOCoW0GmmgXDKBA6orzhWUyhY",
+    "y": "PE91OlW_AdxT9sCwx-7ni0DG_30lqW4igrmJzvccFEo",
+    "d": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+  },
+  "kid": "issuer-key-1",
+  "verify_now": 1700000000,
+  "claims": {
+    "iss": "https://issuer.example",
+    "sub": "spiffe://example.org/workload/api",
+    "iat": 1700000000,
+    "exp": 1700003600,
+    "jti": "a1b2c3",
+    "cnf": {
+      "jwk": {
+        "alg": "ES256",
+        "kty": "EC",
+        "crv": "P-256",
+        "x": "HhhTL9R1TALzBB2cdc6zO4P_2BrHzk_ogsyxyYvFiW4",
+        "y": "pGwxHE4v9A3ZajZT5uRURdMt_khuztdcepDGoYiBwKM"
+      }
+    }
+  },
+  "token": "eyJ0eXAiOiJ3aXQrand0IiwiYWxnIjoiRVMyNTYiLCJraWQiOiJpc3N1ZXIta2V5LTEifQ.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvYXBpIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDM2MDAsImp0aSI6ImExYjJjMyIsImNuZiI6eyJqd2siOnsiYWxnIjoiRVMyNTYiLCJrdHkiOiJFQyIsImNydiI6IlAtMjU2IiwieCI6IkhoaFRMOVIxVEFMekJCMmNkYzZ6TzRQXzJCckh6a19vZ3N5eHlZdkZpVzQiLCJ5IjoicEd3eEhFNHY5QTNaYWpaVDV1UlVSZE10X2todXp0ZGNlcERHb1lpQndLTSJ9fX0.j6SQSombbkjUppbQoff4UMQ_Ts_qfuvnrCqFTLj03Owsoey0sFldybAszcbYazpZjNIPU2OR1CBhR7lnyBA-fg",
+  "negative": [
+    {
+      "id": "expired",
+      "description": "verified one second after `exp`",
+      "expect": "expired",
+      "verify_now": 1700003601
+    },
+    {
+      "id": "issued-in-future",
+      "description": "verified one second before `iat`",
+      "expect": "issued_in_future",
+      "verify_now": 1699999999
+    },
+    {
+      "id": "wrong-typ",
+      "description": "validly signed, but the JOSE `typ` is `jwt` and not `wit+jwt`",
+      "expect": "wrong_type",
+      "token": "eyJ0eXAiOiJqd3QiLCJhbGciOiJFZERTQSIsImtpZCI6Imlzc3Vlci1rZXktMSJ9.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvYXBpIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDM2MDAsImp0aSI6ImExYjJjMyIsImNuZiI6eyJqd2siOnsiYWxnIjoiRVMyNTYiLCJrdHkiOiJFQyIsImNydiI6IlAtMjU2IiwieCI6IkhoaFRMOVIxVEFMekJCMmNkYzZ6TzRQXzJCckh6a19vZ3N5eHlZdkZpVzQiLCJ5IjoicEd3eEhFNHY5QTNaYWpaVDV1UlVSZE10X2todXp0ZGNlcERHb1lpQndLTSJ9fX0.mmGza_pzRtiaY8_OqptZnRapKkKktzSUPDP1QCVB9ydLWYZwGybOmQQlHvwE97SVCKoD-FhC01v83nQMJ41YQQ"
+    },
+    {
+      "id": "tampered-payload",
+      "description": "`jti` was altered after signing; the payload is still valid JSON",
+      "expect": "invalid_signature",
+      "token": "eyJ0eXAiOiJ3aXQrand0IiwiYWxnIjoiRVMyNTYiLCJraWQiOiJpc3N1ZXIta2V5LTEifQ.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvYXBpIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDM2MDAsImp0aSI6ImExYjJjNCIsImNuZiI6eyJqd2siOnsiYWxnIjoiRVMyNTYiLCJrdHkiOiJFQyIsImNydiI6IlAtMjU2IiwieCI6IkhoaFRMOVIxVEFMekJCMmNkYzZ6TzRQXzJCckh6a19vZ3N5eHlZdkZpVzQiLCJ5IjoicEd3eEhFNHY5QTNaYWpaVDV1UlVSZE10X2todXp0ZGNlcERHb1lpQndLTSJ9fX0.j6SQSombbkjUppbQoff4UMQ_Ts_qfuvnrCqFTLj03Owsoey0sFldybAszcbYazpZjNIPU2OR1CBhR7lnyBA-fg"
+    },
+    {
+      "id": "wrong-issuer-key",
+      "description": "verified against an issuer key that did not sign the token",
+      "expect": "invalid_signature",
+      "issuer_verifying_key": {
+        "alg": "ES256",
+        "kty": "EC",
+        "crv": "P-256",
+        "x": "VQ9HEAPz35fD31Bqx5f2ch-xoft7j2-D0iRJimXIjiQ",
+        "y": "E2CT1wEuUJpzcVy9CwCjzA_0tcAbP_oZarH7MnA2uOY"
+      }
+    },
+    {
+      "id": "issuer-mismatch",
+      "description": "the verifier expects a different `iss` than the token carries",
+      "expect": "issuer_mismatch",
+      "expected_iss": "https://other-issuer.example"
+    },
+    {
+      "id": "cnf-missing-alg",
+      "description": "the `cnf` JWK omits the `alg` member the draft requires",
+      "expect": "missing_confirmation_alg",
+      "token": "eyJ0eXAiOiJ3aXQrand0IiwiYWxnIjoiRVMyNTYiLCJraWQiOiJpc3N1ZXIta2V5LTEifQ.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvYXBpIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDM2MDAsImp0aSI6ImExYjJjMyIsImNuZiI6eyJqd2siOnsia3R5IjoiRUMiLCJjcnYiOiJQLTI1NiIsIngiOiJIaGhUTDlSMVRBTHpCQjJjZGM2ek80UF8yQnJIemtfb2dzeXh5WXZGaVc0IiwieSI6InBHd3hIRTR2OUEzWmFqWlQ1dVJVUmRNdF9raHV6dGRjZXBER29ZaUJ3S00ifX19.9khn-e4YHvSY41MIyZPZmARgHA13A9qJT79rgQzNDQ2zwUrnEUViQuVS5BWVe687ELzTOs4ElxXSbZIZy9tZLg"
+    },
+    {
+      "id": "cnf-symmetric-alg",
+      "description": "the `cnf` JWK names a symmetric algorithm, which cannot prove possession",
+      "expect": "forbidden_confirmation_alg",
+      "token": "eyJ0eXAiOiJ3aXQrand0IiwiYWxnIjoiRVMyNTYiLCJraWQiOiJpc3N1ZXIta2V5LTEifQ.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvYXBpIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDM2MDAsImp0aSI6ImExYjJjMyIsImNuZiI6eyJqd2siOnsiYWxnIjoiSFMyNTYiLCJrdHkiOiJFQyIsImNydiI6IlAtMjU2IiwieCI6IkhoaFRMOVIxVEFMekJCMmNkYzZ6TzRQXzJCckh6a19vZ3N5eHlZdkZpVzQiLCJ5IjoicEd3eEhFNHY5QTNaYWpaVDV1UlVSZE10X2todXp0ZGNlcERHb1lpQndLTSJ9fX0.Xw1qEWm6hNjGGrzClQSBIXs1AidPvHD0E4lqE1yrCCiMe0TTPSyltFFRToBjNr4X7PnRPBHUffO0RRB7JLK0vw"
+    },
+    {
+      "id": "cnf-unsecured-alg",
+      "description": "the `cnf` JWK names `none`, which the draft forbids outright",
+      "expect": "forbidden_confirmation_alg",
+      "token": "eyJ0eXAiOiJ3aXQrand0IiwiYWxnIjoiRVMyNTYiLCJraWQiOiJpc3N1ZXIta2V5LTEifQ.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvYXBpIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDM2MDAsImp0aSI6ImExYjJjMyIsImNuZiI6eyJqd2siOnsiYWxnIjoibm9uZSIsImt0eSI6IkVDIiwiY3J2IjoiUC0yNTYiLCJ4IjoiSGhoVEw5UjFUQUx6QkIyY2RjNnpPNFBfMkJySHprX29nc3l4eVl2RmlXNCIsInkiOiJwR3d4SEU0djlBM1phalpUNXVSVVJkTXRfa2h1enRkY2VwREdvWWlCd0tNIn19fQ.eaESqQKujgrGnWM97FoHObaS9GM1tJYUTM0jrM-ZnpSmxIn11au7z7bATZ57zUA-1UsFimwns71b1NBVBKujBg"
+    }
+  ]
+}

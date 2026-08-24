@@ -1,12 +1,23 @@
 {
-  "format": "wimse-conformance/v1",
+  "format": "wimse-conformance/v2",
   "suite": "wpt",
-  "id": "proof-basic",
+  "id": "proof-eddsa",
   "spec": "draft-ietf-wimse-wpt-01",
   "description": "WPT bound to a WIT via `wth`, plus the inputs a verifier must reject",
   "alg": "EdDSA",
-  "pop_signing_key_seed_b64u": "CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk",
-  "issuer_verifying_key_b64u": "iojj3XQJ8ZX9UtstPLpdcspnCb8dlBIb83SIAbQPb1w",
+  "pop_signing_key": {
+    "alg": "EdDSA",
+    "kty": "OKP",
+    "crv": "Ed25519",
+    "x": "_RckOFqgx1tk-3jNYC-h2ZH96_drE8WO1wLqyDXp9hg",
+    "d": "CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk"
+  },
+  "issuer_verifying_key": {
+    "alg": "EdDSA",
+    "kty": "OKP",
+    "crv": "Ed25519",
+    "x": "iojj3XQJ8ZX9UtstPLpdcspnCb8dlBIb83SIAbQPb1w"
+  },
   "verify_now": 1700000000,
   "audience": "https://workload.example.com/path",
   "wit": "eyJ0eXAiOiJ3aXQrand0IiwiYWxnIjoiRWREU0EiLCJraWQiOiJpc3N1ZXIta2V5LTEifQ.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvYXBpIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDM2MDAsImp0aSI6ImExYjJjMyIsImNuZiI6eyJqd2siOnsiYWxnIjoiRWREU0EiLCJrdHkiOiJPS1AiLCJjcnYiOiJFZDI1NTE5IiwieCI6Il9SY2tPRnFneDF0ay0zak5ZQy1oMlpIOTZfZHJFOFdPMXdMcXlEWHA5aGcifX19.gEOIwRVXNwJTSXRGBDPV4CQLRUFeKYx-oK_nwSxaxegepaEEcKbn1TIPacMI0rWR2M8kRikyzB4jkcudkUtXCA",

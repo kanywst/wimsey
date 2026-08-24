@@ -4,7 +4,7 @@ use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use serde::{Deserialize, Serialize};
 
 use crate::error::JoseError;
-use crate::key::{Algorithm, VerifyingKey};
+use crate::key::{Algorithm, SigningKey, VerifyingKey};
 
 /// A public JSON Web Key, in the two shapes WIMSE uses.
 ///
@@ -127,6 +127,81 @@ impl Jwk {
     }
 }
 
+/// A JSON Web Key carrying the private half as well.
+///
+/// The same members as a [`Jwk`] plus `d`: the 32-byte Ed25519 seed or the
+/// P-256 scalar. This is what a key file on disk holds, and what a test vector
+/// records so a consumer can re-sign from scratch.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PrivateJwk {
+    /// The algorithm this key signs with.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub alg: Option<String>,
+    /// Key type: `OKP` for Ed25519, `EC` for P-256.
+    pub kty: String,
+    /// Curve: `Ed25519` or `P-256`.
+    pub crv: String,
+    /// The Base64url-encoded public key, or the x coordinate for `EC`.
+    pub x: String,
+    /// The Base64url-encoded y coordinate. Present for `EC` only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub y: Option<String>,
+    /// The Base64url-encoded 32-byte private seed or scalar.
+    pub d: String,
+}
+
+impl PrivateJwk {
+    /// Builds a private JWK from a signing key.
+    #[must_use]
+    pub fn from_signing_key(key: &SigningKey) -> Self {
+        let public = Jwk::from_verifying_key(&key.verifying_key());
+        Self {
+            alg: public.alg,
+            kty: public.kty,
+            crv: public.crv,
+            x: public.x,
+            y: public.y,
+            d: URL_SAFE_NO_PAD.encode(key.to_bytes()),
+        }
+    }
+
+    /// The public half.
+    #[must_use]
+    pub fn to_public(&self) -> Jwk {
+        Jwk {
+            alg: self.alg.clone(),
+            kty: self.kty.clone(),
+            crv: self.crv.clone(),
+            x: self.x.clone(),
+            y: self.y.clone(),
+        }
+    }
+
+    /// Decodes this JWK into a signing key.
+    ///
+    /// The public members are not decoration: they are decoded too and checked
+    /// against the key `d` derives, because a JWK whose halves disagree would
+    /// sign with one key while advertising another.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`JoseError::MissingAlg`], [`JoseError::ForbiddenAlg`] or
+    /// [`JoseError::UnsupportedAlg`] for the `alg` member, or
+    /// [`JoseError::InvalidKey`] if `d` is not a valid secret for the algorithm
+    /// or does not match the public half.
+    pub fn to_signing_key(&self) -> Result<SigningKey, JoseError> {
+        let secret = coordinate(&self.d)?;
+        let signing_key = match self.to_public().validated_alg()? {
+            Algorithm::EdDsa => SigningKey::from_ed25519_seed(&secret),
+            Algorithm::Es256 => SigningKey::from_p256_scalar(&secret)?,
+        };
+        if signing_key.verifying_key() != self.to_public().to_verifying_key()? {
+            return Err(JoseError::InvalidKey);
+        }
+        Ok(signing_key)
+    }
+}
+
 /// Decodes one Base64url coordinate, which must be exactly 32 bytes.
 ///
 /// The fixed length matters: RFC 7518 Section 6.2.1.2 requires the octet length
@@ -227,6 +302,28 @@ mod tests {
             [9u8; 32],
         ));
         assert!(matches!(jwk.to_verifying_key(), Err(JoseError::InvalidKey)));
+    }
+
+    #[test]
+    fn private_keys_round_trip() {
+        for key in [ed25519(), p256()] {
+            let jwk = super::PrivateJwk::from_signing_key(&key);
+            assert_eq!(jwk.to_signing_key().unwrap().to_bytes(), key.to_bytes());
+            assert_eq!(
+                jwk.to_public().to_verifying_key().unwrap(),
+                key.verifying_key()
+            );
+        }
+    }
+
+    // A key file whose halves disagree would sign with one key and advertise
+    // another, which is worth catching when the file is read rather than when a
+    // peer rejects the signature.
+    #[test]
+    fn rejects_a_private_key_that_does_not_match_its_public_half() {
+        let mut jwk = super::PrivateJwk::from_signing_key(&ed25519());
+        jwk.d = super::PrivateJwk::from_signing_key(&SigningKey::from_ed25519_seed(&[8u8; 32])).d;
+        assert!(matches!(jwk.to_signing_key(), Err(JoseError::InvalidKey)));
     }
 
     #[test]

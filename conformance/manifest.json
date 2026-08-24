@@ -1,5 +1,5 @@
 {
-  "format": "wimse-conformance/v1",
+  "format": "wimse-conformance/v2",
   "vectors": [
     {
       "suite": "identifier",
@@ -8,17 +8,32 @@
     },
     {
       "suite": "wit",
-      "path": "wit/issue-basic.json",
+      "path": "wit/issue-eddsa.json",
+      "spec": "draft-ietf-wimse-workload-creds-02"
+    },
+    {
+      "suite": "wit",
+      "path": "wit/issue-es256.json",
       "spec": "draft-ietf-wimse-workload-creds-02"
     },
     {
       "suite": "wpt",
-      "path": "wpt/proof-basic.json",
+      "path": "wpt/proof-eddsa.json",
+      "spec": "draft-ietf-wimse-wpt-01"
+    },
+    {
+      "suite": "wpt",
+      "path": "wpt/proof-es256.json",
       "spec": "draft-ietf-wimse-wpt-01"
     },
     {
       "suite": "httpsig",
-      "path": "httpsig/sign-basic.json",
+      "path": "httpsig/sign-eddsa.json",
+      "spec": "draft-ietf-wimse-http-signature-06"
+    },
+    {
+      "suite": "httpsig",
+      "path": "httpsig/sign-es256.json",
       "spec": "draft-ietf-wimse-http-signature-06"
     },
     {

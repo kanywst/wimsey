@@ -12,7 +12,7 @@ use wimsey_httpsig::{
     HttpResponse, SignatureParams, WIMSE_TAG,
 };
 use wimsey_identifier::WorkloadIdentifier;
-use wimsey_jose::SigningKey;
+use wimsey_jose::{Algorithm, Jwk as JoseJwk, PrivateJwk, SigningKey};
 use wimsey_mtls::WorkloadCa;
 use wimsey_wit::{issue as issue_wit, Confirmation, Jwk, WitClaims};
 use wimsey_wpt::{issue as issue_wpt, wit_thumbprint, WptClaims};
@@ -24,7 +24,25 @@ use crate::vectors::{
     FORMAT,
 };
 
-/// The issuer's Ed25519 seed. Fixed so the vectors are reproducible.
+/// Builds a signing key of `algorithm` from a fixed seed.
+///
+/// The same seed under either algorithm, so an `EdDSA` vector and its `ES256`
+/// twin differ only in the algorithm and not in which secret they use.
+///
+/// # Panics
+///
+/// Panics if the fixed seed is not a valid scalar for the algorithm, which
+/// would mean the constants below stopped being usable.
+fn key(algorithm: Algorithm, seed: [u8; 32]) -> SigningKey {
+    match algorithm {
+        Algorithm::Es256 => {
+            SigningKey::from_p256_scalar(&seed).expect("the fixed seeds are valid P-256 scalars")
+        }
+        _ => SigningKey::from_ed25519_seed(&seed),
+    }
+}
+
+/// The issuer's seed. Fixed so the vectors are reproducible.
 const ISSUER_SEED: [u8; 32] = [1u8; 32];
 /// A second issuer, used only as the wrong trust anchor in a negative case.
 const OTHER_ISSUER_SEED: [u8; 32] = [2u8; 32];
@@ -50,11 +68,16 @@ const WIT_SPEC: &str = "draft-ietf-wimse-workload-creds-02";
 const WPT_SPEC: &str = "draft-ietf-wimse-wpt-01";
 const HTTPSIG_SPEC: &str = "draft-ietf-wimse-http-signature-06";
 
-fn header(suite: &str, id: &str, spec: &str, description: &str) -> Header {
+/// Names a vector after what it covers and which algorithm it covers it with.
+fn vector_id(base: &str, algorithm: Algorithm) -> String {
+    format!("{base}-{}", algorithm.as_str().to_ascii_lowercase())
+}
+
+fn header(suite: &str, id: impl Into<String>, spec: &str, description: &str) -> Header {
     Header {
         format: FORMAT.to_owned(),
         suite: suite.to_owned(),
-        id: id.to_owned(),
+        id: id.into(),
         spec: spec.to_owned(),
         description: description.to_owned(),
     }
@@ -97,7 +120,7 @@ fn wit_neg(id: &str, description: &str, expect: ErrorCode) -> WitNegative {
         expect,
         token: None,
         verify_now: None,
-        issuer_verifying_key_b64u: None,
+        issuer_verifying_key: None,
         expected_iss: None,
     }
 }
@@ -214,9 +237,7 @@ fn wit_negatives(
             )
         },
         WitNegative {
-            issuer_verifying_key_b64u: Some(
-                URL_SAFE_NO_PAD.encode(other_issuer.verifying_key().to_raw_bytes()),
-            ),
+            issuer_verifying_key: Some(JoseJwk::from_verifying_key(&other_issuer.verifying_key())),
             ..wit_neg(
                 "wrong-issuer-key",
                 "verified against an issuer key that did not sign the token",
@@ -268,9 +289,9 @@ fn wit_negatives(
 /// Panics if the fixed inputs in this module stop being valid — which would
 /// mean the implementation can no longer issue its own reference credentials.
 #[must_use]
-pub fn wit_vector() -> WitVector {
-    let issuer_key = SigningKey::from_ed25519_seed(&ISSUER_SEED);
-    let pop_key = SigningKey::from_ed25519_seed(&WIT_POP_SEED);
+pub fn wit_vector(algorithm: Algorithm) -> WitVector {
+    let issuer_key = key(algorithm, ISSUER_SEED);
+    let pop_key = key(algorithm, WIT_POP_SEED);
 
     let claims = wit_claims(SUBJECT, &pop_key);
     let kid = Some(KID.to_owned());
@@ -280,18 +301,18 @@ pub fn wit_vector() -> WitVector {
         &token,
         kid.as_deref(),
         &issuer_key,
-        &SigningKey::from_ed25519_seed(&OTHER_ISSUER_SEED),
+        &key(algorithm, OTHER_ISSUER_SEED),
     );
 
     WitVector {
         header: header(
             "wit",
-            "issue-basic",
+            vector_id("issue", algorithm),
             WIT_SPEC,
             "WIT issuance with EdDSA (Ed25519), plus the inputs a verifier must reject",
         ),
-        alg: "EdDSA".to_owned(),
-        issuer_signing_key_seed_b64u: URL_SAFE_NO_PAD.encode(ISSUER_SEED),
+        alg: algorithm.as_str().to_owned(),
+        issuer_signing_key: PrivateJwk::from_signing_key(&issuer_key),
         kid,
         verify_now: IAT,
         claims,
@@ -307,9 +328,9 @@ pub fn wit_vector() -> WitVector {
 /// Panics if the fixed inputs in this module stop being valid — which would
 /// mean the implementation can no longer issue its own reference credentials.
 #[must_use]
-pub fn wpt_vector() -> WptVector {
-    let issuer_key = SigningKey::from_ed25519_seed(&ISSUER_SEED);
-    let pop_key = SigningKey::from_ed25519_seed(&POP_SEED);
+pub fn wpt_vector(algorithm: Algorithm) -> WptVector {
+    let issuer_key = key(algorithm, ISSUER_SEED);
+    let pop_key = key(algorithm, POP_SEED);
 
     let wit = issue_wit(&wit_claims(SUBJECT, &pop_key), Some(KID), &issuer_key).expect("issue WIT");
     // A second, equally valid WIT for the same key: the proof is bound to the
@@ -385,14 +406,13 @@ pub fn wpt_vector() -> WptVector {
     WptVector {
         header: header(
             "wpt",
-            "proof-basic",
+            vector_id("proof", algorithm),
             WPT_SPEC,
             "WPT bound to a WIT via `wth`, plus the inputs a verifier must reject",
         ),
         alg: "EdDSA".to_owned(),
-        pop_signing_key_seed_b64u: URL_SAFE_NO_PAD.encode(POP_SEED),
-        issuer_verifying_key_b64u: URL_SAFE_NO_PAD
-            .encode(issuer_key.verifying_key().to_raw_bytes()),
+        pop_signing_key: PrivateJwk::from_signing_key(&pop_key),
+        issuer_verifying_key: JoseJwk::from_verifying_key(&issuer_key.verifying_key()),
         verify_now: IAT,
         audience,
         wit,
@@ -409,9 +429,9 @@ pub fn wpt_vector() -> WptVector {
 /// Panics if the fixed inputs in this module stop being valid — which would
 /// mean the implementation can no longer issue its own reference credentials.
 #[must_use]
-pub fn httpsig_vector() -> HttpSigVector {
-    let issuer_key = SigningKey::from_ed25519_seed(&ISSUER_SEED);
-    let pop_key = SigningKey::from_ed25519_seed(&POP_SEED);
+pub fn httpsig_vector(algorithm: Algorithm) -> HttpSigVector {
+    let issuer_key = key(algorithm, ISSUER_SEED);
+    let pop_key = key(algorithm, POP_SEED);
     let wit = issue_wit(&wit_claims(SUBJECT, &pop_key), Some(KID), &issuer_key).expect("issue WIT");
 
     let body = br#"{"amount":100}"#;
@@ -460,12 +480,12 @@ pub fn httpsig_vector() -> HttpSigVector {
     HttpSigVector {
         header: header(
             "httpsig",
-            "sign-basic",
+            vector_id("sign", algorithm),
             HTTPSIG_SPEC,
             "WIMSE HTTP Message Signature (RFC 9421, ed25519) carrying a WIT, plus the inputs a verifier must reject",
         ),
-        pop_signing_key_seed_b64u: URL_SAFE_NO_PAD.encode(POP_SEED),
-        issuer_verifying_key_b64u: URL_SAFE_NO_PAD.encode(issuer_key.verifying_key().to_raw_bytes()),
+        pop_signing_key: PrivateJwk::from_signing_key(&pop_key),
+        issuer_verifying_key: JoseJwk::from_verifying_key(&issuer_key.verifying_key()),
         verify_now: 1_700_000_100,
         label: "wimse".to_owned(),
         components: components.iter().map(Component::quoted_id).collect(),
@@ -756,17 +776,32 @@ pub fn manifest() -> Manifest {
             },
             ManifestEntry {
                 suite: "wit".to_owned(),
-                path: "wit/issue-basic.json".to_owned(),
+                path: "wit/issue-eddsa.json".to_owned(),
+                spec: WIT_SPEC.to_owned(),
+            },
+            ManifestEntry {
+                suite: "wit".to_owned(),
+                path: "wit/issue-es256.json".to_owned(),
                 spec: WIT_SPEC.to_owned(),
             },
             ManifestEntry {
                 suite: "wpt".to_owned(),
-                path: "wpt/proof-basic.json".to_owned(),
+                path: "wpt/proof-eddsa.json".to_owned(),
+                spec: WPT_SPEC.to_owned(),
+            },
+            ManifestEntry {
+                suite: "wpt".to_owned(),
+                path: "wpt/proof-es256.json".to_owned(),
                 spec: WPT_SPEC.to_owned(),
             },
             ManifestEntry {
                 suite: "httpsig".to_owned(),
-                path: "httpsig/sign-basic.json".to_owned(),
+                path: "httpsig/sign-eddsa.json".to_owned(),
+                spec: HTTPSIG_SPEC.to_owned(),
+            },
+            ManifestEntry {
+                suite: "httpsig".to_owned(),
+                path: "httpsig/sign-es256.json".to_owned(),
                 spec: HTTPSIG_SPEC.to_owned(),
             },
             ManifestEntry {
@@ -1066,10 +1101,10 @@ pub fn mtls_vector() -> MtlsVector {
             MTLS_SPEC,
             "Workload Identity Certificate issuance over a workload-supplied public key, plus the inputs a verifier must reject",
         ),
-        ca_signing_key_seed_b64u: URL_SAFE_NO_PAD.encode(CA_SEED),
+        ca_signing_key: PrivateJwk::from_signing_key(&ca_key),
         ca_not_before: CA_NBF,
         ca_not_after: CA_NAF,
-        workload_signing_key_seed_b64u: URL_SAFE_NO_PAD.encode(POP_SEED),
+        workload_signing_key: PrivateJwk::from_signing_key(&workload_key),
         identifier: SUBJECT.to_owned(),
         not_before: WIC_NBF,
         not_after: WIC_NAF,

@@ -8,7 +8,7 @@ These vectors are a contract, not a snapshot of what `wimsey` happens to emit. A
 
 The third question is the one that matters most and the one a byte-diff of regenerated output can never answer. An implementation that rejects an expired token because it failed to parse the payload is still wrong, and it will still interoperate badly.
 
-Everything here is EdDSA over Ed25519 (RFC 8037), which is deterministic, so the recorded bytes are reproducible. Time is an input (`verify_now`), never a wall clock.
+Signing is EdDSA over Ed25519 (RFC 8037) or ES256 (ECDSA P-256), and both are deterministic — ES256 through its RFC 6979 nonce — so the recorded bytes are reproducible. Time is an input (`verify_now`), never a wall clock.
 
 ## Layout
 
@@ -16,11 +16,20 @@ Everything here is EdDSA over Ed25519 (RFC 8037), which is deterministic, so the
 conformance/
   manifest.json                    index of every vector
   identifier/parse-basic.json      draft-ietf-wimse-identifier-03
-  wit/issue-basic.json             draft-ietf-wimse-workload-creds-02
-  wpt/proof-basic.json             draft-ietf-wimse-wpt-01
-  httpsig/sign-basic.json          draft-ietf-wimse-http-signature-06
+  wit/issue-eddsa.json             draft-ietf-wimse-workload-creds-02
+  wit/issue-es256.json             draft-ietf-wimse-workload-creds-02
+  wpt/proof-eddsa.json             draft-ietf-wimse-wpt-01
+  wpt/proof-es256.json             draft-ietf-wimse-wpt-01
+  httpsig/sign-eddsa.json          draft-ietf-wimse-http-signature-06
+  httpsig/sign-es256.json          draft-ietf-wimse-http-signature-06
   mtls/wic-basic.json              draft-ietf-wimse-mutual-tls-02
 ```
+
+Each token suite has one vector per signature algorithm. `ES256` is not an
+extra credit: Section 5.1 of `draft-ietf-wimse-workload-creds` requires it of
+general-purpose implementations, and the draft's own example WIT is signed with
+it, so passing only the `eddsa` half is not passing. Certificates are Ed25519
+only, because the mutual-TLS draft makes no such requirement.
 
 Start at `manifest.json`. Do not glob the directories — the manifest is the list, and a runner that globs will silently skip a vector whose suite it does not recognise.
 
@@ -29,8 +38,10 @@ Start at `manifest.json`. Do not glob the directories — the manifest is the li
 Every file, including the manifest, carries a `format` field:
 
 ```json
-{ "format": "wimse-conformance/v1" }
+{ "format": "wimse-conformance/v2" }
 ```
+
+**v2 replaced the raw key bytes of v1 with JWKs.** v1 recorded a public key as 32 base64url bytes, which only worked because every v1 vector was Ed25519 — the bytes do not say which algorithm they are for. A JWK carries its own `alg`, so one suite can hold vectors for both. A private key is a JWK with `d`, so a consumer can re-sign from scratch as before.
 
 Reject a file whose `format` you do not recognise rather than guessing at its shape. The version changes when the format changes, not when a vector is added.
 
@@ -38,10 +49,10 @@ Each vector file additionally carries `suite`, `id`, `spec` (the pinned Internet
 
 ### Encoding conventions
 
-| Field suffix | Encoding |
+| Field | Encoding |
 | --- | --- |
-| `_seed_b64u` | 32-byte Ed25519 private seed, base64url **without** padding |
-| `_key_b64u` | 32-byte Ed25519 public key, base64url **without** padding |
+| A key (`issuer_signing_key`, `issuer_verifying_key`, …) | A JWK: `OKP`/`Ed25519` or `EC`/`P-256`, with `d` when private |
+| `_der_b64u` | DER, base64url **without** padding |
 | JWT compact serialization | base64url without padding, per RFC 7515 |
 | RFC 8941 byte sequences (the `Signature` field) | **standard** base64, with padding |
 
@@ -130,22 +141,22 @@ Note `wimse://example.org/a%2Fb` in `accept`: `%2F` encodes a **reserved** chara
 
 ### `wit`
 
-- Re-issue from `claims`, `kid` and `issuer_signing_key_seed_b64u`; the result must equal `token` byte for byte.
+- Re-issue from `claims`, `kid` and `issuer_signing_key`; the result must equal `token` byte for byte.
 - Verify `token` at `verify_now` against the seed's public half; the recovered claims must equal `claims`.
-- Run every negative case. Unless it overrides `issuer_verifying_key_b64u`, verify against the seed's public half; `expected_iss`, when present, is an issuer the verifier must require.
+- Run every negative case. Unless it overrides `issuer_verifying_key`, verify against the issuer key's public half; `expected_iss`, when present, is an issuer the verifier must require.
 
 ### `wpt`
 
-- Re-issue from `claims` and `pop_signing_key_seed_b64u`; the result must equal `proof`.
+- Re-issue from `claims` and `pop_signing_key`; the result must equal `proof`.
 - `claims.wth` must equal `base64url(SHA-256(wit))`, computed over the WIT's ASCII compact serialization.
-- Verify the full chain: verify `wit` against `issuer_verifying_key_b64u`, take the proof-of-possession key from its `cnf`, then verify `proof` against that key with `audience` and `wit`. Recovering the key from the WIT rather than from the vector is the point — it is what catches a break in the WIT-to-WPT binding.
+- Verify the full chain: verify `wit` against `issuer_verifying_key`, take the proof-of-possession key from its `cnf`, then verify `proof` against that key with `audience` and `wit`. Recovering the key from the WIT rather than from the vector is the point — it is what catches a break in the WIT-to-WPT binding.
 - Run every negative case against the proof-of-possession key.
 
 Note `wit-binding-mismatch`: the substituted WIT is itself perfectly valid and signed by the same issuer for the same key. Only `wth` distinguishes them. An implementation that checks the signature but not the binding will pass everything else and fail here.
 
 ### `httpsig`
 
-- Re-sign `request` with `components`, `params`, `label` and the proof-of-possession seed; both `signature_input` and `signature` must match byte for byte. The signature base is byte-exact (RFC 9421 section 2.5); whitespace and quoting are not free choices.
+- Re-sign `request` with `components`, `params`, `label` and `pop_signing_key`; both `signature_input` and `signature` must match byte for byte. The signature base is byte-exact (RFC 9421 section 2.5); whitespace and quoting are not free choices.
 - Verify the full chain: verify `wit`, take the proof-of-possession key from its `cnf`, then verify the signature over `request`, requiring every component in `components` to be covered.
 - Enforce the profile in Section 3 of the http-signature draft: `created`, `expires`, `nonce` and `tag` must be present, `tag` must be `wimse-workload-to-workload`, `wimse-aud` must be present and must equal the audience the verifier answers to, and `keyid` and `alg` must be absent.
 - Check `verify_content_digest(Content-Digest header, body)`.
@@ -157,8 +168,8 @@ The six profile cases (`forbidden-alg-parameter`, `forbidden-keyid-parameter`, `
 
 ### `mtls`
 
-- Rebuild the CA from `ca_signing_key_seed_b64u` and its validity window; the result must equal `ca_certificate_der_b64u`.
-- Re-issue the WIC for the workload's **public** key — derived from `workload_signing_key_seed_b64u` — over `identifier` and the recorded window. It must equal `wic_der_b64u` byte for byte.
+- Rebuild the CA from `ca_signing_key` and its validity window; the result must equal `ca_certificate_der_b64u`.
+- Re-issue the WIC for the workload's **public** key — the public half of `workload_signing_key` — over `identifier` and the recorded window. It must equal `wic_der_b64u` byte for byte.
 - Verify `wic_der_b64u` against `ca_certificate_der_b64u` at `verify_now`; the URI SAN must decode to `identifier`.
 - Run every negative case.
 
