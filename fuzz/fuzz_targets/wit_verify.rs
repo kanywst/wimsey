@@ -10,13 +10,20 @@ use libfuzzer_sys::fuzz_target;
 use wimsey_wit::{verify, SigningKey, Validation};
 
 fuzz_target!(|data: &str| {
-    let key = SigningKey::from_bytes(&[1u8; 32]).verifying_key();
-    let _ = verify(data, &key, &Validation::at(1_700_000_000));
-    let _ = verify(
-        data,
-        &key,
-        &Validation::at(1_700_000_000)
-            .with_leeway(60)
-            .expect_issuer("https://issuer.example"),
-    );
+    // Both algorithms, so the fuzzer reaches the ES256 branch of signature and
+    // `cnf` handling as well as the Ed25519 one.
+    for key in [
+        SigningKey::from_ed25519_seed(&[1u8; 32]),
+        SigningKey::from_p256_scalar(&[1u8; 32]).expect("a fixed valid scalar"),
+    ] {
+        let key = key.verifying_key();
+        let _ = verify(data, &key, &Validation::at(1_700_000_000));
+        let _ = verify(
+            data,
+            &key,
+            &Validation::at(1_700_000_000)
+                .with_leeway(60)
+                .expect_issuer("https://issuer.example"),
+        );
+    }
 });

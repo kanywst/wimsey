@@ -1,6 +1,6 @@
 [package]
-name = "wimsey-wpt"
-description = "WIMSE Workload Proof Token (WPT), a DPoP-style proof of possession."
+name = "wimsey-jose"
+description = "JOSE keys and signatures for the WIMSE credential formats: EdDSA and ES256."
 readme = "README.md"
 version.workspace = true
 edition.workspace = true
@@ -13,13 +13,14 @@ keywords.workspace = true
 categories.workspace = true
 
 [dependencies]
-wimsey-jose = { workspace = true }
 ed25519-dalek = { workspace = true }
+p256 = { version = "0.14", default-features = false, features = ["ecdsa", "std"] }
 base64 = { workspace = true }
 serde = { workspace = true }
-serde_json = { workspace = true }
-sha2 = { workspace = true }
 thiserror = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
 
 [lints]
 workspace = true

@@ -68,6 +68,7 @@ The proof of possession is one of three interchangeable bindings:
 | Crate | Role | Spec |
 | --- | --- | --- |
 | `wimsey-identifier` | Workload identifier URI (`spiffe` and `wimse`) | `draft-ietf-wimse-identifier` |
+| `wimsey-jose` | JOSE keys and signatures: `EdDSA` and `ES256` | RFC 7518, RFC 8037 |
 | `wimsey-wit` | Workload Identity Token (WIT / WIC) | `draft-ietf-wimse-workload-creds` |
 | `wimsey-wpt` | Workload Proof Token | `draft-ietf-wimse-wpt` |
 | `wimsey-httpsig` | HTTP Message Signatures binding | `draft-ietf-wimse-http-signature` |

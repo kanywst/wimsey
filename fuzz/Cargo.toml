@@ -14,7 +14,9 @@ cargo-fuzz = true
 [dependencies]
 libfuzzer-sys = "0.4"
 arbitrary = { version = "1", features = ["derive"] }
+serde_json = "1"
 wimsey-identifier = { path = "../crates/identifier" }
+wimsey-jose = { path = "../crates/jose" }
 wimsey-wit = { path = "../crates/wit" }
 wimsey-wpt = { path = "../crates/wpt" }
 wimsey-httpsig = { path = "../crates/httpsig" }
@@ -23,6 +25,13 @@ wimsey-mtls = { path = "../crates/mtls" }
 [[bin]]
 name = "identifier_parse"
 path = "fuzz_targets/identifier_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "jwk_parse"
+path = "fuzz_targets/jwk_parse.rs"
 test = false
 doc = false
 bench = false

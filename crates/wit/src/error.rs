@@ -45,9 +45,13 @@ pub enum WitError {
     /// The token issuer did not match the expected issuer.
     #[error("issuer mismatch")]
     IssuerMismatch,
-    /// A key could not be decoded into an Ed25519 key.
+    /// A key could not be decoded.
     #[error("invalid key")]
     InvalidKey,
+    /// The JOSE header named an algorithm the verifying key does not use, so
+    /// the token was signed with a different algorithm than the one presented.
+    #[error("the token's `alg` does not match the verifying key's algorithm")]
+    AlgorithmMismatch,
     /// The `cnf` JWK omitted the `alg` member, which the draft requires.
     #[error("the confirmation key is missing the required `alg` member")]
     MissingConfirmationAlg,
@@ -65,4 +69,20 @@ pub enum WitError {
         /// The `alg` value that was found.
         found: String,
     },
+}
+
+impl From<wimsey_jose::JoseError> for WitError {
+    fn from(error: wimsey_jose::JoseError) -> Self {
+        use wimsey_jose::JoseError;
+        match error {
+            JoseError::MissingAlg => Self::MissingConfirmationAlg,
+            JoseError::ForbiddenAlg { found } => Self::ForbiddenConfirmationAlg { found },
+            JoseError::UnsupportedAlg { found } => Self::UnsupportedConfirmationAlg { found },
+            JoseError::InvalidSignature => Self::InvalidSignature,
+            // `InvalidKey`, `InvalidEncoding`, and any variant added later:
+            // every remaining way a JOSE key can be rejected reaches this crate
+            // as an unusable key.
+            _ => Self::InvalidKey,
+        }
+    }
 }

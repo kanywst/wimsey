@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "crates/identifier",
+    "crates/jose",
     "crates/wit",
     "crates/wpt",
     "crates/httpsig",
@@ -28,6 +29,7 @@ categories = ["authentication", "cryptography"]
 
 [workspace.dependencies]
 wimsey-identifier = { path = "crates/identifier", version = "0.3.0" }
+wimsey-jose = { path = "crates/jose", version = "0.3.0" }
 wimsey-wit = { path = "crates/wit", version = "0.3.0" }
 wimsey-wpt = { path = "crates/wpt", version = "0.3.0" }
 wimsey-httpsig = { path = "crates/httpsig", version = "0.3.0" }

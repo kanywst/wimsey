@@ -49,13 +49,12 @@
 //!   but does not remember the ones it has seen.
 //!
 //! ```
-//! use ed25519_dalek::SigningKey;
 //! use wimsey_httpsig::{
 //!     content_digest_sha256, sign, verify, verify_content_digest, Component, HttpRequest,
-//!     SignatureParams, VerifyConfig, WIMSE_TAG,
+//!     SignatureParams, SigningKey, VerifyConfig, WIMSE_TAG,
 //! };
 //!
-//! let pop_key = SigningKey::from_bytes(&[5u8; 32]);
+//! let pop_key = SigningKey::from_ed25519_seed(&[5u8; 32]);
 //! let body = br#"{"hello":"world"}"#;
 //!
 //! let request = HttpRequest {
@@ -117,4 +116,4 @@ pub use signature::{
 };
 
 // Re-exported so callers can name the key types without a direct dependency.
-pub use ed25519_dalek::{SigningKey, VerifyingKey};
+pub use wimsey_jose::{Algorithm, SigningKey, VerifyingKey};
