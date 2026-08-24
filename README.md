@@ -133,6 +133,8 @@ Or in an mTLS client certificate. Run `wimsey --help`, or start the issuer with
   vector format, for other WIMSE implementations.
 - [Implementation status](docs/implementation-status.md) — the RFC 7942 entries
   for the WIMSE drafts, kept in step with what the code actually does.
+- [Fuzzing](fuzz/README.md) — the parser fuzz targets and how to run them for
+  longer than CI does.
 - [Releasing](RELEASING.md) — cadence, versioning, and how to verify a release's
   signatures and SBOM.
 - [Changelog](CHANGELOG.md).

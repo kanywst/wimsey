@@ -55,6 +55,17 @@ These are the things that break silently or fail CI in non-obvious ways.
 - **base64 alphabet split.** Tokens use URL-safe **no-pad** (`URL_SAFE_NO_PAD`); RFC 8941 byte
   sequences use **standard** base64. Don't unify these.
 
+- **Every parser is fuzzed.** `fuzz/` carries a target per untrusted-input
+  surface — the identifier, WIT, WPT, `Signature-Input` and DER X.509 — and CI
+  runs each for 30 seconds against a corpus seeded from the conformance vectors
+  (`fuzz/seed-corpus.sh`). Adding a parser without a target leaves a hole; the
+  targets need nightly, which is why `fuzz/` is excluded from the workspace.
+
+  ```bash
+  ./fuzz/seed-corpus.sh
+  cargo +nightly fuzz run httpsig_verify -- -max_total_time=600
+  ```
+
 - **Draft pins are deliberate.** Each crate targets one pinned Internet-Draft revision (see
   `SPEC-MAP.md`). Bumping a pin is a reviewed change, not a drive-by.
 
