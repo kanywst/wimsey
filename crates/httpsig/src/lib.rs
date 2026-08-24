@@ -42,9 +42,9 @@
 //! - Exactly one signature per `Signature`/`Signature-Input` field is supported.
 //! - `@authority` is lowercased but its default port is not stripped; pass a
 //!   normalized authority.
-//! - Response signing (`@status`, `;req` components and `wimse-req-nonce`) is
-//!   not implemented yet; [`SignatureParams::wimse_req_nonce`] is carried and
-//!   verified, but this crate models requests only.
+//! - Response signing is supported: sign an [`HttpExchange`] rather than an
+//!   [`HttpRequest`], enforce [`VerifyConfig::wimse_response_profile`], and
+//!   check the returned nonce with [`VerifyConfig::expected_req_nonce`].
 //! - Replay defense is the caller's: this crate checks that a `nonce` is present
 //!   but does not remember the ones it has seen.
 //!
@@ -106,10 +106,14 @@ mod message;
 mod signature;
 
 pub use error::HttpSigError;
-pub use message::{content_digest_sha256, verify_content_digest, Component, HttpRequest};
+pub use message::{
+    content_digest_sha256, verify_content_digest, Component, ComponentSource, HttpExchange,
+    HttpRequest, HttpResponse,
+};
 pub use signature::{
-    check_request_profile, sign, signature_base, verify, SignatureParams, SignedSignature,
-    VerifiedSignature, VerifyConfig, ALG, WIMSE_LABEL, WIMSE_TAG,
+    check_request_profile, check_response_profile, response_components, sign, signature_base,
+    verify, SignatureParams, SignedSignature, VerifiedSignature, VerifyConfig, ALG, WIMSE_LABEL,
+    WIMSE_TAG,
 };
 
 // Re-exported so callers can name the key types without a direct dependency.

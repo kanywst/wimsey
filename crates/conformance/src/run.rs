@@ -13,8 +13,8 @@ use std::path::{Path, PathBuf};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use serde::Serialize;
 use wimsey_httpsig::{
-    sign, verify as verify_httpsig, verify_content_digest, Component, HttpRequest, SignatureParams,
-    VerifyConfig, VerifyingKey,
+    sign, verify as verify_httpsig, verify_content_digest, Component, HttpExchange, HttpRequest,
+    HttpResponse, SignatureParams, VerifyConfig, VerifyingKey,
 };
 use wimsey_identifier::WorkloadIdentifier;
 use wimsey_mtls::{verify as verify_mtls, SigningKey, WorkloadCa};
@@ -22,8 +22,8 @@ use wimsey_wit::{issue as issue_wit, verify as verify_wit, Validation as WitVali
 use wimsey_wpt::{issue as issue_wpt, verify as verify_wpt, wit_thumbprint, Validation};
 
 use crate::vectors::{
-    ErrorCode, HttpSigVector, IdentifierVector, Manifest, MtlsVector, VectorRequest, WitVector,
-    WptVector, FORMAT,
+    ErrorCode, HttpSigVector, IdentifierVector, Manifest, MtlsVector, VectorRequest,
+    VectorResponse, WitVector, WptVector, FORMAT,
 };
 
 /// Something that stopped the runner before it could reach a verdict.
@@ -548,17 +548,204 @@ pub fn run_httpsig(vector: &HttpSigVector, report: &mut Report) {
         },
     );
 
-    run_httpsig_negatives(vector, &pop, &covered, &name, report);
+    run_httpsig_negatives(vector, &covered, &name, report);
+    if let Some(response) = &vector.response {
+        run_httpsig_response(vector, response, &name, report);
+    }
+}
+
+/// Runs the signed-response half of an httpsig vector.
+///
+/// A response is only an *answer* if it is tied to the request it answers, so
+/// the two things worth checking are exactly those bindings: the `;req`
+/// components, which resolve from the request, and `wimse-req-nonce`, which
+/// carries the request's own nonce back.
+fn run_httpsig_response(
+    vector: &HttpSigVector,
+    response: &VectorResponse,
+    name: &str,
+    report: &mut Report,
+) {
+    let pop_key = match verifying_key(&vector.issuer_verifying_key_b64u).and_then(|issuer| {
+        verify_wit(&vector.wit, &issuer, &WitValidation::at(vector.verify_now))
+            .map(|verified| verified.pop_key)
+            .map_err(|e| format!("the carried WIT did not verify: {e}"))
+    }) {
+        Ok(key) => key,
+        Err(detail) => {
+            report.fail(name, "response/recover the key from the WIT", detail);
+            return;
+        }
+    };
+    let covered = match components(&response.components) {
+        Ok(covered) => covered,
+        Err(detail) => {
+            report.fail(name, "response/parse covered components", detail);
+            return;
+        }
+    };
+
+    let http_response = HttpResponse {
+        status: response.status,
+        headers: response.headers.clone(),
+    };
+    let request = http_request(&vector.request);
+    let exchange = HttpExchange {
+        response: &http_response,
+        request: &request,
+    };
+
+    let params = SignatureParams {
+        created: Some(response.params.created),
+        expires: Some(response.params.expires),
+        nonce: Some(response.params.nonce.clone()),
+        tag: Some(response.params.tag.clone()),
+        wimse_req_nonce: response.params.wimse_req_nonce.clone(),
+        ..SignatureParams::default()
+    };
+    // Re-signing needs the private half, which only the recorded seed carries;
+    // verification below deliberately uses the public half recovered from the
+    // WIT instead, so the two halves of the check stay independent.
+    let signing = match signing_key(&vector.pop_signing_key_seed_b64u) {
+        Ok(key) => key,
+        Err(detail) => {
+            report.fail(name, "response/load the signing key", detail);
+            return;
+        }
+    };
+    report.record(
+        name,
+        "response/reproduce",
+        sign(&exchange, &covered, &params, &vector.label, &signing)
+            .map_err(|e| format!("re-signing the response failed: {e}"))
+            .and_then(|signed| {
+                if signed.signature_input != response.signature_input {
+                    Err("re-signed response `Signature-Input` differs".to_owned())
+                } else if signed.signature != response.signature {
+                    Err("re-signed response `Signature` differs".to_owned())
+                } else {
+                    Ok(())
+                }
+            }),
+    );
+
+    let config = |expected_req_nonce: &str| VerifyConfig {
+        now: Some(vector.verify_now),
+        required_components: covered.clone(),
+        label: Some(vector.label.clone()),
+        wimse_response_profile: true,
+        expected_req_nonce: Some(expected_req_nonce.to_owned()),
+        ..VerifyConfig::default()
+    };
+
+    report.record(
+        name,
+        "response/verify",
+        verify_httpsig(
+            &exchange,
+            &response.signature_input,
+            &response.signature,
+            &pop_key,
+            &config(&response.expected_req_nonce),
+        )
+        .map(|_| ())
+        .map_err(|e| format!("the response signature did not verify: {e}")),
+    );
+
+    report.record(
+        name,
+        "response/content-digest",
+        match response
+            .headers
+            .iter()
+            .find(|(n, _)| n.eq_ignore_ascii_case("content-digest"))
+        {
+            None => Err("the response carries no `Content-Digest` header".to_owned()),
+            Some((_, digest)) if verify_content_digest(digest, response.body.as_bytes()) => Ok(()),
+            Some(_) => Err("`Content-Digest` does not match the recorded body".to_owned()),
+        },
+    );
+
+    run_response_negatives(
+        vector,
+        response,
+        &http_response,
+        &pop_key,
+        &config,
+        name,
+        report,
+    );
+}
+
+/// Runs the signed-response rejection cases.
+fn run_response_negatives(
+    vector: &HttpSigVector,
+    response: &VectorResponse,
+    http_response: &HttpResponse,
+    pop_key: &VerifyingKey,
+    config: &impl Fn(&str) -> VerifyConfig,
+    name: &str,
+    report: &mut Report,
+) {
+    for case in &response.negative {
+        let case_request = case
+            .request
+            .as_ref()
+            .map_or_else(|| http_request(&vector.request), http_request);
+        let case_exchange = HttpExchange {
+            response: http_response,
+            request: &case_request,
+        };
+        let expected_nonce = case
+            .expected_req_nonce
+            .as_deref()
+            .unwrap_or(&response.expected_req_nonce);
+        let actual = verify_httpsig(
+            &case_exchange,
+            case.signature_input
+                .as_deref()
+                .unwrap_or(&response.signature_input),
+            case.signature.as_deref().unwrap_or(&response.signature),
+            pop_key,
+            &config(expected_nonce),
+        )
+        .map(|_| ())
+        .map_err(|e| ErrorCode::from(&e));
+        report.record(
+            name,
+            &format!("response/reject/{}", case.id),
+            expect_reject(case.expect, actual),
+        );
+    }
 }
 
 /// Runs the httpsig rejection cases.
 fn run_httpsig_negatives(
     vector: &HttpSigVector,
-    pop: &wimsey_wit::SigningKey,
     covered: &[Component],
     name: &str,
     report: &mut Report,
 ) {
+    // Section 3: "Recipients of signed HTTP messages MUST validate the signature
+    // and content of the WIT before validating the HTTP message signature." The
+    // negatives therefore recover the key the same way the positive case does —
+    // out of the verified WIT — rather than taking the vector's seed on trust,
+    // which would let an implementation skip the WIT entirely and still pass.
+    let pop_key = match verifying_key(&vector.issuer_verifying_key_b64u).and_then(|issuer| {
+        verify_wit(&vector.wit, &issuer, &WitValidation::at(vector.verify_now))
+            .map(|verified| verified.pop_key)
+            .map_err(|e| format!("the carried WIT did not verify: {e}"))
+    }) {
+        Ok(key) => key,
+        Err(detail) => {
+            report.fail(
+                name,
+                "recover the proof-of-possession key from the WIT",
+                detail,
+            );
+            return;
+        }
+    };
     for case in &vector.negative {
         let case_request = case.request.as_ref().unwrap_or(&vector.request);
         let body = case.body.as_deref().unwrap_or(&vector.body);
@@ -604,7 +791,7 @@ fn run_httpsig_negatives(
                     .as_deref()
                     .unwrap_or(&vector.signature_input),
                 case.signature.as_deref().unwrap_or(&vector.signature),
-                &pop.verifying_key(),
+                &pop_key,
                 &config,
             )
             .map(|_| ())

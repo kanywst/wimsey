@@ -7,7 +7,7 @@ use base64::{engine::general_purpose::STANDARD, Engine};
 use ed25519_dalek::{Signature, Signer, SigningKey, VerifyingKey};
 
 use crate::error::HttpSigError;
-use crate::message::{Component, HttpRequest};
+use crate::message::{Component, ComponentSource};
 
 /// The signature algorithm name this crate emits and accepts (RFC 9421
 /// Section 3.3.6).
@@ -108,6 +108,15 @@ pub struct VerifyConfig {
     /// If set, the signature's `wimse-aud` must equal this value. A signature
     /// is only bound to *this* service if the audience it names is checked.
     pub expected_audience: Option<String>,
+    /// Enforce the WIMSE **response**-signature profile instead of the request
+    /// one: same mandatory parameters, but `wimse-aud` is a request-only
+    /// parameter and `wimse-req-nonce` is required whenever the client demanded
+    /// a signed response.
+    pub wimse_response_profile: bool,
+    /// If set, the response's `wimse-req-nonce` must equal this value — the
+    /// `nonce` the client put on its own request. Checking it is what stops a
+    /// response signed for one request being replayed against another.
+    pub expected_req_nonce: Option<String>,
 }
 
 /// Errors unless `params` satisfies the WIMSE profile for a **request**
@@ -151,6 +160,79 @@ pub fn check_request_profile(params: &SignatureParams) -> Result<(), HttpSigErro
         return Err(HttpSigError::MissingParameter("wimse-aud"));
     }
     Ok(())
+}
+
+/// Errors unless `params` satisfies the WIMSE profile for a **response**
+/// signature (Section 3 of `draft-ietf-wimse-http-signature`).
+///
+/// `created`, `expires`, `nonce` and `tag` are mandatory on every message, and
+/// `keyid` and `alg` are forbidden on every message, exactly as for a request.
+/// The difference is at the ends: `wimse-aud` names the service a *request* is
+/// for and has no meaning coming back, while `wimse-req-nonce` carries the
+/// requesting client's nonce and is required when that client asked for a
+/// signed response.
+///
+/// # Errors
+///
+/// Returns [`HttpSigError::MissingParameter`], [`HttpSigError::ForbiddenParameter`]
+/// or [`HttpSigError::WrongTag`] for the first rule the parameters break.
+pub fn check_response_profile(
+    params: &SignatureParams,
+    response_signing_required: bool,
+) -> Result<(), HttpSigError> {
+    if params.keyid.is_some() {
+        return Err(HttpSigError::ForbiddenParameter("keyid"));
+    }
+    if params.alg.is_some() {
+        return Err(HttpSigError::ForbiddenParameter("alg"));
+    }
+    if params.created.is_none() {
+        return Err(HttpSigError::MissingParameter("created"));
+    }
+    if params.expires.is_none() {
+        return Err(HttpSigError::MissingParameter("expires"));
+    }
+    if params.nonce.is_none() {
+        return Err(HttpSigError::MissingParameter("nonce"));
+    }
+    match params.tag.as_deref() {
+        None => return Err(HttpSigError::MissingParameter("tag")),
+        Some(tag) if tag != WIMSE_TAG => {
+            return Err(HttpSigError::WrongTag {
+                found: tag.to_owned(),
+            })
+        }
+        Some(_) => {}
+    }
+    if params.wimse_aud.is_some() {
+        return Err(HttpSigError::ForbiddenParameter("wimse-aud"));
+    }
+    if response_signing_required && params.wimse_req_nonce.is_none() {
+        return Err(HttpSigError::MissingParameter("wimse-req-nonce"));
+    }
+    Ok(())
+}
+
+/// The components the WIMSE profile requires a **response** signature to cover,
+/// given the headers the response actually carries.
+///
+/// Section 3 names `@status`, `@method;req` and `@request-target;req`, plus
+/// `Content-Type` and `Content-Digest` when present and the WIT. The two `;req`
+/// components are the interesting ones: without them a signed response could be
+/// lifted onto a different request.
+#[must_use]
+pub fn response_components(headers: &[(String, String)]) -> Vec<Component> {
+    let mut components = vec![
+        Component::Status,
+        Component::Req(Box::new(Component::Method)),
+        Component::Req(Box::new(Component::RequestTarget)),
+    ];
+    for name in ["content-type", "content-digest", "workload-identity-token"] {
+        if headers.iter().any(|(n, _)| n.eq_ignore_ascii_case(name)) {
+            components.push(Component::header(name));
+        }
+    }
+    components
 }
 
 fn sf_string(value: &str) -> String {
@@ -210,7 +292,7 @@ fn serialize_params_value(components: &[Component], params: &SignatureParams) ->
 }
 
 fn signature_base_from_params_str(
-    request: &HttpRequest,
+    message: &impl ComponentSource,
     components: &[Component],
     params_value: &str,
 ) -> Result<String, HttpSigError> {
@@ -223,7 +305,7 @@ fn signature_base_from_params_str(
     }
     let mut base = String::new();
     for component in components {
-        let value = request.component_value(component)?;
+        let value = message.component_value(component)?;
         // A bare CR or LF in a value would forge extra signature-base lines.
         if value.contains(['\r', '\n']) {
             return Err(HttpSigError::InvalidComponentValue(component.quoted_id()));
@@ -245,12 +327,12 @@ fn signature_base_from_params_str(
 ///
 /// Returns [`HttpSigError::MissingComponent`] if a covered header is absent.
 pub fn signature_base(
-    request: &HttpRequest,
+    message: &impl ComponentSource,
     components: &[Component],
     params: &SignatureParams,
 ) -> Result<String, HttpSigError> {
     let params_value = serialize_params_value(components, params);
-    signature_base_from_params_str(request, components, &params_value)
+    signature_base_from_params_str(message, components, &params_value)
 }
 
 /// Signs `request` over `components`, producing `Signature-Input` and
@@ -260,14 +342,14 @@ pub fn signature_base(
 ///
 /// Returns [`HttpSigError::MissingComponent`] if a covered header is absent.
 pub fn sign(
-    request: &HttpRequest,
+    message: &impl ComponentSource,
     components: &[Component],
     params: &SignatureParams,
     label: &str,
     signing_key: &SigningKey,
 ) -> Result<SignedSignature, HttpSigError> {
     let params_value = serialize_params_value(components, params);
-    let base = signature_base_from_params_str(request, components, &params_value)?;
+    let base = signature_base_from_params_str(message, components, &params_value)?;
     let signature: Signature = signing_key.sign(base.as_bytes());
     Ok(SignedSignature {
         signature_input: format!("{label}={params_value}"),
@@ -469,7 +551,7 @@ fn parse_signature(value: &str) -> Result<(String, [u8; 64]), HttpSigError> {
 /// invalid signature, a missing required component, or a stale, expired,
 /// future-dated, or inverted-window signature.
 pub fn verify(
-    request: &HttpRequest,
+    message: &impl ComponentSource,
     signature_input: &str,
     signature: &str,
     verifying_key: &VerifyingKey,
@@ -489,13 +571,16 @@ pub fn verify(
     if config.wimse_profile {
         check_request_profile(&params)?;
     }
+    if config.wimse_response_profile {
+        check_response_profile(&params, config.expected_req_nonce.is_some())?;
+    }
     if let Some(alg) = &params.alg {
         if alg != ALG {
             return Err(HttpSigError::UnsupportedAlg { found: alg.clone() });
         }
     }
 
-    let base = signature_base_from_params_str(request, &components, &params_value)?;
+    let base = signature_base_from_params_str(message, &components, &params_value)?;
     let signature = Signature::from_bytes(&sig_bytes);
     verifying_key
         .verify_strict(base.as_bytes(), &signature)
@@ -513,6 +598,14 @@ pub fn verify(
     if let Some(expected) = &config.expected_audience {
         if params.wimse_aud.as_ref() != Some(expected) {
             return Err(HttpSigError::AudienceMismatch);
+        }
+    }
+    // Section 3.4: a client that demanded a signed response MUST check that the
+    // response carries back the nonce it sent, which is what stops a response
+    // signed for one request being replayed against another.
+    if let Some(expected) = &config.expected_req_nonce {
+        if params.wimse_req_nonce.as_ref() != Some(expected) {
+            return Err(HttpSigError::RequestNonceMismatch);
         }
     }
 
@@ -558,7 +651,7 @@ mod tests {
 
     use super::{sign, signature_base, verify, SignatureParams, VerifyConfig, ALG};
     use crate::error::HttpSigError;
-    use crate::message::{Component, HttpRequest};
+    use crate::message::{Component, HttpExchange, HttpRequest};
 
     // The canonical RFC 9421 test request (Section 2.5).
     fn rfc_request() -> HttpRequest {
@@ -1240,6 +1333,175 @@ mod tests {
             &VerifyConfig::default(),
         )
         .is_ok());
+    }
+
+    // --- Response signing (draft Section 3.4) ---
+
+    use crate::message::HttpResponse;
+
+    fn rfc_response() -> HttpResponse {
+        HttpResponse {
+            status: 200,
+            headers: vec![
+                ("Content-Type".to_owned(), "application/json".to_owned()),
+                (
+                    "Workload-Identity-Token".to_owned(),
+                    "eyJ0eXAi.wit.value".to_owned(),
+                ),
+            ],
+        }
+    }
+
+    fn response_params() -> SignatureParams {
+        SignatureParams {
+            created: Some(1_700_000_000),
+            expires: Some(1_700_000_300),
+            nonce: Some("resp-2222".to_owned()),
+            tag: Some(WIMSE_TAG.to_owned()),
+            // The nonce the client put on its request.
+            wimse_req_nonce: Some("abcd1111".to_owned()),
+            ..SignatureParams::default()
+        }
+    }
+
+    fn response_config() -> VerifyConfig {
+        VerifyConfig {
+            wimse_response_profile: true,
+            expected_req_nonce: Some("abcd1111".to_owned()),
+            ..VerifyConfig::default()
+        }
+    }
+
+    #[test]
+    fn signs_and_verifies_a_response() {
+        let key = SigningKey::from_bytes(&[5u8; 32]);
+        let request = rfc_request();
+        let response = rfc_response();
+        let exchange = HttpExchange {
+            response: &response,
+            request: &request,
+        };
+        let components = super::response_components(&response.headers);
+        let signed = sign(&exchange, &components, &response_params(), "wimse", &key).unwrap();
+
+        // `@status` and the two `;req` components must be in the covered list.
+        assert!(signed
+            .signature_input
+            .contains(r#""@status" "@method";req "@request-target";req"#));
+
+        let verified = verify(
+            &exchange,
+            &signed.signature_input,
+            &signed.signature,
+            &key.verifying_key(),
+            &response_config(),
+        )
+        .unwrap();
+        assert_eq!(verified.params.wimse_req_nonce.as_deref(), Some("abcd1111"));
+    }
+
+    // The `;req` components are what tie a response to one request. Verifying
+    // the same response against a different request must fail.
+    #[test]
+    fn a_response_cannot_be_lifted_onto_another_request() {
+        let key = SigningKey::from_bytes(&[5u8; 32]);
+        let request = rfc_request();
+        let response = rfc_response();
+        let signed = sign(
+            &HttpExchange {
+                response: &response,
+                request: &request,
+            },
+            &super::response_components(&response.headers),
+            &response_params(),
+            "wimse",
+            &key,
+        )
+        .unwrap();
+
+        let other_request = HttpRequest {
+            path: "/admin".to_owned(),
+            ..rfc_request()
+        };
+        let err = verify(
+            &HttpExchange {
+                response: &response,
+                request: &other_request,
+            },
+            &signed.signature_input,
+            &signed.signature,
+            &key.verifying_key(),
+            &response_config(),
+        );
+        assert!(matches!(err, Err(HttpSigError::InvalidSignature)));
+    }
+
+    // A client that asked for a signed response must reject one carrying back
+    // somebody else's nonce.
+    #[test]
+    fn rejects_a_response_answering_a_different_request() {
+        let key = SigningKey::from_bytes(&[5u8; 32]);
+        let request = rfc_request();
+        let response = rfc_response();
+        let exchange = HttpExchange {
+            response: &response,
+            request: &request,
+        };
+        let signed = sign(
+            &exchange,
+            &super::response_components(&response.headers),
+            &response_params(),
+            "wimse",
+            &key,
+        )
+        .unwrap();
+
+        let config = VerifyConfig {
+            expected_req_nonce: Some("some-other-nonce".to_owned()),
+            ..response_config()
+        };
+        let err = verify(
+            &exchange,
+            &signed.signature_input,
+            &signed.signature,
+            &key.verifying_key(),
+            &config,
+        );
+        assert!(matches!(err, Err(HttpSigError::RequestNonceMismatch)));
+    }
+
+    #[test]
+    fn response_profile_requires_the_returned_nonce() {
+        let params = SignatureParams {
+            wimse_req_nonce: None,
+            ..response_params()
+        };
+        assert!(matches!(
+            super::check_response_profile(&params, true),
+            Err(HttpSigError::MissingParameter("wimse-req-nonce"))
+        ));
+        // ...but only when the client demanded a signed response.
+        assert!(super::check_response_profile(&params, false).is_ok());
+    }
+
+    // `wimse-aud` names the service a request is for; on the way back it means
+    // nothing, so the profile forbids it rather than ignoring it.
+    #[test]
+    fn response_profile_forbids_the_request_audience() {
+        let params = SignatureParams {
+            wimse_aud: Some("https://svcb.example.com/x".to_owned()),
+            ..response_params()
+        };
+        assert!(matches!(
+            super::check_response_profile(&params, true),
+            Err(HttpSigError::ForbiddenParameter("wimse-aud"))
+        ));
+    }
+
+    #[test]
+    fn a_request_has_no_status_component() {
+        let err = rfc_request().component_value(&Component::Status);
+        assert!(matches!(err, Err(HttpSigError::UnsupportedComponent(_))));
     }
 
     #[test]
