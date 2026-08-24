@@ -29,13 +29,13 @@ jq -r '[.accept[].identifier, .reject[].identifier] | .[]' \
 # Tokens, including the negative cases: those are the interesting ones, being
 # well-formed enough to reach deep into the parser before being refused.
 jq -r '[.token] + [.negative[].token // empty] | .[]' \
-  "$vectors/wit/issue-basic.json" |
+  "$vectors"/wit/issue-*.json |
   while IFS= read -r token; do
     printf '%s' "$token" | write wit_verify "wit-$(printf '%s' "$token" | shasum | cut -c1-8)"
   done
 
 jq -r '[.proof] + [.negative[].proof // empty] | .[]' \
-  "$vectors/wpt/proof-basic.json" |
+  "$vectors"/wpt/proof-*.json |
   while IFS= read -r proof; do
     printf '%s' "$proof" | write wpt_verify "wpt-$(printf '%s' "$proof" | shasum | cut -c1-8)"
   done
@@ -43,9 +43,20 @@ jq -r '[.proof] + [.negative[].proof // empty] | .[]' \
 jq -r '[.signature_input] + [.negative[].signature_input // empty]
        + [.response.signature_input // empty]
        + [.response.negative[]?.signature_input // empty] | .[]' \
-  "$vectors/httpsig/sign-basic.json" |
+  "$vectors"/httpsig/sign-*.json |
   while IFS= read -r input; do
     printf '%s' "$input" | write httpsig_verify "sig-$(printf '%s' "$input" | shasum | cut -c1-8)"
+  done
+
+# Every JWK the vectors carry: confirmation keys, issuer keys, and the private
+# ones. A JWK reaches a parser from a `cnf` claim and from a fetched JWKS, so
+# both shapes are worth seeding.
+jq -c '[.claims.cnf.jwk // empty, .issuer_verifying_key // empty,
+        .issuer_signing_key // empty, .pop_signing_key // empty,
+        .ca_signing_key // empty, .workload_signing_key // empty] | .[]' \
+  "$vectors"/*/*.json 2>/dev/null | sort -u |
+  while IFS= read -r jwk; do
+    printf '%s' "$jwk" | write jwk_parse "jwk-$(printf '%s' "$jwk" | shasum | cut -c1-8)"
   done
 
 # Certificates are base64url in the vector and raw DER to the parser.

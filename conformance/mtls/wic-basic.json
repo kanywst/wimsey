@@ -1,13 +1,25 @@
 {
-  "format": "wimse-conformance/v1",
+  "format": "wimse-conformance/v2",
   "suite": "mtls",
   "id": "wic-basic",
   "spec": "draft-ietf-wimse-mutual-tls-02",
   "description": "Workload Identity Certificate issuance over a workload-supplied public key, plus the inputs a verifier must reject",
-  "ca_signing_key_seed_b64u": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+  "ca_signing_key": {
+    "alg": "EdDSA",
+    "kty": "OKP",
+    "crv": "Ed25519",
+    "x": "7UkoxijRwsbq6QM4kFmVYSlZJzpcY_k2NsFGFKyHN9E",
+    "d": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+  },
   "ca_not_before": 1600000000,
   "ca_not_after": 1900000000,
-  "workload_signing_key_seed_b64u": "CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk",
+  "workload_signing_key": {
+    "alg": "EdDSA",
+    "kty": "OKP",
+    "crv": "Ed25519",
+    "x": "_RckOFqgx1tk-3jNYC-h2ZH96_drE8WO1wLqyDXp9hg",
+    "d": "CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk"
+  },
   "identifier": "spiffe://example.org/workload/api",
   "not_before": 1700000000,
   "not_after": 1700086400,

@@ -6,6 +6,7 @@ use std::process::ExitCode;
 
 use clap::{Parser, Subcommand, ValueEnum};
 use wimsey_conformance::{generate, run};
+use wimsey_jose::Algorithm;
 
 #[derive(Parser)]
 #[command(
@@ -61,12 +62,24 @@ fn write_vectors(out: &Path) -> std::io::Result<()> {
         &out.join("identifier/parse-basic.json"),
         &generate::identifier_vector(),
     )?;
-    write_json(&out.join("wit/issue-basic.json"), &generate::wit_vector())?;
-    write_json(&out.join("wpt/proof-basic.json"), &generate::wpt_vector())?;
-    write_json(
-        &out.join("httpsig/sign-basic.json"),
-        &generate::httpsig_vector(),
-    )?;
+    // One vector per suite per algorithm. ES256 is not an afterthought here:
+    // `workload-creds` requires it of general-purpose implementations, so an
+    // implementation that only passes the EdDSA half is not done.
+    for algorithm in [Algorithm::EdDsa, Algorithm::Es256] {
+        let suffix = algorithm.as_str().to_ascii_lowercase();
+        write_json(
+            &out.join(format!("wit/issue-{suffix}.json")),
+            &generate::wit_vector(algorithm),
+        )?;
+        write_json(
+            &out.join(format!("wpt/proof-{suffix}.json")),
+            &generate::wpt_vector(algorithm),
+        )?;
+        write_json(
+            &out.join(format!("httpsig/sign-{suffix}.json")),
+            &generate::httpsig_vector(algorithm),
+        )?;
+    }
     write_json(&out.join("mtls/wic-basic.json"), &generate::mtls_vector())
 }
 

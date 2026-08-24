@@ -35,5 +35,5 @@ mod jwk;
 mod key;
 
 pub use error::JoseError;
-pub use jwk::Jwk;
+pub use jwk::{Jwk, PrivateJwk};
 pub use key::{Algorithm, SigningKey, VerifyingKey, SIGNATURE_LEN};

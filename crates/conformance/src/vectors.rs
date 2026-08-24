@@ -9,6 +9,7 @@
 use serde::{Deserialize, Serialize};
 use wimsey_httpsig::HttpSigError;
 use wimsey_identifier::ParseError;
+use wimsey_jose::{Jwk, PrivateJwk};
 use wimsey_mtls::MtlsError;
 use wimsey_wit::{WitClaims, WitError};
 use wimsey_wpt::{WptClaims, WptError};
@@ -17,7 +18,12 @@ use wimsey_wpt::{WptClaims, WptError};
 ///
 /// Consumers MUST reject a file whose `format` they do not recognise rather
 /// than guessing at the shape.
-pub const FORMAT: &str = "wimse-conformance/v1";
+///
+/// v2 replaced the raw key bytes of v1 with JWKs. v1 recorded a public key as
+/// 32 base64url bytes, which only worked because every v1 vector was Ed25519;
+/// a JWK carries its own algorithm, so one suite can hold both `EdDSA` and
+/// `ES256` vectors.
+pub const FORMAT: &str = "wimse-conformance/v2";
 
 /// The index of every vector in the suite, written to `manifest.json`.
 ///
@@ -297,8 +303,8 @@ pub struct WitVector {
     pub header: Header,
     /// The JWS algorithm; always `EdDSA` for WIMSE.
     pub alg: String,
-    /// The issuer's Ed25519 seed, so the token can be re-signed from scratch.
-    pub issuer_signing_key_seed_b64u: String,
+    /// The issuer's private key, so the token can be re-signed from scratch.
+    pub issuer_signing_key: PrivateJwk,
     /// The JOSE `kid` header, if the token carries one.
     pub kid: Option<String>,
     /// The time at which the positive case must verify.
@@ -326,9 +332,9 @@ pub struct WitNegative {
     /// Replaces the positive case's `verify_now`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub verify_now: Option<u64>,
-    /// Verify against this key instead of the one derived from the seed.
+    /// Verify against this key instead of the vector's issuer key.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub issuer_verifying_key_b64u: Option<String>,
+    pub issuer_verifying_key: Option<Jwk>,
     /// Require this `iss` on the token.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub expected_iss: Option<String>,
@@ -342,10 +348,10 @@ pub struct WptVector {
     pub header: Header,
     /// The JWS algorithm; always `EdDSA` for WIMSE.
     pub alg: String,
-    /// The workload's proof-of-possession Ed25519 seed.
-    pub pop_signing_key_seed_b64u: String,
+    /// The workload's proof-of-possession private key.
+    pub pop_signing_key: PrivateJwk,
     /// The issuer's public key, the trust anchor for `wit`.
-    pub issuer_verifying_key_b64u: String,
+    pub issuer_verifying_key: Jwk,
     /// The time at which the positive case must verify.
     pub verify_now: u64,
     /// The audience the proof is addressed to.
@@ -426,10 +432,10 @@ pub struct HttpSigVector {
     /// The common header fields.
     #[serde(flatten)]
     pub header: Header,
-    /// The workload's proof-of-possession Ed25519 seed.
-    pub pop_signing_key_seed_b64u: String,
+    /// The workload's proof-of-possession private key.
+    pub pop_signing_key: PrivateJwk,
     /// The issuer's public key, the trust anchor for `wit`.
-    pub issuer_verifying_key_b64u: String,
+    pub issuer_verifying_key: Jwk,
     /// The time at which the positive case must verify.
     pub verify_now: u64,
     /// The signature label.
@@ -610,15 +616,15 @@ pub struct MtlsVector {
     /// The common header fields.
     #[serde(flatten)]
     pub header: Header,
-    /// The CA's Ed25519 seed, so the CA certificate can be rebuilt.
-    pub ca_signing_key_seed_b64u: String,
+    /// The CA's private key, so the CA certificate can be rebuilt.
+    pub ca_signing_key: PrivateJwk,
     /// The CA certificate's validity window, in seconds since the Unix epoch.
     pub ca_not_before: u64,
     /// The end of the CA certificate's validity window.
     pub ca_not_after: u64,
-    /// The workload's Ed25519 seed. Only its public half is certified; it is
+    /// The workload's private key. Only its public half is certified; it is
     /// recorded in full so a consumer can derive that public half.
-    pub workload_signing_key_seed_b64u: String,
+    pub workload_signing_key: PrivateJwk,
     /// The workload identifier the WIC must carry in its URI SAN.
     pub identifier: String,
     /// The WIC's validity window, in seconds since the Unix epoch.
