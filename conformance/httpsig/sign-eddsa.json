@@ -3,7 +3,7 @@
   "suite": "httpsig",
   "id": "sign-eddsa",
   "spec": "draft-ietf-wimse-http-signature-06",
-  "description": "WIMSE HTTP Message Signature (RFC 9421, ed25519) carrying a WIT, plus the inputs a verifier must reject",
+  "description": "WIMSE HTTP Message Signature (RFC 9421, EdDSA) carrying a WIT, plus the inputs a verifier must reject",
   "pop_signing_key": {
     "alg": "EdDSA",
     "kty": "OKP",

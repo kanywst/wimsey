@@ -23,7 +23,7 @@ use wimsey_wit::{issue as issue_wit, verify as verify_wit, Validation as WitVali
 use wimsey_wpt::{issue as issue_wpt, verify as verify_wpt, wit_thumbprint, Validation};
 
 use crate::vectors::{
-    ErrorCode, HttpSigVector, IdentifierVector, Manifest, MtlsVector, VectorRequest,
+    ErrorCode, Header, HttpSigVector, IdentifierVector, Manifest, MtlsVector, VectorRequest,
     VectorResponse, WitVector, WptVector, FORMAT,
 };
 
@@ -169,6 +169,39 @@ fn content_digest(request: &VectorRequest) -> Option<&str> {
         .iter()
         .find(|(name, _)| name.eq_ignore_ascii_case("content-digest"))
         .map(|(_, value)| value.as_str())
+}
+
+/// Checks that a vector's prose does not name an algorithm it is not for.
+///
+/// A description is prose and cannot be checked for truth, but it can be
+/// checked for contradiction. This exists because the same mistake — a field
+/// carried over from the Ed25519-only era, regenerating identically every time
+/// and read by nothing — was made three times in one change.
+fn description_names_no_other_algorithm(
+    header: &Header,
+    declared: Option<&str>,
+) -> Result<(), String> {
+    const ALIASES: [(&str, &str); 4] = [
+        ("EdDSA", "EdDSA"),
+        ("Ed25519", "EdDSA"),
+        ("ES256", "ES256"),
+        ("P-256", "ES256"),
+    ];
+    // Case-insensitively: the descriptions spell it both `Ed25519` and
+    // `ed25519`, and a guard that misses half the spellings is worse than none
+    // because it reads as coverage.
+    let description = header.description.to_ascii_lowercase();
+    for (needle, algorithm) in ALIASES {
+        if description.contains(&needle.to_ascii_lowercase())
+            && declared.is_some_and(|d| d != algorithm)
+        {
+            return Err(format!(
+                "the description mentions `{needle}` but the vector is for `{}`",
+                declared.unwrap_or("?")
+            ));
+        }
+    }
+    Ok(())
 }
 
 /// Checks that a vector's declared `alg` matches the key it actually recorded.
@@ -343,7 +376,8 @@ pub fn run_wit(vector: &WitVector, report: &mut Report) {
     report.record(
         &name,
         "declared-algorithm",
-        declared_algorithm_matches(&vector.alg, &key),
+        declared_algorithm_matches(&vector.alg, &key)
+            .and_then(|()| description_names_no_other_algorithm(&vector.header, Some(&vector.alg))),
     );
     report.record(
         &name,
@@ -411,7 +445,8 @@ pub fn run_wpt(vector: &WptVector, report: &mut Report) {
     report.record(
         &name,
         "declared-algorithm",
-        declared_algorithm_matches(&vector.alg, &pop),
+        declared_algorithm_matches(&vector.alg, &pop)
+            .and_then(|()| description_names_no_other_algorithm(&vector.header, Some(&vector.alg))),
     );
     report.record(
         &name,
@@ -501,6 +536,11 @@ pub fn run_httpsig(vector: &HttpSigVector, report: &mut Report) {
     };
     let request = http_request(&vector.request);
 
+    report.record(
+        &name,
+        "declared-algorithm",
+        description_names_no_other_algorithm(&vector.header, Some(pop.algorithm().as_str())),
+    );
     report.record(
         &name,
         "reproduce",

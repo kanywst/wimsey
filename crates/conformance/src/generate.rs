@@ -309,7 +309,10 @@ pub fn wit_vector(algorithm: Algorithm) -> WitVector {
             "wit",
             vector_id("issue", algorithm),
             WIT_SPEC,
-            "WIT issuance with EdDSA (Ed25519), plus the inputs a verifier must reject",
+            &format!(
+                "WIT issuance with {}, plus the inputs a verifier must reject",
+                algorithm.as_str()
+            ),
         ),
         alg: algorithm.as_str().to_owned(),
         issuer_signing_key: PrivateJwk::from_signing_key(&issuer_key),
@@ -482,7 +485,10 @@ pub fn httpsig_vector(algorithm: Algorithm) -> HttpSigVector {
             "httpsig",
             vector_id("sign", algorithm),
             HTTPSIG_SPEC,
-            "WIMSE HTTP Message Signature (RFC 9421, ed25519) carrying a WIT, plus the inputs a verifier must reject",
+            &format!(
+                "WIMSE HTTP Message Signature (RFC 9421, {}) carrying a WIT, plus the inputs a verifier must reject",
+                algorithm.as_str()
+            ),
         ),
         pop_signing_key: PrivateJwk::from_signing_key(&pop_key),
         issuer_verifying_key: JoseJwk::from_verifying_key(&issuer_key.verifying_key()),

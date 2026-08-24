@@ -3,7 +3,7 @@
   "suite": "wit",
   "id": "issue-es256",
   "spec": "draft-ietf-wimse-workload-creds-02",
-  "description": "WIT issuance with EdDSA (Ed25519), plus the inputs a verifier must reject",
+  "description": "WIT issuance with ES256, plus the inputs a verifier must reject",
   "alg": "ES256",
   "issuer_signing_key": {
     "alg": "ES256",
