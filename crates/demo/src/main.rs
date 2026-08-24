@@ -13,12 +13,12 @@
 //! prints the same bytes — including the certificates, since a WIC is issued
 //! over a public key the workload supplies rather than one the CA invents.
 
-use ed25519_dalek::SigningKey;
 use wimsey_httpsig::{
     content_digest_sha256, verify_content_digest, Component, HttpRequest, SignatureParams,
     VerifyConfig, WIMSE_LABEL, WIMSE_TAG,
 };
 use wimsey_identifier::WorkloadIdentifier;
+use wimsey_jose::SigningKey;
 use wimsey_mtls::WorkloadCa;
 use wimsey_wit::{Confirmation, Jwk, WitClaims};
 use wimsey_wpt::{wit_thumbprint, WptClaims};
@@ -52,8 +52,8 @@ fn rule(title: &str) {
 fn main() -> Result<()> {
     println!("WIMSE end-to-end demo — service A calls service B through a middlebox");
 
-    let issuer_key = SigningKey::from_bytes(&ISSUER_SEED);
-    let pop_key = SigningKey::from_bytes(&POP_SEED);
+    let issuer_key = SigningKey::from_ed25519_seed(&ISSUER_SEED);
+    let pop_key = SigningKey::from_ed25519_seed(&POP_SEED);
 
     let wit = issue_wit(&issuer_key, &pop_key)?;
     let body = br#"{"amount":100,"to":"acct-42"}"#;
@@ -79,7 +79,7 @@ fn issue_wit(issuer_key: &SigningKey, pop_key: &SigningKey) -> Result<String> {
         exp: NOW + 3600,
         jti: Some("wit-0001".to_owned()),
         cnf: Confirmation {
-            jwk: Jwk::from_ed25519(&pop_key.verifying_key()),
+            jwk: Jwk::from_verifying_key(&pop_key.verifying_key()),
         },
     };
     let wit = wimsey_wit::issue(&claims, Some("issuer-key-1"), issuer_key)?;
@@ -241,12 +241,12 @@ fn mutual_tls_instead() -> Result<()> {
     // The CA key is long-lived and belongs to the operator. Loading it, rather
     // than generating one per process, is what lets peers keep trusting the same
     // anchor across a restart.
-    let ca_key = SigningKey::from_bytes(&CA_SEED);
+    let ca_key = SigningKey::from_ed25519_seed(&CA_SEED);
     let ca = WorkloadCa::from_ed25519(&ca_key, NOW - 86_400, NOW + 31_536_000)?;
 
     // The workload generates its own key pair. Only the public half is sent to
     // the CA — there is no API here that would let the CA see the private one.
-    let workload_key = SigningKey::from_bytes(&POP_SEED);
+    let workload_key = SigningKey::from_ed25519_seed(&POP_SEED);
     let identifier = WorkloadIdentifier::parse(SERVICE_A)?;
     let wic = ca.issue(
         &identifier,
@@ -361,7 +361,7 @@ fn rebuild_claims(pop_key: &SigningKey) -> Result<WitClaims> {
         exp: NOW + 3600,
         jti: Some("wit-0001".to_owned()),
         cnf: Confirmation {
-            jwk: Jwk::from_ed25519(&pop_key.verifying_key()),
+            jwk: Jwk::from_verifying_key(&pop_key.verifying_key()),
         },
     })
 }

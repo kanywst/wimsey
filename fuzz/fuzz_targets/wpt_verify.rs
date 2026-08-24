@@ -17,8 +17,12 @@ struct Input<'a> {
 }
 
 fuzz_target!(|input: Input<'_>| {
-    let key = SigningKey::from_bytes(&[9u8; 32]).verifying_key();
     let mut validation = Validation::new(1_700_000_000, input.audience, input.wit);
     validation.access_token = input.access_token;
-    let _ = verify(input.proof, &key, &validation);
+    for key in [
+        SigningKey::from_ed25519_seed(&[9u8; 32]),
+        SigningKey::from_p256_scalar(&[9u8; 32]).expect("a fixed valid scalar"),
+    ] {
+        let _ = verify(input.proof, &key.verifying_key(), &validation);
+    }
 });

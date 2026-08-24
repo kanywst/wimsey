@@ -7,12 +7,12 @@
 //! silent interop break.
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-use ed25519_dalek::{Signer, SigningKey};
 use wimsey_httpsig::{
     content_digest_sha256, response_components, sign, Component, HttpExchange, HttpRequest,
     HttpResponse, SignatureParams, WIMSE_TAG,
 };
 use wimsey_identifier::WorkloadIdentifier;
+use wimsey_jose::SigningKey;
 use wimsey_mtls::WorkloadCa;
 use wimsey_wit::{issue as issue_wit, Confirmation, Jwk, WitClaims};
 use wimsey_wpt::{issue as issue_wpt, wit_thumbprint, WptClaims};
@@ -68,7 +68,7 @@ fn wit_claims(sub: &str, pop: &SigningKey) -> WitClaims {
         exp: EXP,
         jti: Some("a1b2c3".to_owned()),
         cnf: Confirmation {
-            jwk: Jwk::from_ed25519(&pop.verifying_key()),
+            jwk: Jwk::from_verifying_key(&pop.verifying_key()),
         },
     }
 }
@@ -140,10 +140,7 @@ fn resign_with_header(token: &str, header_json: &str, key: &SigningKey) -> Strin
     let payload = token.split('.').nth(1).expect("token has three parts");
     let signing_input = format!("{}.{payload}", URL_SAFE_NO_PAD.encode(header_json));
     let signature = key.sign(signing_input.as_bytes());
-    format!(
-        "{signing_input}.{}",
-        URL_SAFE_NO_PAD.encode(signature.to_bytes())
-    )
+    format!("{signing_input}.{}", URL_SAFE_NO_PAD.encode(signature))
 }
 
 /// Rewrites one claim value in a token's payload, leaving the signature alone.
@@ -218,7 +215,7 @@ fn wit_negatives(
         },
         WitNegative {
             issuer_verifying_key_b64u: Some(
-                URL_SAFE_NO_PAD.encode(other_issuer.verifying_key().to_bytes()),
+                URL_SAFE_NO_PAD.encode(other_issuer.verifying_key().to_raw_bytes()),
             ),
             ..wit_neg(
                 "wrong-issuer-key",
@@ -272,8 +269,8 @@ fn wit_negatives(
 /// mean the implementation can no longer issue its own reference credentials.
 #[must_use]
 pub fn wit_vector() -> WitVector {
-    let issuer_key = SigningKey::from_bytes(&ISSUER_SEED);
-    let pop_key = SigningKey::from_bytes(&WIT_POP_SEED);
+    let issuer_key = SigningKey::from_ed25519_seed(&ISSUER_SEED);
+    let pop_key = SigningKey::from_ed25519_seed(&WIT_POP_SEED);
 
     let claims = wit_claims(SUBJECT, &pop_key);
     let kid = Some(KID.to_owned());
@@ -283,7 +280,7 @@ pub fn wit_vector() -> WitVector {
         &token,
         kid.as_deref(),
         &issuer_key,
-        &SigningKey::from_bytes(&OTHER_ISSUER_SEED),
+        &SigningKey::from_ed25519_seed(&OTHER_ISSUER_SEED),
     );
 
     WitVector {
@@ -311,8 +308,8 @@ pub fn wit_vector() -> WitVector {
 /// mean the implementation can no longer issue its own reference credentials.
 #[must_use]
 pub fn wpt_vector() -> WptVector {
-    let issuer_key = SigningKey::from_bytes(&ISSUER_SEED);
-    let pop_key = SigningKey::from_bytes(&POP_SEED);
+    let issuer_key = SigningKey::from_ed25519_seed(&ISSUER_SEED);
+    let pop_key = SigningKey::from_ed25519_seed(&POP_SEED);
 
     let wit = issue_wit(&wit_claims(SUBJECT, &pop_key), Some(KID), &issuer_key).expect("issue WIT");
     // A second, equally valid WIT for the same key: the proof is bound to the
@@ -394,7 +391,8 @@ pub fn wpt_vector() -> WptVector {
         ),
         alg: "EdDSA".to_owned(),
         pop_signing_key_seed_b64u: URL_SAFE_NO_PAD.encode(POP_SEED),
-        issuer_verifying_key_b64u: URL_SAFE_NO_PAD.encode(issuer_key.verifying_key().to_bytes()),
+        issuer_verifying_key_b64u: URL_SAFE_NO_PAD
+            .encode(issuer_key.verifying_key().to_raw_bytes()),
         verify_now: IAT,
         audience,
         wit,
@@ -412,8 +410,8 @@ pub fn wpt_vector() -> WptVector {
 /// mean the implementation can no longer issue its own reference credentials.
 #[must_use]
 pub fn httpsig_vector() -> HttpSigVector {
-    let issuer_key = SigningKey::from_bytes(&ISSUER_SEED);
-    let pop_key = SigningKey::from_bytes(&POP_SEED);
+    let issuer_key = SigningKey::from_ed25519_seed(&ISSUER_SEED);
+    let pop_key = SigningKey::from_ed25519_seed(&POP_SEED);
     let wit = issue_wit(&wit_claims(SUBJECT, &pop_key), Some(KID), &issuer_key).expect("issue WIT");
 
     let body = br#"{"amount":100}"#;
@@ -467,7 +465,7 @@ pub fn httpsig_vector() -> HttpSigVector {
             "WIMSE HTTP Message Signature (RFC 9421, ed25519) carrying a WIT, plus the inputs a verifier must reject",
         ),
         pop_signing_key_seed_b64u: URL_SAFE_NO_PAD.encode(POP_SEED),
-        issuer_verifying_key_b64u: URL_SAFE_NO_PAD.encode(issuer_key.verifying_key().to_bytes()),
+        issuer_verifying_key_b64u: URL_SAFE_NO_PAD.encode(issuer_key.verifying_key().to_raw_bytes()),
         verify_now: 1_700_000_100,
         label: "wimse".to_owned(),
         components: components.iter().map(Component::quoted_id).collect(),
@@ -998,8 +996,8 @@ fn mtls_neg(id: &str, description: &str, expect: ErrorCode) -> MtlsNegative {
 /// implementation can no longer issue its own reference certificates.
 #[must_use]
 pub fn mtls_vector() -> MtlsVector {
-    let ca_key = SigningKey::from_bytes(&CA_SEED);
-    let workload_key = SigningKey::from_bytes(&POP_SEED);
+    let ca_key = SigningKey::from_ed25519_seed(&CA_SEED);
+    let workload_key = SigningKey::from_ed25519_seed(&POP_SEED);
     let identifier =
         WorkloadIdentifier::parse(SUBJECT).expect("the fixed subject is a valid identifier");
 
@@ -1008,9 +1006,12 @@ pub fn mtls_vector() -> MtlsVector {
         .issue(&identifier, &workload_key.verifying_key(), WIC_NBF, WIC_NAF)
         .expect("issue the fixed WIC");
 
-    let other_ca =
-        WorkloadCa::from_ed25519(&SigningKey::from_bytes(&OTHER_CA_SEED), CA_NBF, CA_NAF)
-            .expect("load the second CA");
+    let other_ca = WorkloadCa::from_ed25519(
+        &SigningKey::from_ed25519_seed(&OTHER_CA_SEED),
+        CA_NBF,
+        CA_NAF,
+    )
+    .expect("load the second CA");
 
     let negative = vec![
         MtlsNegative {

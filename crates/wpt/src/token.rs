@@ -1,9 +1,9 @@
 //! Compact-JWS issuance and verification of Workload Proof Tokens.
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-use ed25519_dalek::{Signature, Signer, SigningKey, VerifyingKey};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use wimsey_jose::{Algorithm, SigningKey, VerifyingKey, SIGNATURE_LEN};
 
 use crate::claims::WptClaims;
 use crate::error::WptError;
@@ -11,7 +11,10 @@ use crate::error::WptError;
 /// The JOSE `typ` of a Workload Proof Token.
 pub const TYP: &str = "wpt+jwt";
 
-/// The only signature algorithm supported by this crate.
+/// The signature algorithm this crate prefers.
+///
+/// Not the only one: the proof must be produced with whatever the bound WIT's
+/// `cnf` JWK names, which may be `ES256`. The algorithm is taken from the key.
 pub const ALG: &str = "EdDSA";
 
 /// The maximum accepted size, in bytes, of a compact WPT serialization.
@@ -121,14 +124,13 @@ pub struct VerifiedWpt {
 pub fn issue(claims: &WptClaims, pop_signing_key: &SigningKey) -> Result<String, WptError> {
     let header = Header {
         typ: TYP.to_owned(),
-        alg: ALG.to_owned(),
+        alg: pop_signing_key.algorithm().as_str().to_owned(),
         crit: None,
     };
     let header_b64 = URL_SAFE_NO_PAD.encode(serde_json::to_vec(&header)?);
     let claims_b64 = URL_SAFE_NO_PAD.encode(serde_json::to_vec(claims)?);
     let signing_input = format!("{header_b64}.{claims_b64}");
-    let signature: Signature = pop_signing_key.sign(signing_input.as_bytes());
-    let signature_b64 = URL_SAFE_NO_PAD.encode(signature.to_bytes());
+    let signature_b64 = URL_SAFE_NO_PAD.encode(pop_signing_key.sign(signing_input.as_bytes()));
     Ok(format!("{signing_input}.{signature_b64}"))
 }
 
@@ -174,8 +176,18 @@ pub fn verify(
     if header.typ != TYP {
         return Err(WptError::WrongType { found: header.typ });
     }
-    if header.alg != ALG {
-        return Err(WptError::UnsupportedAlg { found: header.alg });
+    // The proof MUST be produced with the algorithm the WIT's `cnf` JWK names,
+    // and `pop_key` came out of that JWK — so requiring the header to match the
+    // key is what enforces the binding.
+    let alg = Algorithm::parse(&header.alg).map_err(|e| match e {
+        wimsey_jose::JoseError::UnsupportedAlg { found }
+        | wimsey_jose::JoseError::ForbiddenAlg { found } => WptError::UnsupportedAlg { found },
+        _ => WptError::UnsupportedAlg {
+            found: header.alg.clone(),
+        },
+    })?;
+    if alg != pop_key.algorithm() {
+        return Err(WptError::AlgorithmMismatch);
     }
     if header.crit.is_some() {
         return Err(WptError::UnsupportedCritical);
@@ -184,20 +196,19 @@ pub fn verify(
     // Decode the signature straight into a stack buffer to avoid a heap
     // allocation on the verify path. `decode_slice` rejects an output buffer
     // smaller than its (conservative) length estimate, so the buffer is sized
-    // above the 64 bytes an Ed25519 signature decodes to; the exact decoded
-    // length is then pinned to 64.
+    // above the 64 bytes a signature decodes to; the exact decoded length is
+    // then pinned.
     let mut signature_buf = [0u8; 96];
     let signature_len = URL_SAFE_NO_PAD
         .decode_slice(signature_b64, &mut signature_buf)
         .map_err(|_| WptError::MalformedToken)?;
-    let signature_array: [u8; 64] = signature_buf[..signature_len]
-        .try_into()
-        .map_err(|_| WptError::MalformedToken)?;
-    let signature = Signature::from_bytes(&signature_array);
+    if signature_len != SIGNATURE_LEN {
+        return Err(WptError::MalformedToken);
+    }
 
     let signing_input = format!("{header_b64}.{claims_b64}");
     pop_key
-        .verify_strict(signing_input.as_bytes(), &signature)
+        .verify(signing_input.as_bytes(), &signature_buf[..signature_len])
         .map_err(|_| WptError::InvalidSignature)?;
 
     let claims: WptClaims = serde_json::from_slice(&URL_SAFE_NO_PAD.decode(claims_b64)?)?;
@@ -230,7 +241,7 @@ pub fn verify(
 
 #[cfg(test)]
 mod tests {
-    use ed25519_dalek::SigningKey;
+    use wimsey_jose::SigningKey;
 
     use super::{issue, verify, wit_thumbprint, Validation};
     use crate::claims::WptClaims;
@@ -255,7 +266,7 @@ mod tests {
 
     #[test]
     fn round_trips() {
-        let key = SigningKey::from_bytes(&[9u8; 32]);
+        let key = SigningKey::from_ed25519_seed(&[9u8; 32]);
         let claims = sample_claims();
         let wpt = issue(&claims, &key).unwrap();
 
@@ -265,7 +276,7 @@ mod tests {
 
     #[test]
     fn rejects_a_tampered_payload() {
-        let key = SigningKey::from_bytes(&[9u8; 32]);
+        let key = SigningKey::from_ed25519_seed(&[9u8; 32]);
         let wpt = issue(&sample_claims(), &key).unwrap();
 
         let mut parts: Vec<&str> = wpt.split('.').collect();
@@ -281,8 +292,8 @@ mod tests {
 
     #[test]
     fn rejects_the_wrong_pop_key() {
-        let key = SigningKey::from_bytes(&[9u8; 32]);
-        let other = SigningKey::from_bytes(&[8u8; 32]);
+        let key = SigningKey::from_ed25519_seed(&[9u8; 32]);
+        let other = SigningKey::from_ed25519_seed(&[8u8; 32]);
         let wpt = issue(&sample_claims(), &key).unwrap();
 
         let err = verify(&wpt, &other.verifying_key(), &valid_at(1_700_000_000));
@@ -291,7 +302,7 @@ mod tests {
 
     #[test]
     fn rejects_an_expired_proof() {
-        let key = SigningKey::from_bytes(&[9u8; 32]);
+        let key = SigningKey::from_ed25519_seed(&[9u8; 32]);
         let wpt = issue(&sample_claims(), &key).unwrap();
 
         let err = verify(&wpt, &key.verifying_key(), &valid_at(1_700_000_300));
@@ -300,7 +311,7 @@ mod tests {
 
     #[test]
     fn rejects_a_wrong_audience() {
-        let key = SigningKey::from_bytes(&[9u8; 32]);
+        let key = SigningKey::from_ed25519_seed(&[9u8; 32]);
         let wpt = issue(&sample_claims(), &key).unwrap();
 
         let validation = Validation::new(1_700_000_000, "https://evil.example/path", WIT);
@@ -310,7 +321,7 @@ mod tests {
 
     #[test]
     fn rejects_a_mismatched_wit_binding() {
-        let key = SigningKey::from_bytes(&[9u8; 32]);
+        let key = SigningKey::from_ed25519_seed(&[9u8; 32]);
         let wpt = issue(&sample_claims(), &key).unwrap();
 
         // A different WIT than the one the proof was bound to.
@@ -321,7 +332,7 @@ mod tests {
 
     #[test]
     fn rejects_an_oversized_token() {
-        let key = SigningKey::from_bytes(&[9u8; 32]);
+        let key = SigningKey::from_ed25519_seed(&[9u8; 32]);
         let oversized = "a".repeat(super::MAX_TOKEN_LEN + 1);
 
         let err = verify(&oversized, &key.verifying_key(), &valid_at(1_700_000_000));
@@ -330,7 +341,7 @@ mod tests {
 
     #[test]
     fn rejects_too_few_parts() {
-        let key = SigningKey::from_bytes(&[9u8; 32]);
+        let key = SigningKey::from_ed25519_seed(&[9u8; 32]);
         let err = verify("only.two", &key.verifying_key(), &valid_at(1_700_000_000));
         assert!(matches!(err, Err(WptError::MalformedToken)));
     }
@@ -339,7 +350,7 @@ mod tests {
     fn rejects_a_wrong_length_signature() {
         use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 
-        let key = SigningKey::from_bytes(&[9u8; 32]);
+        let key = SigningKey::from_ed25519_seed(&[9u8; 32]);
         let wpt = issue(&sample_claims(), &key).unwrap();
 
         // Swap in a 32-byte (too short) signature segment.
@@ -355,13 +366,12 @@ mod tests {
     #[test]
     fn rejects_a_critical_header() {
         use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-        use ed25519_dalek::Signer;
 
-        let key = SigningKey::from_bytes(&[9u8; 32]);
+        let key = SigningKey::from_ed25519_seed(&[9u8; 32]);
         let header = URL_SAFE_NO_PAD.encode(r#"{"typ":"wpt+jwt","alg":"EdDSA","crit":["exp"]}"#);
         let claims = URL_SAFE_NO_PAD.encode(serde_json::to_vec(&sample_claims()).unwrap());
         let signing_input = format!("{header}.{claims}");
-        let signature = URL_SAFE_NO_PAD.encode(key.sign(signing_input.as_bytes()).to_bytes());
+        let signature = URL_SAFE_NO_PAD.encode(key.sign(signing_input.as_bytes()));
         let wpt = format!("{signing_input}.{signature}");
 
         let err = verify(&wpt, &key.verifying_key(), &valid_at(1_700_000_000));
@@ -370,7 +380,7 @@ mod tests {
 
     #[test]
     fn is_deterministic() {
-        let key = SigningKey::from_bytes(&[9u8; 32]);
+        let key = SigningKey::from_ed25519_seed(&[9u8; 32]);
         let claims = sample_claims();
         assert_eq!(issue(&claims, &key).unwrap(), issue(&claims, &key).unwrap());
     }
@@ -386,7 +396,7 @@ mod tests {
 
     #[test]
     fn binds_to_the_matching_access_token() {
-        let key = SigningKey::from_bytes(&[9u8; 32]);
+        let key = SigningKey::from_ed25519_seed(&[9u8; 32]);
         let wpt = issue(&claims_with_ath(), &key).unwrap();
 
         let validation = valid_at(1_700_000_000).with_access_token(ACCESS_TOKEN);
@@ -395,7 +405,7 @@ mod tests {
 
     #[test]
     fn rejects_a_different_access_token() {
-        let key = SigningKey::from_bytes(&[9u8; 32]);
+        let key = SigningKey::from_ed25519_seed(&[9u8; 32]);
         let wpt = issue(&claims_with_ath(), &key).unwrap();
 
         let validation = valid_at(1_700_000_000).with_access_token("a-different-token");
@@ -405,7 +415,7 @@ mod tests {
 
     #[test]
     fn rejects_ath_present_but_no_access_token_in_request() {
-        let key = SigningKey::from_bytes(&[9u8; 32]);
+        let key = SigningKey::from_ed25519_seed(&[9u8; 32]);
         let wpt = issue(&claims_with_ath(), &key).unwrap();
 
         let err = verify(&wpt, &key.verifying_key(), &valid_at(1_700_000_000));
@@ -414,7 +424,7 @@ mod tests {
 
     #[test]
     fn rejects_access_token_in_request_but_no_ath() {
-        let key = SigningKey::from_bytes(&[9u8; 32]);
+        let key = SigningKey::from_ed25519_seed(&[9u8; 32]);
         let wpt = issue(&sample_claims(), &key).unwrap();
 
         let validation = valid_at(1_700_000_000).with_access_token(ACCESS_TOKEN);
@@ -424,7 +434,7 @@ mod tests {
 
     #[test]
     fn rejects_a_lifetime_over_the_cap() {
-        let key = SigningKey::from_bytes(&[9u8; 32]);
+        let key = SigningKey::from_ed25519_seed(&[9u8; 32]);
         let wpt = issue(&sample_claims(), &key).unwrap();
 
         // exp - now == 300s; cap at 120s.
@@ -435,7 +445,7 @@ mod tests {
 
     #[test]
     fn accepts_a_lifetime_within_the_cap() {
-        let key = SigningKey::from_bytes(&[9u8; 32]);
+        let key = SigningKey::from_ed25519_seed(&[9u8; 32]);
         let wpt = issue(&sample_claims(), &key).unwrap();
 
         let validation = valid_at(1_700_000_000).with_max_lifetime(600);

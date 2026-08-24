@@ -33,6 +33,10 @@ pub enum WptError {
     /// understand (RFC 7515 section 4.1.11).
     #[error("unsupported critical header parameter(s)")]
     UnsupportedCritical,
+    /// The JOSE header named an algorithm the proof-of-possession key does not
+    /// use, so the proof was not produced with the algorithm the WIT pins.
+    #[error("the proof's `alg` does not match the confirmation key's algorithm")]
+    AlgorithmMismatch,
     /// The signature did not verify against the confirmation key.
     #[error("signature verification failed")]
     InvalidSignature,

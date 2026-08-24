@@ -57,7 +57,7 @@ fn load_key() -> Result<SigningKey> {
         let seed: [u8; 32] = bytes
             .try_into()
             .map_err(|_| "WIMSEY_ISSUER_KEY must be a 32-byte Base64url seed")?;
-        Ok(SigningKey::from_bytes(&seed))
+        Ok(SigningKey::from_ed25519_seed(&seed))
     } else {
         let mut seed = [0u8; 32];
         getrandom::fill(&mut seed).map_err(|e| format!("getrandom: {e}"))?;
@@ -66,6 +66,6 @@ fn load_key() -> Result<SigningKey> {
              stop verifying after a restart, and multiple instances disagree; set \
              a stable key for anything beyond local experimentation"
         );
-        Ok(SigningKey::from_bytes(&seed))
+        Ok(SigningKey::from_ed25519_seed(&seed))
     }
 }

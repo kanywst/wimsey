@@ -67,7 +67,7 @@ jobs:
       - name: fuzz
         run: |
           set -euo pipefail
-          for target in identifier_parse wit_verify wpt_verify httpsig_verify wic_parse; do
+          for target in identifier_parse jwk_parse wit_verify wpt_verify httpsig_verify wic_parse; do
             echo "::group::$target"
             # rust-toolchain.toml pins the workspace to stable, and libFuzzer's
             # `-Zsanitizer` needs nightly, so the override is not optional here.

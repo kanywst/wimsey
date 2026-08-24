@@ -10,15 +10,16 @@
 //! recomputes `wth` from the presented WIT and checks the audience, so a proof
 //! cannot be replayed against a different WIT or a different service.
 //!
-//! Signatures use `EdDSA` (Ed25519) and are deterministic, so a proof is
+//! The proof is signed with whatever algorithm the bound WIT's `cnf` JWK names
+//! — `EdDSA` or `ES256` — and verification requires the header to match the key
+//! recovered from that JWK. Both algorithms are deterministic, so a proof is
 //! byte-for-byte reproducible for a given key and input.
 //!
 //! ```
-//! use ed25519_dalek::SigningKey;
-//! use wimsey_wpt::{issue, verify, wit_thumbprint, Validation, WptClaims};
+//! use wimsey_wpt::{issue, verify, wit_thumbprint, SigningKey, Validation, WptClaims};
 //!
 //! // The workload's proof-of-possession key (its public half is in the WIT cnf).
-//! let pop_key = SigningKey::from_bytes(&[9u8; 32]);
+//! let pop_key = SigningKey::from_ed25519_seed(&[9u8; 32]);
 //! let wit = "eyJ0eXAiOiJ3aXQrand0In0.payload.signature";
 //!
 //! let claims = WptClaims {
@@ -45,4 +46,4 @@ pub use error::WptError;
 pub use token::{issue, verify, wit_thumbprint, Validation, VerifiedWpt, ALG, MAX_TOKEN_LEN, TYP};
 
 // Re-exported so callers can name the key types without a direct dependency.
-pub use ed25519_dalek::{SigningKey, VerifyingKey};
+pub use wimsey_jose::{Algorithm, SigningKey, VerifyingKey};

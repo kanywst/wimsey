@@ -18,7 +18,7 @@ struct Input<'a> {
 }
 
 fuzz_target!(|input: Input<'_>| {
-    let key = SigningKey::from_bytes(&[5u8; 32]).verifying_key();
+    let key = SigningKey::from_ed25519_seed(&[5u8; 32]).verifying_key();
     let request = HttpRequest {
         method: "POST".to_owned(),
         authority: "service.example".to_owned(),

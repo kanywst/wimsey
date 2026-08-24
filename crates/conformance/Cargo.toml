@@ -18,6 +18,7 @@ path = "src/main.rs"
 
 [dependencies]
 wimsey-identifier = { workspace = true }
+wimsey-jose = { workspace = true }
 wimsey-wit = { workspace = true }
 wimsey-wpt = { workspace = true }
 wimsey-httpsig = { workspace = true }

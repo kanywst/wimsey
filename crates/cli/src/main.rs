@@ -1,7 +1,7 @@
 //! `wimsey` — a command-line tool for WIMSE workload credentials.
 //!
 //! Issues, verifies and inspects Workload Identity Tokens and Workload Proof
-//! Tokens using Ed25519 keys stored as OKP JSON Web Keys.
+//! Tokens, with `EdDSA` (Ed25519) or `ES256` (P-256) keys stored as JSON Web Keys.
 
 mod httpsig;
 mod key;
@@ -10,9 +10,9 @@ use std::path::{Path, PathBuf};
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use clap::{Parser, Subcommand};
-use ed25519_dalek::SigningKey;
 use serde_json::json;
 use wimsey_identifier::WorkloadIdentifier;
+use wimsey_jose::SigningKey;
 use wimsey_wit::{Confirmation, Jwk, WitClaims};
 use wimsey_wpt::WptClaims;
 
@@ -34,7 +34,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Ed25519 key management.
+    /// Key management.
     Key {
         #[command(subcommand)]
         cmd: KeyCmd,
@@ -60,8 +60,11 @@ enum Command {
 
 #[derive(Subcommand)]
 enum KeyCmd {
-    /// Generate a new Ed25519 private key as an OKP JWK.
+    /// Generate a new private key as a JWK.
     Generate {
+        /// The signature algorithm: `EdDSA` (Ed25519) or `ES256` (P-256).
+        #[arg(long, default_value = "EdDSA")]
+        alg: String,
         /// Optional 32-byte seed (Base64url) for a reproducible key. For testing
         /// only: a seed on the command line is visible to other processes.
         #[arg(long)]
@@ -207,15 +210,25 @@ fn run(cli: Cli) -> Result<()> {
 
 fn run_key(cmd: KeyCmd) -> Result<()> {
     match cmd {
-        KeyCmd::Generate { seed, out } => {
-            let signing_key = if let Some(seed) = seed {
+        KeyCmd::Generate { alg, seed, out } => {
+            let algorithm =
+                wimsey_jose::Algorithm::parse(alg.trim()).map_err(|e| format!("--alg: {e}"))?;
+            let secret = if let Some(seed) = seed {
                 let bytes = URL_SAFE_NO_PAD.decode(seed.trim())?;
                 let seed: [u8; 32] = bytes.try_into().map_err(|_| "seed is not 32 bytes")?;
-                SigningKey::from_bytes(&seed)
+                seed
             } else {
                 let mut seed = [0u8; 32];
                 getrandom::fill(&mut seed).map_err(|e| format!("getrandom: {e}"))?;
-                SigningKey::from_bytes(&seed)
+                seed
+            };
+            let signing_key = match algorithm {
+                wimsey_jose::Algorithm::EdDsa => SigningKey::from_ed25519_seed(&secret),
+                // Not every 32-byte string is a valid P-256 scalar, so a random
+                // one can be refused; a caller-supplied seed can be wrong too.
+                wimsey_jose::Algorithm::Es256 => SigningKey::from_p256_scalar(&secret)
+                    .map_err(|_| "the seed is not a valid P-256 scalar")?,
+                other => return Err(format!("cannot generate a {other:?} key").into()),
             };
             emit(
                 &key::to_json(&JwkKey::from_signing_key(&signing_key))?,
@@ -264,7 +277,7 @@ fn run_wit(cmd: WitCmd) -> Result<()> {
                 exp,
                 jti: Some(jti.map_or_else(random_id, Ok)?),
                 cnf: Confirmation {
-                    jwk: Jwk::from_ed25519(&cnf),
+                    jwk: Jwk::from_verifying_key(&cnf),
                 },
             };
             let token = wimsey_wit::issue(&claims, kid.as_deref(), &issuer)?;

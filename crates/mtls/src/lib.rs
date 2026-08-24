@@ -25,6 +25,11 @@
 //! The underlying default would be a certificate valid until the year 4096,
 //! which is not a lifetime anyone would pick deliberately.
 //!
+//! Certificates are Ed25519-only. The mutual-TLS draft does not require ES256
+//! the way `workload-creds` does for the token path, so a P-256 key is refused
+//! by [`WorkloadCa::issue`] rather than certified under an algorithm identifier
+//! that would not match it.
+//!
 //! # Scope and limitations
 //!
 //! [`verify`] checks that the WIC is signed by the *directly provided* CA
@@ -41,11 +46,11 @@
 //! use wimsey_mtls::{verify, SigningKey, WorkloadCa};
 //!
 //! // The CA key is long-lived and kept by the operator, not by this process.
-//! let ca_key = SigningKey::from_bytes(&[3u8; 32]);
+//! let ca_key = SigningKey::from_ed25519_seed(&[3u8; 32]);
 //! let ca = WorkloadCa::from_ed25519(&ca_key, 1_600_000_000, 1_900_000_000).unwrap();
 //!
 //! // The workload generates its own key. Only the public half reaches the CA.
-//! let workload_key = SigningKey::from_bytes(&[7u8; 32]);
+//! let workload_key = SigningKey::from_ed25519_seed(&[7u8; 32]);
 //! let id = WorkloadIdentifier::parse("spiffe://example.org/api").unwrap();
 //! let wic = ca
 //!     .issue(&id, &workload_key.verifying_key(), 1_700_000_000, 1_700_086_400)
@@ -63,4 +68,4 @@ pub use error::MtlsError;
 pub use wic::{verify, workload_identifier, WorkloadCa};
 
 // Re-exported so callers can name the key types without a direct dependency.
-pub use ed25519_dalek::{SigningKey, VerifyingKey};
+pub use wimsey_jose::{Algorithm, SigningKey, VerifyingKey};

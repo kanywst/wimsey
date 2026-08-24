@@ -12,6 +12,33 @@ silently.
 
 ### Added
 
+- **ES256 support**, which closes the last algorithm divergence:
+  `draft-ietf-wimse-workload-creds-02` Section 5.1 requires it of
+  general-purpose implementations, and the draft's own example WIT is signed
+  with it. WIT, WPT and the HTTP-signature binding all accept it, in any
+  combination — an EdDSA issuer with an ES256 confirmation key is exactly the
+  draft's example shape.
+
+  The invariant survives: ECDSA is normally non-deterministic, but the RFC 6979
+  nonce derivation makes ES256 signatures reproducible, so conformance vectors
+  can still record signature bytes. There is a test asserting it for both
+  algorithms.
+
+- `wimsey-jose`, a new crate holding the keys, algorithms and JWK that WIT, WPT
+  and httpsig share. They previously each re-exported `ed25519-dalek`'s key
+  types, which made a second algorithm a change in three places.
+
+  `Jwk::to_verifying_key` dispatches on `alg` and then requires `kty` and `crv`
+  to agree. Reading the key type first and treating `alg` as a hint would let a
+  token name one algorithm and be verified under another.
+
+- `wimsey key generate --alg ES256`, and key files in the `EC` / `P-256` shape
+  alongside `OKP` / `Ed25519`.
+
+- A `jwk_parse` fuzz target. A JWK is untrusted input twice over — inside a
+  WIT's `cnf` claim and inside a fetched JWKS — and the target asserts that
+  anything which decodes survives a round trip back to the same key.
+
 - Response signing for `wimsey-httpsig`, closing the last gap against
   `http-signature-06`: the `@status` and `;req` covered components, the
   `wimse-req-nonce` parameter, `check_response_profile`, and

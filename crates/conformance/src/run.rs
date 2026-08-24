@@ -17,7 +17,8 @@ use wimsey_httpsig::{
     HttpResponse, SignatureParams, VerifyConfig, VerifyingKey,
 };
 use wimsey_identifier::WorkloadIdentifier;
-use wimsey_mtls::{verify as verify_mtls, SigningKey, WorkloadCa};
+use wimsey_jose::{Algorithm, SigningKey};
+use wimsey_mtls::{verify as verify_mtls, WorkloadCa};
 use wimsey_wit::{issue as issue_wit, verify as verify_wit, Validation as WitValidation};
 use wimsey_wpt::{issue as issue_wpt, verify as verify_wpt, wit_thumbprint, Validation};
 
@@ -127,24 +128,27 @@ impl Report {
     }
 }
 
-fn signing_key(seed_b64u: &str) -> Result<wimsey_wit::SigningKey, String> {
+fn signing_key(seed_b64u: &str) -> Result<SigningKey, String> {
     let seed = URL_SAFE_NO_PAD
         .decode(seed_b64u)
         .map_err(|e| format!("seed is not base64url: {e}"))?;
     let seed: [u8; 32] = seed
         .try_into()
         .map_err(|_| "seed is not 32 bytes".to_owned())?;
-    Ok(wimsey_wit::SigningKey::from_bytes(&seed))
+    Ok(SigningKey::from_ed25519_seed(&seed))
 }
 
+/// Decodes a recorded public key.
+///
+/// The v1 vector format records raw key bytes rather than a JWK, which only
+/// works because every v1 vector is Ed25519. Carrying the algorithm with the key
+/// is what a JWK is for, and is what an ES256 vector will need.
 fn verifying_key(b64u: &str) -> Result<VerifyingKey, String> {
     let bytes = URL_SAFE_NO_PAD
         .decode(b64u)
         .map_err(|e| format!("key is not base64url: {e}"))?;
-    let bytes: [u8; 32] = bytes
-        .try_into()
-        .map_err(|_| "key is not 32 bytes".to_owned())?;
-    VerifyingKey::from_bytes(&bytes).map_err(|e| format!("key is not a valid Ed25519 point: {e}"))
+    VerifyingKey::from_raw_bytes(Algorithm::EdDsa, &bytes)
+        .map_err(|e| format!("key is not a valid Ed25519 point: {e}"))
 }
 
 fn expect_reject(expected: ErrorCode, actual: Result<(), ErrorCode>) -> Result<(), String> {
@@ -240,8 +244,8 @@ pub fn run_mtls(vector: &MtlsVector, report: &mut Report) {
         let identifier = WorkloadIdentifier::parse(&vector.identifier)
             .map_err(|e| format!("the recorded identifier does not parse: {e}"))?;
         Ok((
-            SigningKey::from_bytes(&ca_seed),
-            SigningKey::from_bytes(&workload),
+            SigningKey::from_ed25519_seed(&ca_seed),
+            SigningKey::from_ed25519_seed(&workload),
             identifier,
         ))
     });

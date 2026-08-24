@@ -4,7 +4,7 @@
 use std::fmt::Write as _;
 
 use base64::{engine::general_purpose::STANDARD, Engine};
-use ed25519_dalek::{Signature, Signer, SigningKey, VerifyingKey};
+use wimsey_jose::{SigningKey, VerifyingKey, SIGNATURE_LEN};
 
 use crate::error::HttpSigError;
 use crate::message::{Component, ComponentSource};
@@ -354,10 +354,12 @@ pub fn sign(
 ) -> Result<SignedSignature, HttpSigError> {
     let params_value = serialize_params_value(components, params);
     let base = signature_base_from_params_str(message, components, &params_value)?;
-    let signature: Signature = signing_key.sign(base.as_bytes());
     Ok(SignedSignature {
         signature_input: format!("{label}={params_value}"),
-        signature: format!("{label}=:{}:", STANDARD.encode(signature.to_bytes())),
+        signature: format!(
+            "{label}=:{}:",
+            STANDARD.encode(signing_key.sign(base.as_bytes()))
+        ),
     })
 }
 
@@ -516,7 +518,7 @@ fn parse_signature_input(
 }
 
 /// Parses a `Signature` field value into its label and 64-byte signature.
-fn parse_signature(value: &str) -> Result<(String, [u8; 64]), HttpSigError> {
+fn parse_signature(value: &str) -> Result<(String, [u8; SIGNATURE_LEN]), HttpSigError> {
     let (label, rest) = split_member(value)?;
     let b64 = rest
         .trim()
@@ -526,7 +528,7 @@ fn parse_signature(value: &str) -> Result<(String, [u8; 64]), HttpSigError> {
     let bytes = STANDARD
         .decode(b64)
         .map_err(|_| HttpSigError::MalformedSignature)?;
-    let array: [u8; 64] = bytes
+    let array: [u8; SIGNATURE_LEN] = bytes
         .try_into()
         .map_err(|_| HttpSigError::MalformedSignature)?;
     Ok((label.to_owned(), array))
@@ -585,9 +587,8 @@ pub fn verify(
     }
 
     let base = signature_base_from_params_str(message, &components, &params_value)?;
-    let signature = Signature::from_bytes(&sig_bytes);
     verifying_key
-        .verify_strict(base.as_bytes(), &signature)
+        .verify(base.as_bytes(), &sig_bytes)
         .map_err(|_| HttpSigError::InvalidSignature)?;
 
     for required in &config.required_components {
@@ -651,7 +652,7 @@ pub fn verify(
 
 #[cfg(test)]
 mod tests {
-    use ed25519_dalek::SigningKey;
+    use wimsey_jose::SigningKey;
 
     use super::{sign, signature_base, verify, SignatureParams, VerifyConfig, ALG};
     use crate::error::HttpSigError;
@@ -722,7 +723,7 @@ mod tests {
 
     #[test]
     fn round_trips() {
-        let key = SigningKey::from_bytes(&[5u8; 32]);
+        let key = SigningKey::from_ed25519_seed(&[5u8; 32]);
         let request = rfc_request();
         let components = rfc_components();
         let signed = sign(&request, &components, &ed25519_params(), "sig1", &key).unwrap();
@@ -742,7 +743,7 @@ mod tests {
 
     #[test]
     fn rejects_a_tampered_request() {
-        let key = SigningKey::from_bytes(&[5u8; 32]);
+        let key = SigningKey::from_ed25519_seed(&[5u8; 32]);
         let mut request = rfc_request();
         let components = rfc_components();
         let signed = sign(&request, &components, &ed25519_params(), "sig1", &key).unwrap();
@@ -767,8 +768,8 @@ mod tests {
 
     #[test]
     fn rejects_the_wrong_key() {
-        let key = SigningKey::from_bytes(&[5u8; 32]);
-        let other = SigningKey::from_bytes(&[6u8; 32]);
+        let key = SigningKey::from_ed25519_seed(&[5u8; 32]);
+        let other = SigningKey::from_ed25519_seed(&[6u8; 32]);
         let request = rfc_request();
         let signed = sign(&request, &rfc_components(), &ed25519_params(), "sig1", &key).unwrap();
 
@@ -784,7 +785,7 @@ mod tests {
 
     #[test]
     fn rejects_a_missing_covered_header() {
-        let key = SigningKey::from_bytes(&[5u8; 32]);
+        let key = SigningKey::from_ed25519_seed(&[5u8; 32]);
         let request = HttpRequest {
             headers: vec![],
             ..rfc_request()
@@ -795,7 +796,7 @@ mod tests {
 
     #[test]
     fn enforces_expiry() {
-        let key = SigningKey::from_bytes(&[5u8; 32]);
+        let key = SigningKey::from_ed25519_seed(&[5u8; 32]);
         let request = rfc_request();
         let params = SignatureParams {
             created: Some(1_700_000_000),
@@ -822,7 +823,7 @@ mod tests {
 
     #[test]
     fn rejects_a_label_mismatch() {
-        let key = SigningKey::from_bytes(&[5u8; 32]);
+        let key = SigningKey::from_ed25519_seed(&[5u8; 32]);
         let request = rfc_request();
         let signed = sign(&request, &rfc_components(), &ed25519_params(), "sig1", &key).unwrap();
 
@@ -842,7 +843,7 @@ mod tests {
 
     #[test]
     fn is_deterministic() {
-        let key = SigningKey::from_bytes(&[5u8; 32]);
+        let key = SigningKey::from_ed25519_seed(&[5u8; 32]);
         let request = rfc_request();
         let components = rfc_components();
         let a = sign(&request, &components, &ed25519_params(), "sig1", &key).unwrap();
@@ -853,7 +854,7 @@ mod tests {
 
     #[test]
     fn rejects_a_missing_required_component() {
-        let key = SigningKey::from_bytes(&[5u8; 32]);
+        let key = SigningKey::from_ed25519_seed(&[5u8; 32]);
         let request = rfc_request();
         // Signature covers method and path only.
         let signed = sign(
@@ -884,7 +885,7 @@ mod tests {
 
     #[test]
     fn rejects_a_non_ed25519_alg() {
-        let key = SigningKey::from_bytes(&[5u8; 32]);
+        let key = SigningKey::from_ed25519_seed(&[5u8; 32]);
         let request = rfc_request();
         let params = SignatureParams {
             created: Some(1_700_000_000),
@@ -906,7 +907,7 @@ mod tests {
 
     #[test]
     fn rejects_crlf_in_a_covered_header() {
-        let key = SigningKey::from_bytes(&[5u8; 32]);
+        let key = SigningKey::from_ed25519_seed(&[5u8; 32]);
         let mut request = rfc_request();
         request
             .headers
@@ -924,7 +925,7 @@ mod tests {
 
     #[test]
     fn rejects_an_inverted_time_window() {
-        let key = SigningKey::from_bytes(&[5u8; 32]);
+        let key = SigningKey::from_ed25519_seed(&[5u8; 32]);
         let request = rfc_request();
         let params = SignatureParams {
             created: Some(1_700_000_300),
@@ -947,7 +948,7 @@ mod tests {
 
     #[test]
     fn enforces_max_age() {
-        let key = SigningKey::from_bytes(&[5u8; 32]);
+        let key = SigningKey::from_ed25519_seed(&[5u8; 32]);
         let request = rfc_request();
         // created is 1_700_000_000.
         let signed = sign(&request, &rfc_components(), &ed25519_params(), "sig1", &key).unwrap();
@@ -970,9 +971,8 @@ mod tests {
     #[test]
     fn tolerates_unknown_boolean_parameters() {
         use base64::{engine::general_purpose::STANDARD, Engine};
-        use ed25519_dalek::Signer;
 
-        let key = SigningKey::from_bytes(&[5u8; 32]);
+        let key = SigningKey::from_ed25519_seed(&[5u8; 32]);
         let request = rfc_request();
         // A params value carrying a boolean parameter `;ext` (no value).
         let params_value = "(\"@method\" \"@path\");created=1700000000;ext";
@@ -980,7 +980,7 @@ mod tests {
             "\"@method\": {}\n\"@path\": {}\n\"@signature-params\": {params_value}",
             request.method, request.path,
         );
-        let signature = STANDARD.encode(key.sign(base.as_bytes()).to_bytes());
+        let signature = STANDARD.encode(key.sign(base.as_bytes()));
         let signature_input = format!("sig1={params_value}");
         let signature = format!("sig1=:{signature}:");
 
@@ -1009,7 +1009,7 @@ mod tests {
     fn round_trips_params_with_quoted_delimiters() {
         // A keyid whose value legitimately contains `;`, `)` and `"` (all valid
         // inside an RFC 8941 string) must survive the round trip.
-        let key = SigningKey::from_bytes(&[5u8; 32]);
+        let key = SigningKey::from_ed25519_seed(&[5u8; 32]);
         let request = rfc_request();
         let params = SignatureParams {
             created: Some(1_700_000_000),
@@ -1037,7 +1037,7 @@ mod tests {
     fn rejects_crlf_in_signature_params() {
         use base64::{engine::general_purpose::STANDARD, Engine};
 
-        let key = SigningKey::from_bytes(&[5u8; 32]);
+        let key = SigningKey::from_ed25519_seed(&[5u8; 32]);
         let request = rfc_request();
         // A newline smuggled into the parameters (parses, but must be rejected).
         let signature_input = "sig1=(\"@method\")\n;created=1700000000";
@@ -1077,7 +1077,7 @@ mod tests {
     }
 
     fn sign_with(params: &SignatureParams) -> (SigningKey, HttpRequest, super::SignedSignature) {
-        let key = SigningKey::from_bytes(&[5u8; 32]);
+        let key = SigningKey::from_ed25519_seed(&[5u8; 32]);
         let request = rfc_request();
         let signed = sign(&request, &rfc_components(), params, "wimse", &key).unwrap();
         (key, request, signed)
@@ -1222,7 +1222,7 @@ mod tests {
     // anything can still probe for the audience a service answers to.
     #[test]
     fn reports_a_forgery_as_invalid_regardless_of_audience() {
-        let key = SigningKey::from_bytes(&[5u8; 32]);
+        let key = SigningKey::from_ed25519_seed(&[5u8; 32]);
         let request = rfc_request();
         let (_, _, signed) = sign_with(&wimse_params());
         let forged = format!("wimse=:{}:", STANDARD.encode([0u8; 64]));
@@ -1375,7 +1375,7 @@ mod tests {
 
     #[test]
     fn signs_and_verifies_a_response() {
-        let key = SigningKey::from_bytes(&[5u8; 32]);
+        let key = SigningKey::from_ed25519_seed(&[5u8; 32]);
         let request = rfc_request();
         let response = rfc_response();
         let exchange = HttpExchange {
@@ -1402,7 +1402,7 @@ mod tests {
 
     #[test]
     fn a_response_cannot_be_lifted_onto_another_request() {
-        let key = SigningKey::from_bytes(&[5u8; 32]);
+        let key = SigningKey::from_ed25519_seed(&[5u8; 32]);
         let request = rfc_request();
         let response = rfc_response();
         let signed = sign(
@@ -1436,7 +1436,7 @@ mod tests {
 
     #[test]
     fn rejects_a_response_answering_a_different_request() {
-        let key = SigningKey::from_bytes(&[5u8; 32]);
+        let key = SigningKey::from_ed25519_seed(&[5u8; 32]);
         let request = rfc_request();
         let response = rfc_response();
         let exchange = HttpExchange {
@@ -1502,7 +1502,7 @@ mod tests {
 
     #[test]
     fn rejects_max_age_without_now() {
-        let key = SigningKey::from_bytes(&[5u8; 32]);
+        let key = SigningKey::from_ed25519_seed(&[5u8; 32]);
         let request = rfc_request();
         let signed = sign(&request, &rfc_components(), &ed25519_params(), "sig1", &key).unwrap();
 

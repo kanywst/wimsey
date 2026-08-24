@@ -57,7 +57,7 @@ impl Issuer {
         assert!(default_ttl > 0, "default_ttl must be greater than 0");
         // The JWKS is static, so render it once. Advertise the `kid` so verifiers
         // can match it to the WIT's JOSE header.
-        let mut jwk = json!(Jwk::from_ed25519(&signing_key.verifying_key()));
+        let mut jwk = json!(Jwk::from_verifying_key(&signing_key.verifying_key()));
         if let (Some(object), Some(kid)) = (jwk.as_object_mut(), kid.as_ref()) {
             object.insert("kid".to_owned(), json!(kid));
         }
@@ -75,7 +75,7 @@ impl Issuer {
     /// The issuer's public key as an OKP JWK.
     #[must_use]
     pub fn public_jwk(&self) -> Jwk {
-        Jwk::from_ed25519(&self.signing_key.verifying_key())
+        Jwk::from_verifying_key(&self.signing_key.verifying_key())
     }
 }
 
@@ -157,7 +157,7 @@ async fn issue_wit(
     // Reject a confirmation key that is not a usable Ed25519 key.
     request
         .cnf_jwk
-        .to_ed25519()
+        .to_verifying_key()
         .map_err(|_| IssueError::BadRequest("invalid cnf_jwk".to_owned()))?;
 
     // `default_ttl` is also the maximum a client may request.

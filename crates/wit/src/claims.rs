@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 use wimsey_identifier::WorkloadIdentifier;
 
-use crate::jwk::Jwk;
+use wimsey_jose::Jwk;
 
 /// The `cnf` (confirmation) claim binding a proof-of-possession key to the WIT.
 ///

@@ -9,17 +9,22 @@
 //! must carry an `alg` member, which pins the algorithm the proof of possession
 //! has to be produced with.
 //!
-//! This crate signs with `EdDSA` (Ed25519, RFC 8037). Ed25519 signatures are
-//! deterministic, so a token is byte-for-byte reproducible for a given key and
-//! input — see the conformance vectors under `conformance/wit/`.
+//! Signing uses `EdDSA` (Ed25519) or `ES256` (ECDSA P-256), the latter because
+//! Section 5.1 requires it of general-purpose implementations. Both are
+//! deterministic — ES256 through its RFC 6979 nonce — so a token is
+//! byte-for-byte reproducible for a given key and input. See the conformance
+//! vectors under `conformance/wit/`.
+//!
+//! The header's `alg` follows the signing key, and verification requires it to
+//! match the key presented, so a token cannot name one algorithm and be checked
+//! under another.
 //!
 //! ```
-//! use ed25519_dalek::SigningKey;
 //! use wimsey_identifier::WorkloadIdentifier;
-//! use wimsey_wit::{issue, verify, Confirmation, Jwk, Validation, WitClaims};
+//! use wimsey_wit::{issue, verify, Confirmation, Jwk, SigningKey, Validation, WitClaims};
 //!
-//! let issuer_key = SigningKey::from_bytes(&[1u8; 32]);
-//! let pop_key = SigningKey::from_bytes(&[7u8; 32]);
+//! let issuer_key = SigningKey::from_ed25519_seed(&[1u8; 32]);
+//! let pop_key = SigningKey::from_p256_scalar(&[7u8; 32])?;
 //!
 //! let claims = WitClaims {
 //!     iss: Some("https://issuer.example".to_owned()),
@@ -27,26 +32,29 @@
 //!     iat: Some(1_700_000_000),
 //!     exp: 1_700_003_600,
 //!     jti: Some("a1b2c3".to_owned()),
-//!     cnf: Confirmation { jwk: Jwk::from_ed25519(&pop_key.verifying_key()) },
+//!     cnf: Confirmation { jwk: Jwk::from_verifying_key(&pop_key.verifying_key()) },
 //! };
 //!
-//! let token = issue(&claims, Some("issuer-key-1"), &issuer_key).unwrap();
-//! let verified = verify(&token, &issuer_key.verifying_key(), &Validation::at(1_700_000_000)).unwrap();
+//! let token = issue(&claims, Some("issuer-key-1"), &issuer_key)?;
+//! let verified = verify(&token, &issuer_key.verifying_key(), &Validation::at(1_700_000_000))?;
 //! assert_eq!(verified.claims.sub.trust_domain(), "example.org");
+//!
+//! // The confirmation key is an ES256 key, recovered ready to check a proof.
+//! assert_eq!(verified.pop_key, pop_key.verifying_key());
+//! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 
 mod claims;
 mod error;
-mod jwk;
 mod token;
 
 pub use claims::{Confirmation, WitClaims};
 pub use error::WitError;
-pub use jwk::Jwk;
 pub use token::{issue, verify, Validation, VerifiedWit, ALG, TYP};
 
-// Re-exported so callers can name the key types without a direct dependency.
-pub use ed25519_dalek::{SigningKey, VerifyingKey};
+// Re-exported so callers can name the key and JWK types without a direct
+// dependency on `wimsey-jose`.
+pub use wimsey_jose::{Algorithm, Jwk, SigningKey, VerifyingKey};
 
 /// Returns the current time in seconds since the Unix epoch.
 ///

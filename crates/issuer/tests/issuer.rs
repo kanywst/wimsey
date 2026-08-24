@@ -37,12 +37,12 @@ async fn post_wit(app: axum::Router, body: serde_json::Value) -> (StatusCode, se
 
 #[tokio::test]
 async fn issues_a_verifiable_wit() {
-    let issuer_key = SigningKey::from_bytes(&[1u8; 32]);
-    let pop_key = SigningKey::from_bytes(&[9u8; 32]);
+    let issuer_key = SigningKey::from_ed25519_seed(&[1u8; 32]);
+    let pop_key = SigningKey::from_ed25519_seed(&[9u8; 32]);
 
     let body = serde_json::json!({
         "sub": "spiffe://example.org/api",
-        "cnf_jwk": Jwk::from_ed25519(&pop_key.verifying_key()),
+        "cnf_jwk": Jwk::from_verifying_key(&pop_key.verifying_key()),
     });
     let (status, json) = post_wit(app(issuer_key.clone()), body).await;
     assert_eq!(status, StatusCode::OK);
@@ -61,12 +61,12 @@ async fn issues_a_verifiable_wit() {
 
 #[tokio::test]
 async fn rejects_a_bad_subject() {
-    let pop_key = SigningKey::from_bytes(&[9u8; 32]);
+    let pop_key = SigningKey::from_ed25519_seed(&[9u8; 32]);
     let body = serde_json::json!({
         "sub": "not-a-spiffe-id",
-        "cnf_jwk": Jwk::from_ed25519(&pop_key.verifying_key()),
+        "cnf_jwk": Jwk::from_verifying_key(&pop_key.verifying_key()),
     });
-    let (status, _) = post_wit(app(SigningKey::from_bytes(&[1u8; 32])), body).await;
+    let (status, _) = post_wit(app(SigningKey::from_ed25519_seed(&[1u8; 32])), body).await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
 }
 
@@ -76,13 +76,13 @@ async fn rejects_an_invalid_confirmation_key() {
         "sub": "spiffe://example.org/api",
         "cnf_jwk": { "kty": "OKP", "crv": "Ed25519", "x": "not-a-key" },
     });
-    let (status, _) = post_wit(app(SigningKey::from_bytes(&[1u8; 32])), body).await;
+    let (status, _) = post_wit(app(SigningKey::from_ed25519_seed(&[1u8; 32])), body).await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]
 async fn healthz_and_jwks() {
-    let issuer_key = SigningKey::from_bytes(&[1u8; 32]);
+    let issuer_key = SigningKey::from_ed25519_seed(&[1u8; 32]);
     let app = app(issuer_key.clone());
 
     let health = app
@@ -102,31 +102,31 @@ async fn healthz_and_jwks() {
     assert_eq!(json["keys"][0]["kid"], "issuer-key-1");
     assert_eq!(
         json["keys"][0]["x"],
-        serde_json::to_value(Jwk::from_ed25519(&issuer_key.verifying_key()).x).unwrap()
+        serde_json::to_value(Jwk::from_verifying_key(&issuer_key.verifying_key()).x).unwrap()
     );
 }
 
 #[tokio::test]
 async fn rejects_an_excessive_ttl() {
-    let pop_key = SigningKey::from_bytes(&[9u8; 32]);
+    let pop_key = SigningKey::from_ed25519_seed(&[9u8; 32]);
     let body = serde_json::json!({
         "sub": "spiffe://example.org/api",
-        "cnf_jwk": Jwk::from_ed25519(&pop_key.verifying_key()),
+        "cnf_jwk": Jwk::from_verifying_key(&pop_key.verifying_key()),
         "ttl": 100_000,
     });
     // The app's default (and maximum) ttl is 3600.
-    let (status, _) = post_wit(app(SigningKey::from_bytes(&[1u8; 32])), body).await;
+    let (status, _) = post_wit(app(SigningKey::from_ed25519_seed(&[1u8; 32])), body).await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]
 async fn rejects_a_zero_ttl() {
-    let pop_key = SigningKey::from_bytes(&[9u8; 32]);
+    let pop_key = SigningKey::from_ed25519_seed(&[9u8; 32]);
     let body = serde_json::json!({
         "sub": "spiffe://example.org/api",
-        "cnf_jwk": Jwk::from_ed25519(&pop_key.verifying_key()),
+        "cnf_jwk": Jwk::from_verifying_key(&pop_key.verifying_key()),
         "ttl": 0,
     });
-    let (status, _) = post_wit(app(SigningKey::from_bytes(&[1u8; 32])), body).await;
+    let (status, _) = post_wit(app(SigningKey::from_ed25519_seed(&[1u8; 32])), body).await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
 }

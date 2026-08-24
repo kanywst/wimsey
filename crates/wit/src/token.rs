@@ -1,8 +1,8 @@
 //! Compact-JWS issuance and verification of Workload Identity Tokens.
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-use ed25519_dalek::{Signature, Signer, SigningKey, VerifyingKey};
 use serde::{Deserialize, Serialize};
+use wimsey_jose::{Algorithm, SigningKey, VerifyingKey, SIGNATURE_LEN};
 
 use crate::claims::WitClaims;
 use crate::error::WitError;
@@ -10,7 +10,11 @@ use crate::error::WitError;
 /// The JOSE `typ` of a Workload Identity Token.
 pub const TYP: &str = "wit+jwt";
 
-/// The only signature algorithm supported by this crate.
+/// The signature algorithm this crate prefers.
+///
+/// Not the only one: a WIT may be signed with `ES256`, which Section 5.1 of the
+/// draft requires general-purpose implementations to support. The algorithm is
+/// taken from the key rather than fixed here.
 pub const ALG: &str = "EdDSA";
 
 /// The maximum accepted size, in bytes, of a compact WIT serialization.
@@ -76,8 +80,8 @@ pub struct VerifiedWit {
     pub claims: WitClaims,
     /// The `kid` from the JOSE header, if present.
     pub kid: Option<String>,
-    /// The validated Ed25519 proof-of-possession key from the `cnf` claim. A
-    /// Workload Proof Token is later checked against this key.
+    /// The validated proof-of-possession key from the `cnf` claim. A Workload
+    /// Proof Token is later checked against this key.
     pub pop_key: VerifyingKey,
 }
 
@@ -96,15 +100,16 @@ pub fn issue(
 ) -> Result<String, WitError> {
     let header = Header {
         typ: TYP.to_owned(),
-        alg: ALG.to_owned(),
+        // The algorithm follows the key, so a caller cannot claim one thing in
+        // the header and sign with another.
+        alg: signing_key.algorithm().as_str().to_owned(),
         kid: kid.map(ToOwned::to_owned),
         crit: None,
     };
     let header_b64 = URL_SAFE_NO_PAD.encode(serde_json::to_vec(&header)?);
     let claims_b64 = URL_SAFE_NO_PAD.encode(serde_json::to_vec(claims)?);
     let signing_input = format!("{header_b64}.{claims_b64}");
-    let signature: Signature = signing_key.sign(signing_input.as_bytes());
-    let signature_b64 = URL_SAFE_NO_PAD.encode(signature.to_bytes());
+    let signature_b64 = URL_SAFE_NO_PAD.encode(signing_key.sign(signing_input.as_bytes()));
     Ok(format!("{signing_input}.{signature_b64}"))
 }
 
@@ -141,23 +146,31 @@ pub fn verify(
     if header.typ != TYP {
         return Err(WitError::WrongType { found: header.typ });
     }
-    if header.alg != ALG {
-        return Err(WitError::UnsupportedAlg { found: header.alg });
+    // Parsing rejects `none`, symmetric and encryption algorithms outright;
+    // the comparison then requires the token to have been signed with the key
+    // actually being presented, rather than merely with something this crate
+    // can verify.
+    let alg = Algorithm::parse(&header.alg).map_err(|e| match e {
+        wimsey_jose::JoseError::UnsupportedAlg { found }
+        | wimsey_jose::JoseError::ForbiddenAlg { found } => WitError::UnsupportedAlg { found },
+        other => WitError::from(other),
+    })?;
+    if alg != verifying_key.algorithm() {
+        return Err(WitError::AlgorithmMismatch);
     }
     // This crate understands no critical extensions, so any `crit` is fatal.
     if header.crit.is_some() {
         return Err(WitError::UnsupportedCritical);
     }
 
-    let signature_bytes = URL_SAFE_NO_PAD.decode(signature_b64)?;
-    let signature_array: [u8; 64] = signature_bytes
-        .try_into()
-        .map_err(|_| WitError::MalformedToken)?;
-    let signature = Signature::from_bytes(&signature_array);
+    let signature = URL_SAFE_NO_PAD.decode(signature_b64)?;
+    if signature.len() != SIGNATURE_LEN {
+        return Err(WitError::MalformedToken);
+    }
 
     let signing_input = format!("{header_b64}.{claims_b64}");
     verifying_key
-        .verify_strict(signing_input.as_bytes(), &signature)
+        .verify(signing_input.as_bytes(), &signature)
         .map_err(|_| WitError::InvalidSignature)?;
 
     let claims: WitClaims = serde_json::from_slice(&URL_SAFE_NO_PAD.decode(claims_b64)?)?;
@@ -181,7 +194,7 @@ pub fn verify(
     }
 
     // A verified WIT must carry a usable confirmation key.
-    let pop_key = claims.cnf.jwk.to_ed25519()?;
+    let pop_key = claims.cnf.jwk.to_verifying_key()?;
 
     Ok(VerifiedWit {
         claims,
@@ -192,16 +205,23 @@ pub fn verify(
 
 #[cfg(test)]
 mod tests {
-    use ed25519_dalek::SigningKey;
     use wimsey_identifier::WorkloadIdentifier;
+    use wimsey_jose::{Jwk, SigningKey};
 
     use super::{issue, verify, Validation};
     use crate::claims::{Confirmation, WitClaims};
     use crate::error::WitError;
-    use crate::jwk::Jwk;
+
+    /// The two algorithms a WIT may be signed with, so each test covers both.
+    fn issuer_keys() -> [SigningKey; 2] {
+        [
+            SigningKey::from_ed25519_seed(&[1u8; 32]),
+            SigningKey::from_p256_scalar(&[1u8; 32]).unwrap(),
+        ]
+    }
 
     fn sample_claims() -> WitClaims {
-        let cnf_key = SigningKey::from_bytes(&[7u8; 32]);
+        let cnf_key = SigningKey::from_ed25519_seed(&[7u8; 32]);
         WitClaims {
             iss: Some("https://issuer.example".to_owned()),
             sub: WorkloadIdentifier::parse("spiffe://example.org/workload/api").unwrap(),
@@ -209,14 +229,14 @@ mod tests {
             exp: 1_700_003_600,
             jti: Some("a1b2c3".to_owned()),
             cnf: Confirmation {
-                jwk: Jwk::from_ed25519(&cnf_key.verifying_key()),
+                jwk: Jwk::from_verifying_key(&cnf_key.verifying_key()),
             },
         }
     }
 
     #[test]
     fn round_trips() {
-        let key = SigningKey::from_bytes(&[1u8; 32]);
+        let key = SigningKey::from_ed25519_seed(&[1u8; 32]);
         let claims = sample_claims();
         let token = issue(&claims, Some("issuer-key-1"), &key).unwrap();
 
@@ -226,9 +246,66 @@ mod tests {
         assert_eq!(verified.kid.as_deref(), Some("issuer-key-1"));
     }
 
+    // Section 5.1 requires ES256 of general-purpose implementations, and the
+    // draft's own example WIT is signed with it.
+    #[test]
+    fn round_trips_under_both_signing_algorithms() {
+        for key in issuer_keys() {
+            let claims = sample_claims();
+            let token = issue(&claims, Some("issuer-key-1"), &key).unwrap();
+            let verified =
+                verify(&token, &key.verifying_key(), &Validation::at(1_700_000_000)).unwrap();
+            assert_eq!(verified.claims, claims);
+        }
+    }
+
+    #[test]
+    fn issuing_is_deterministic_under_both_algorithms() {
+        for key in issuer_keys() {
+            let claims = sample_claims();
+            assert_eq!(
+                issue(&claims, Some("k"), &key).unwrap(),
+                issue(&claims, Some("k"), &key).unwrap()
+            );
+        }
+    }
+
+    // A token signed under one algorithm must not be accepted by a key of the
+    // other, and the failure must say so rather than looking like a bad
+    // signature.
+    #[test]
+    fn rejects_a_token_whose_alg_is_not_the_keys() {
+        let [ed, p256] = issuer_keys();
+        let token = issue(&sample_claims(), None, &ed).unwrap();
+
+        let err = verify(
+            &token,
+            &p256.verifying_key(),
+            &Validation::at(1_700_000_000),
+        );
+        assert!(matches!(err, Err(WitError::AlgorithmMismatch)));
+    }
+
+    #[test]
+    fn verifies_an_es256_confirmation_key() {
+        let issuer = SigningKey::from_ed25519_seed(&[1u8; 32]);
+        let pop = SigningKey::from_p256_scalar(&[7u8; 32]).unwrap();
+        let mut claims = sample_claims();
+        claims.cnf.jwk = Jwk::from_verifying_key(&pop.verifying_key());
+
+        let token = issue(&claims, None, &issuer).unwrap();
+        let verified = verify(
+            &token,
+            &issuer.verifying_key(),
+            &Validation::at(1_700_000_000),
+        )
+        .unwrap();
+        assert_eq!(verified.pop_key, pop.verifying_key());
+    }
+
     #[test]
     fn rejects_a_tampered_payload() {
-        let key = SigningKey::from_bytes(&[1u8; 32]);
+        let key = SigningKey::from_ed25519_seed(&[1u8; 32]);
         let token = issue(&sample_claims(), None, &key).unwrap();
 
         // Flip the last character of the payload segment.
@@ -249,8 +326,8 @@ mod tests {
 
     #[test]
     fn rejects_the_wrong_key() {
-        let key = SigningKey::from_bytes(&[1u8; 32]);
-        let other = SigningKey::from_bytes(&[2u8; 32]);
+        let key = SigningKey::from_ed25519_seed(&[1u8; 32]);
+        let other = SigningKey::from_ed25519_seed(&[2u8; 32]);
         let token = issue(&sample_claims(), None, &key).unwrap();
 
         let err = verify(
@@ -263,7 +340,7 @@ mod tests {
 
     #[test]
     fn rejects_an_expired_token() {
-        let key = SigningKey::from_bytes(&[1u8; 32]);
+        let key = SigningKey::from_ed25519_seed(&[1u8; 32]);
         let token = issue(&sample_claims(), None, &key).unwrap();
 
         let err = verify(&token, &key.verifying_key(), &Validation::at(1_700_003_601));
@@ -272,7 +349,7 @@ mod tests {
 
     #[test]
     fn honours_leeway_on_expiry() {
-        let key = SigningKey::from_bytes(&[1u8; 32]);
+        let key = SigningKey::from_ed25519_seed(&[1u8; 32]);
         let token = issue(&sample_claims(), None, &key).unwrap();
 
         let validation = Validation::at(1_700_003_601).with_leeway(30);
@@ -281,7 +358,7 @@ mod tests {
 
     #[test]
     fn rejects_a_token_issued_in_the_future() {
-        let key = SigningKey::from_bytes(&[1u8; 32]);
+        let key = SigningKey::from_ed25519_seed(&[1u8; 32]);
         let token = issue(&sample_claims(), None, &key).unwrap();
 
         let err = verify(&token, &key.verifying_key(), &Validation::at(1_699_999_999));
@@ -290,7 +367,7 @@ mod tests {
 
     #[test]
     fn enforces_the_expected_issuer() {
-        let key = SigningKey::from_bytes(&[1u8; 32]);
+        let key = SigningKey::from_ed25519_seed(&[1u8; 32]);
         let token = issue(&sample_claims(), None, &key).unwrap();
 
         let validation = Validation::at(1_700_000_000).expect_issuer("https://other.example");
@@ -300,7 +377,7 @@ mod tests {
 
     #[test]
     fn rejects_a_token_with_too_few_parts() {
-        let key = SigningKey::from_bytes(&[1u8; 32]);
+        let key = SigningKey::from_ed25519_seed(&[1u8; 32]);
         let err = verify(
             "only.two",
             &key.verifying_key(),
@@ -311,7 +388,7 @@ mod tests {
 
     #[test]
     fn is_deterministic() {
-        let key = SigningKey::from_bytes(&[1u8; 32]);
+        let key = SigningKey::from_ed25519_seed(&[1u8; 32]);
         let claims = sample_claims();
         let a = issue(&claims, Some("k"), &key).unwrap();
         let b = issue(&claims, Some("k"), &key).unwrap();
@@ -320,7 +397,7 @@ mod tests {
 
     #[test]
     fn rejects_at_exactly_expiry() {
-        let key = SigningKey::from_bytes(&[1u8; 32]);
+        let key = SigningKey::from_ed25519_seed(&[1u8; 32]);
         let token = issue(&sample_claims(), None, &key).unwrap();
 
         // `now == exp`: the token is no longer valid (RFC 7519 requires before).
@@ -330,8 +407,8 @@ mod tests {
 
     #[test]
     fn exposes_the_validated_pop_key() {
-        let key = SigningKey::from_bytes(&[1u8; 32]);
-        let pop_key = SigningKey::from_bytes(&[7u8; 32]);
+        let key = SigningKey::from_ed25519_seed(&[1u8; 32]);
+        let pop_key = SigningKey::from_ed25519_seed(&[7u8; 32]);
         let token = issue(&sample_claims(), None, &key).unwrap();
 
         let verified =
@@ -341,13 +418,14 @@ mod tests {
 
     #[test]
     fn rejects_an_invalid_confirmation_key() {
-        let key = SigningKey::from_bytes(&[1u8; 32]);
+        let key = SigningKey::from_ed25519_seed(&[1u8; 32]);
         let mut claims = sample_claims();
         claims.cnf.jwk = Jwk {
             alg: Some("EdDSA".to_owned()),
             kty: "OKP".to_owned(),
             crv: "Ed25519".to_owned(),
             x: "not-a-valid-key".to_owned(),
+            y: None,
         };
         let token = issue(&claims, None, &key).unwrap();
 
@@ -359,7 +437,7 @@ mod tests {
     // verify, because nothing then pins the algorithm the proof is produced with.
     #[test]
     fn rejects_a_confirmation_key_without_alg() {
-        let key = SigningKey::from_bytes(&[1u8; 32]);
+        let key = SigningKey::from_ed25519_seed(&[1u8; 32]);
         let mut claims = sample_claims();
         claims.cnf.jwk.alg = None;
         let token = issue(&claims, None, &key).unwrap();
@@ -370,7 +448,7 @@ mod tests {
 
     #[test]
     fn rejects_a_forbidden_confirmation_alg() {
-        let key = SigningKey::from_bytes(&[1u8; 32]);
+        let key = SigningKey::from_ed25519_seed(&[1u8; 32]);
         let mut claims = sample_claims();
         claims.cnf.jwk.alg = Some("HS256".to_owned());
         let token = issue(&claims, None, &key).unwrap();
@@ -386,7 +464,7 @@ mod tests {
     // mandatory claims must verify.
     #[test]
     fn verifies_a_token_with_only_the_mandatory_claims() {
-        let key = SigningKey::from_bytes(&[1u8; 32]);
+        let key = SigningKey::from_ed25519_seed(&[1u8; 32]);
         let claims = WitClaims {
             iss: None,
             iat: None,
@@ -404,7 +482,7 @@ mod tests {
     // names none.
     #[test]
     fn rejects_an_absent_issuer_when_one_is_expected() {
-        let key = SigningKey::from_bytes(&[1u8; 32]);
+        let key = SigningKey::from_ed25519_seed(&[1u8; 32]);
         let claims = WitClaims {
             iss: None,
             ..sample_claims()
@@ -418,7 +496,7 @@ mod tests {
 
     #[test]
     fn rejects_an_oversized_token() {
-        let key = SigningKey::from_bytes(&[1u8; 32]);
+        let key = SigningKey::from_ed25519_seed(&[1u8; 32]);
         let oversized = "a".repeat(super::MAX_TOKEN_LEN + 1);
 
         let err = verify(
@@ -432,14 +510,13 @@ mod tests {
     #[test]
     fn rejects_a_critical_header() {
         use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-        use ed25519_dalek::Signer;
 
-        let key = SigningKey::from_bytes(&[1u8; 32]);
+        let key = SigningKey::from_ed25519_seed(&[1u8; 32]);
         // A well-signed token whose header marks an extension critical.
         let header = URL_SAFE_NO_PAD.encode(r#"{"typ":"wit+jwt","alg":"EdDSA","crit":["exp"]}"#);
         let claims = URL_SAFE_NO_PAD.encode(serde_json::to_vec(&sample_claims()).unwrap());
         let signing_input = format!("{header}.{claims}");
-        let signature = URL_SAFE_NO_PAD.encode(key.sign(signing_input.as_bytes()).to_bytes());
+        let signature = URL_SAFE_NO_PAD.encode(key.sign(signing_input.as_bytes()));
         let token = format!("{signing_input}.{signature}");
 
         let err = verify(&token, &key.verifying_key(), &Validation::at(1_700_000_000));

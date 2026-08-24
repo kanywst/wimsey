@@ -1,12 +1,12 @@
 //! Workload Identity Certificate (WIC): an X.509 certificate carrying the
 //! workload identifier in a URI subjectAltName, signed by a workload CA.
 
-use ed25519_dalek::{Signature, SigningKey, VerifyingKey};
 use rcgen::{
     BasicConstraints, CertificateParams, ExtendedKeyUsagePurpose, IsCa, Issuer, KeyPair, SanType,
     SubjectPublicKeyInfo, PKCS_ED25519,
 };
 use wimsey_identifier::WorkloadIdentifier;
+use wimsey_jose::{Algorithm, SigningKey, VerifyingKey};
 use x509_parser::certificate::X509Certificate;
 use x509_parser::extensions::GeneralName;
 use x509_parser::oid_registry::OID_SIG_ED25519;
@@ -54,9 +54,16 @@ fn ed25519_pkcs8(signing_key: &SigningKey) -> Vec<u8> {
 
 /// Wraps an Ed25519 public key as the `SubjectPublicKeyInfo` rcgen certifies.
 fn spki(public_key: &VerifyingKey) -> Result<SubjectPublicKeyInfo, MtlsError> {
+    // Certificates are Ed25519-only for now. The mutual-TLS draft does not
+    // require ES256 the way workload-creds does for the token path, so a P-256
+    // key is refused here rather than silently certified under the wrong
+    // algorithm identifier.
+    if public_key.algorithm() != Algorithm::EdDsa {
+        return Err(MtlsError::UnsupportedAlgorithm);
+    }
     let mut der = Vec::with_capacity(ED25519_SPKI_PREFIX.len() + 32);
     der.extend_from_slice(&ED25519_SPKI_PREFIX);
-    der.extend_from_slice(public_key.as_bytes());
+    der.extend_from_slice(&public_key.to_raw_bytes());
     SubjectPublicKeyInfo::from_der(&der).map_err(|_| MtlsError::InvalidKey)
 }
 
@@ -121,6 +128,9 @@ impl WorkloadCa {
         not_before: u64,
         not_after: u64,
     ) -> Result<Self, MtlsError> {
+        if signing_key.algorithm() != Algorithm::EdDsa {
+            return Err(MtlsError::UnsupportedAlgorithm);
+        }
         Self::from_pkcs8_der(&ed25519_pkcs8(signing_key), not_before, not_after)
     }
 
@@ -246,22 +256,17 @@ pub fn verify(wic_der: &[u8], ca_der: &[u8], now: u64) -> Result<WorkloadIdentif
         .as_ref()
         .try_into()
         .map_err(|_| MtlsError::InvalidKey)?;
-    let ca_key = VerifyingKey::from_bytes(&ca_key).map_err(|_| MtlsError::InvalidKey)?;
+    let ca_key = VerifyingKey::from_raw_bytes(Algorithm::EdDsa, &ca_key)
+        .map_err(|_| MtlsError::InvalidKey)?;
 
     // The signature BIT STRING must be a whole number of octets.
     if leaf.signature_value.unused_bits != 0 {
         return Err(MtlsError::InvalidSignature);
     }
-    let signature: [u8; 64] = leaf
-        .signature_value
-        .data
-        .as_ref()
-        .try_into()
-        .map_err(|_| MtlsError::InvalidSignature)?;
     ca_key
-        .verify_strict(
+        .verify(
             leaf.tbs_certificate.as_ref(),
-            &Signature::from_bytes(&signature),
+            leaf.signature_value.data.as_ref(),
         )
         .map_err(|_| MtlsError::InvalidSignature)?;
 
@@ -302,7 +307,7 @@ fn uri_san(cert: &X509Certificate) -> Result<WorkloadIdentifier, MtlsError> {
 mod tests {
     use wimsey_identifier::WorkloadIdentifier;
 
-    use ed25519_dalek::SigningKey;
+    use wimsey_jose::SigningKey;
 
     use super::{verify, workload_identifier, WorkloadCa};
     use crate::error::MtlsError;
@@ -323,7 +328,7 @@ mod tests {
 
     /// A key pair the *workload* owns. Only its public half reaches the CA.
     fn workload_key() -> SigningKey {
-        SigningKey::from_bytes(&[7u8; 32])
+        SigningKey::from_ed25519_seed(&[7u8; 32])
     }
 
     fn issue(ca: &WorkloadCa) -> Vec<u8> {
@@ -363,7 +368,7 @@ mod tests {
     // every peer that already trusts it.
     #[test]
     fn a_reloaded_ca_is_the_same_ca() {
-        let key = SigningKey::from_bytes(&[3u8; 32]);
+        let key = SigningKey::from_ed25519_seed(&[3u8; 32]);
         let first = WorkloadCa::from_ed25519(&key, CA_NBF, CA_NAF).unwrap();
         let restarted = WorkloadCa::from_ed25519(&key, CA_NBF, CA_NAF).unwrap();
         assert_eq!(first.certificate_der(), restarted.certificate_der());
@@ -378,7 +383,7 @@ mod tests {
 
     #[test]
     fn loads_a_ca_from_pkcs8() {
-        let key = SigningKey::from_bytes(&[3u8; 32]);
+        let key = SigningKey::from_ed25519_seed(&[3u8; 32]);
         let from_key = WorkloadCa::from_ed25519(&key, CA_NBF, CA_NAF).unwrap();
         let from_der =
             WorkloadCa::from_pkcs8_der(&super::ed25519_pkcs8(&key), CA_NBF, CA_NAF).unwrap();
@@ -396,7 +401,8 @@ mod tests {
     #[test]
     fn issuance_is_reproducible() {
         let ca =
-            WorkloadCa::from_ed25519(&SigningKey::from_bytes(&[3u8; 32]), CA_NBF, CA_NAF).unwrap();
+            WorkloadCa::from_ed25519(&SigningKey::from_ed25519_seed(&[3u8; 32]), CA_NBF, CA_NAF)
+                .unwrap();
         assert_eq!(issue(&ca), issue(&ca));
     }
 
@@ -412,7 +418,7 @@ mod tests {
         let (_, cert) = X509Certificate::from_der(&wic).unwrap();
         assert_eq!(
             cert.public_key().subject_public_key.data.as_ref(),
-            workload_key().verifying_key().as_bytes(),
+            &workload_key().verifying_key().to_raw_bytes()[..],
             "the WIC must carry the workload's own public key"
         );
     }

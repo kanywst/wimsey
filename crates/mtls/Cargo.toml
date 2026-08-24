@@ -14,6 +14,7 @@ categories.workspace = true
 
 [dependencies]
 wimsey-identifier = { workspace = true }
+wimsey-jose = { workspace = true }
 ed25519-dalek = { workspace = true }
 thiserror = { workspace = true }
 rcgen = { version = "0.14", default-features = false, features = [
