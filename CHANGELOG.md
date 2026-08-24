@@ -10,6 +10,32 @@ silently.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-08-25
+
+Three breaking changes, so per the pre-1.0 rule this is a minor bump. Cargo
+treats `0.3` and `0.4` as incompatible, so nothing picks this up silently.
+
+Between them they close the two remaining algorithm and protocol gaps against
+the pinned drafts: response signing for `http-signature-06`, and ES256 for
+`workload-creds-02`. `SPEC-MAP.md`'s known divergences are down from three to
+two, and both survivors are mTLS certificate concerns the mutual-TLS draft does
+not actually require.
+
+### Changed
+
+- **Breaking:** the conformance vector format is now `wimse-conformance/v2`.
+  Keys are recorded as JWKs rather than raw bytes, because raw bytes do not say
+  which algorithm they are for and so left nowhere to put an ES256 vector. The
+  key fields are renamed accordingly — `issuer_signing_key_seed_b64u` becomes
+  `issuer_signing_key`, and likewise across the WPT, httpsig and mTLS vectors —
+  and the `*-basic` token vectors are replaced by `*-eddsa` and `*-es256`.
+  Consumers already reject a `format` they do not recognise, so this is a
+  declared change rather than a silent one.
+- **Breaking:** `PrivateJwk`'s `Debug` redacts the private component. It
+  previously printed `d` in full, which was a regression against the CLI key
+  type it replaced; serializing still writes it, since that is the type's
+  purpose.
+
 ### Added
 
 - **ES256 support**, which closes the last algorithm divergence:
@@ -38,6 +64,17 @@ silently.
 - A `jwk_parse` fuzz target. A JWK is untrusted input twice over — inside a
   WIT's `cnf` claim and inside a fetched JWKS — and the target asserts that
   anything which decodes survives a round trip back to the same key.
+
+- ES256 conformance vectors for WIT, WPT and the HTTP-signature binding, and a
+  `declared-algorithm` check so a vector cannot name one algorithm while
+  carrying keys for another. That check exists because it happened: the field
+  regenerated identically every time and nothing read it, so both CI gates
+  stayed green while the vector lied to its only audience. 118 assertions, up
+  from 71.
+
+- Fuzz targets for every parser that reads untrusted bytes, seeded from the
+  conformance vectors rather than from committed blobs, with a 30-second
+  regression run per target in CI.
 
 - Response signing for `wimsey-httpsig`, closing the last gap against
   `http-signature-06`: the `@status` and `;req` covered components, the
@@ -172,7 +209,8 @@ public API.
 - Project governance, security policy, contributing guide (DCO), and OpenSSF
   Scorecard automation.
 
-[Unreleased]: https://github.com/kanywst/wimsey/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/kanywst/wimsey/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/kanywst/wimsey/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/kanywst/wimsey/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/kanywst/wimsey/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/kanywst/wimsey/releases/tag/v0.1.0
