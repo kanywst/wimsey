@@ -1,5 +1,7 @@
 //! The JSON Web Key that carries a public key inside a WIMSE credential.
 
+use std::fmt;
+
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use serde::{Deserialize, Serialize};
 
@@ -132,7 +134,11 @@ impl Jwk {
 /// The same members as a [`Jwk`] plus `d`: the 32-byte Ed25519 seed or the
 /// P-256 scalar. This is what a key file on disk holds, and what a test vector
 /// records so a consumer can re-sign from scratch.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+///
+/// [`Debug`] redacts `d`. Serializing still writes it, because writing the key
+/// out is the whole point of the type — but a stray `dbg!`, a panic message or
+/// a `format!("{:?}")` in a log line must not be how a private key escapes.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PrivateJwk {
     /// The algorithm this key signs with.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -148,6 +154,19 @@ pub struct PrivateJwk {
     pub y: Option<String>,
     /// The Base64url-encoded 32-byte private seed or scalar.
     pub d: String,
+}
+
+impl fmt::Debug for PrivateJwk {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("PrivateJwk")
+            .field("alg", &self.alg)
+            .field("kty", &self.kty)
+            .field("crv", &self.crv)
+            .field("x", &self.x)
+            .field("y", &self.y)
+            .field("d", &"<redacted>")
+            .finish()
+    }
 }
 
 impl PrivateJwk {
@@ -324,6 +343,21 @@ mod tests {
         let mut jwk = super::PrivateJwk::from_signing_key(&ed25519());
         jwk.d = super::PrivateJwk::from_signing_key(&SigningKey::from_ed25519_seed(&[8u8; 32])).d;
         assert!(matches!(jwk.to_signing_key(), Err(JoseError::InvalidKey)));
+    }
+
+    // A private key must not escape through a log line or a panic message.
+    #[test]
+    fn debug_does_not_print_the_private_key() {
+        let key = ed25519();
+        let jwk = super::PrivateJwk::from_signing_key(&key);
+        let rendered = format!("{jwk:?}");
+        assert!(rendered.contains("<redacted>"));
+        assert!(
+            !rendered.contains(&jwk.d),
+            "the private component must not appear in Debug output"
+        );
+        // The public half is still useful to see.
+        assert!(rendered.contains(&jwk.x));
     }
 
     #[test]
