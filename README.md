@@ -131,6 +131,8 @@ Or in an mTLS client certificate. Run `wimsey --help`, or start the issuer with
   application.
 - [Conformance vectors](conformance/README.md) — the cross-implementation
   vector format, for other WIMSE implementations.
+- [Implementation status](docs/implementation-status.md) — the RFC 7942 entries
+  for the WIMSE drafts, kept in step with what the code actually does.
 - [Releasing](RELEASING.md) — cadence, versioning, and how to verify a release's
   signatures and SBOM.
 - [Changelog](CHANGELOG.md).
