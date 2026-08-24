@@ -410,7 +410,7 @@ pub fn wpt_vector(algorithm: Algorithm) -> WptVector {
             WPT_SPEC,
             "WPT bound to a WIT via `wth`, plus the inputs a verifier must reject",
         ),
-        alg: "EdDSA".to_owned(),
+        alg: algorithm.as_str().to_owned(),
         pop_signing_key: PrivateJwk::from_signing_key(&pop_key),
         issuer_verifying_key: JoseJwk::from_verifying_key(&issuer_key.verifying_key()),
         verify_now: IAT,
