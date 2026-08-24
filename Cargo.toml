@@ -11,6 +11,9 @@ members = [
     "crates/demo",
     "crates/conformance",
 ]
+# cargo-fuzz builds this with nightly and its own sanitizer flags; it must not
+# be pulled into the workspace build.
+exclude = ["fuzz"]
 
 [workspace.package]
 version = "0.3.0"
