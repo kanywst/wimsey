@@ -4,7 +4,7 @@
   "id": "proof-es256",
   "spec": "draft-ietf-wimse-wpt-01",
   "description": "WPT bound to a WIT via `wth`, plus the inputs a verifier must reject",
-  "alg": "EdDSA",
+  "alg": "ES256",
   "pop_signing_key": {
     "alg": "ES256",
     "kty": "EC",

@@ -301,7 +301,11 @@ pub struct WitVector {
     /// The common header fields.
     #[serde(flatten)]
     pub header: Header,
-    /// The JWS algorithm; always `EdDSA` for WIMSE.
+    /// The JWS algorithm this vector is for: `EdDSA` or `ES256`.
+    ///
+    /// It must agree with the algorithm the recorded keys name. A runner is
+    /// expected to check that rather than ignore it — a declared algorithm
+    /// nobody reads is a field that can quietly go wrong.
     pub alg: String,
     /// The issuer's private key, so the token can be re-signed from scratch.
     pub issuer_signing_key: PrivateJwk,
@@ -346,7 +350,11 @@ pub struct WptVector {
     /// The common header fields.
     #[serde(flatten)]
     pub header: Header,
-    /// The JWS algorithm; always `EdDSA` for WIMSE.
+    /// The JWS algorithm this vector is for: `EdDSA` or `ES256`.
+    ///
+    /// It must agree with the algorithm the recorded keys name. A runner is
+    /// expected to check that rather than ignore it — a declared algorithm
+    /// nobody reads is a field that can quietly go wrong.
     pub alg: String,
     /// The workload's proof-of-possession private key.
     pub pop_signing_key: PrivateJwk,

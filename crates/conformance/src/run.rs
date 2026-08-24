@@ -171,6 +171,23 @@ fn content_digest(request: &VectorRequest) -> Option<&str> {
         .map(|(_, value)| value.as_str())
 }
 
+/// Checks that a vector's declared `alg` matches the key it actually recorded.
+///
+/// The bug this exists for is a quiet one: a vector can name one algorithm and
+/// carry keys for another, stay byte-identical on every regeneration, and pass
+/// a suite that never reads the field. Only a consumer trusting the declaration
+/// is misled — which is the whole audience.
+fn declared_algorithm_matches(declared: &str, key: &SigningKey) -> Result<(), String> {
+    let actual = key.algorithm().as_str();
+    if declared == actual {
+        Ok(())
+    } else {
+        Err(format!(
+            "the vector declares alg `{declared}` but its key is `{actual}`"
+        ))
+    }
+}
+
 /// Runs the workload identifier vector.
 ///
 /// There is nothing to re-sign here, so the two checks are the whole contract:
@@ -325,6 +342,11 @@ pub fn run_wit(vector: &WitVector, report: &mut Report) {
 
     report.record(
         &name,
+        "declared-algorithm",
+        declared_algorithm_matches(&vector.alg, &key),
+    );
+    report.record(
+        &name,
         "reproduce",
         issue_wit(&vector.claims, vector.kid.as_deref(), &key)
             .map_err(|e| format!("re-issuing failed: {e}"))
@@ -386,6 +408,11 @@ pub fn run_wpt(vector: &WptVector, report: &mut Report) {
         }
     };
 
+    report.record(
+        &name,
+        "declared-algorithm",
+        declared_algorithm_matches(&vector.alg, &pop),
+    );
     report.record(
         &name,
         "reproduce",
