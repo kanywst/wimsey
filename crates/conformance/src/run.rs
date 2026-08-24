@@ -603,9 +603,8 @@ fn run_httpsig_response(
         wimse_req_nonce: response.params.wimse_req_nonce.clone(),
         ..SignatureParams::default()
     };
-    // Re-signing needs the private half, which only the recorded seed carries;
-    // verification below deliberately uses the public half recovered from the
-    // WIT instead, so the two halves of the check stay independent.
+    // Re-signing needs the private half; verification below uses the public half
+    // recovered from the WIT, so the two checks stay independent.
     let signing = match signing_key(&vector.pop_signing_key_seed_b64u) {
         Ok(key) => key,
         Err(detail) => {
@@ -726,11 +725,9 @@ fn run_httpsig_negatives(
     name: &str,
     report: &mut Report,
 ) {
-    // Section 3: "Recipients of signed HTTP messages MUST validate the signature
-    // and content of the WIT before validating the HTTP message signature." The
-    // negatives therefore recover the key the same way the positive case does —
-    // out of the verified WIT — rather than taking the vector's seed on trust,
-    // which would let an implementation skip the WIT entirely and still pass.
+    // Section 3 requires validating the WIT before the message signature, so the
+    // negatives recover the key from it rather than from the vector's seed —
+    // otherwise an implementation could skip the WIT entirely and still pass.
     let pop_key = match verifying_key(&vector.issuer_verifying_key_b64u).and_then(|issuer| {
         verify_wit(&vector.wit, &issuer, &WitValidation::at(vector.verify_now))
             .map(|verified| verified.pop_key)

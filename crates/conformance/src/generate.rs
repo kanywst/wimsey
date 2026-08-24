@@ -444,9 +444,6 @@ pub fn httpsig_vector() -> HttpSigVector {
         nonce: Some(NONCE.to_owned()),
         tag: Some(WIMSE_TAG.to_owned()),
         wimse_aud: Some(AUDIENCE.to_owned()),
-        // The client demands a signed response, which the response vector below
-        // supplies. Exercising the parameter matters: it is a bare RFC 8941
-        // boolean, a shape nothing else in the suite covers.
         wimse_sign_response: Some(true),
         ..SignatureParams::default()
     };
@@ -555,8 +552,6 @@ fn httpsig_response(
         signature: signed.signature,
         expected_req_nonce: NONCE.to_owned(),
         negative: vec![
-            // The `;req` components resolve from the request, so the same signed
-            // response verified against a different one must fail.
             ResponseNegative {
                 id: "lifted-onto-another-request".to_owned(),
                 description: "the same signed response, verified against a different request"

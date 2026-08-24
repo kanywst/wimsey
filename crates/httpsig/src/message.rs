@@ -92,8 +92,7 @@ impl Component {
     /// crate does not model (including any carrying parameters), and
     /// [`HttpSigError::Parse`] if the token is not a quoted string.
     pub fn from_quoted_id(token: &str) -> Result<Self, HttpSigError> {
-        // `;req` is the only component parameter this crate models; anything
-        // else carrying a parameter is rejected below as unsupported.
+        // `;req` is the only component parameter this crate models.
         if let Some(base) = token.strip_suffix(";req") {
             return Ok(Self::Req(Box::new(Self::from_quoted_id(base)?)));
         }
@@ -153,8 +152,7 @@ impl HttpRequest {
             Component::Query => Ok(format!("?{}", self.query.as_deref().unwrap_or(""))),
             Component::RequestTarget => Ok(self.request_target()),
             Component::Header(name) => self.header_value(name),
-            // A request has no status, and `;req` on a request signature would
-            // mean "from the request this request answers", which is nothing.
+            // A request has no status, and nothing for `;req` to refer back to.
             Component::Status | Component::Req(_) => {
                 Err(HttpSigError::UnsupportedComponent(component.quoted_id()))
             }
@@ -236,8 +234,7 @@ impl ComponentSource for HttpExchange<'_> {
             Component::Status => Ok(self.response.status.to_string()),
             Component::Req(inner) => self.request.component_value(inner),
             Component::Header(name) => header_value(&self.response.headers, name),
-            // Everything else is a request-only derived component, and on a
-            // response it has to be written `;req` to say so.
+            // The rest are request-only, and on a response must be written `;req`.
             other => Err(HttpSigError::UnsupportedComponent(other.quoted_id())),
         }
     }

@@ -112,6 +112,10 @@ pub struct VerifyConfig {
     /// one: same mandatory parameters, but `wimse-aud` is a request-only
     /// parameter and `wimse-req-nonce` is required whenever the client demanded
     /// a signed response.
+    ///
+    /// Whether it was demanded is taken from `expected_req_nonce` being set,
+    /// since the client that sent the request is the only party that knows, and
+    /// it is also the only party that can check the returned value.
     pub wimse_response_profile: bool,
     /// If set, the response's `wimse-req-nonce` must equal this value — the
     /// `nonce` the client put on its own request. Checking it is what stops a
@@ -600,9 +604,9 @@ pub fn verify(
             return Err(HttpSigError::AudienceMismatch);
         }
     }
-    // Section 3.4: a client that demanded a signed response MUST check that the
-    // response carries back the nonce it sent, which is what stops a response
-    // signed for one request being replayed against another.
+    // Section 3.4: a client that demanded a signed response MUST check the nonce
+    // comes back, which is what stops a response being replayed onto another
+    // request.
     if let Some(expected) = &config.expected_req_nonce {
         if params.wimse_req_nonce.as_ref() != Some(expected) {
             return Err(HttpSigError::RequestNonceMismatch);
@@ -1335,8 +1339,6 @@ mod tests {
         .is_ok());
     }
 
-    // --- Response signing (draft Section 3.4) ---
-
     use crate::message::HttpResponse;
 
     fn rfc_response() -> HttpResponse {
@@ -1358,7 +1360,6 @@ mod tests {
             expires: Some(1_700_000_300),
             nonce: Some("resp-2222".to_owned()),
             tag: Some(WIMSE_TAG.to_owned()),
-            // The nonce the client put on its request.
             wimse_req_nonce: Some("abcd1111".to_owned()),
             ..SignatureParams::default()
         }
@@ -1384,7 +1385,6 @@ mod tests {
         let components = super::response_components(&response.headers);
         let signed = sign(&exchange, &components, &response_params(), "wimse", &key).unwrap();
 
-        // `@status` and the two `;req` components must be in the covered list.
         assert!(signed
             .signature_input
             .contains(r#""@status" "@method";req "@request-target";req"#));
@@ -1400,8 +1400,6 @@ mod tests {
         assert_eq!(verified.params.wimse_req_nonce.as_deref(), Some("abcd1111"));
     }
 
-    // The `;req` components are what tie a response to one request. Verifying
-    // the same response against a different request must fail.
     #[test]
     fn a_response_cannot_be_lifted_onto_another_request() {
         let key = SigningKey::from_bytes(&[5u8; 32]);
@@ -1436,8 +1434,6 @@ mod tests {
         assert!(matches!(err, Err(HttpSigError::InvalidSignature)));
     }
 
-    // A client that asked for a signed response must reject one carrying back
-    // somebody else's nonce.
     #[test]
     fn rejects_a_response_answering_a_different_request() {
         let key = SigningKey::from_bytes(&[5u8; 32]);
@@ -1484,8 +1480,8 @@ mod tests {
         assert!(super::check_response_profile(&params, false).is_ok());
     }
 
-    // `wimse-aud` names the service a request is for; on the way back it means
-    // nothing, so the profile forbids it rather than ignoring it.
+    // Forbidden rather than ignored: silently accepting it would hide a sender
+    // that thinks it is still addressing someone.
     #[test]
     fn response_profile_forbids_the_request_audience() {
         let params = SignatureParams {
