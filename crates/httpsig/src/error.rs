@@ -64,4 +64,8 @@ pub enum HttpSigError {
     /// expected — the signature was minted for a different service.
     #[error("audience mismatch")]
     AudienceMismatch,
+    /// A signed response carried back a `wimse-req-nonce` that is not the nonce
+    /// the client sent, so the response answers some other request.
+    #[error("the response's `wimse-req-nonce` does not match the request's nonce")]
+    RequestNonceMismatch,
 }

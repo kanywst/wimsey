@@ -126,6 +126,9 @@ pub enum ErrorCode {
     ForbiddenParameter,
     /// The signature's `tag` was not `wimse-workload-to-workload`.
     WrongTag,
+    /// A signed response carried back a `wimse-req-nonce` that is not the nonce
+    /// the client sent.
+    RequestNonceMismatch,
     /// The `cnf` JWK omitted the required `alg` member.
     MissingConfirmationAlg,
     /// The `cnf` JWK named `none`, a symmetric, or an encryption algorithm.
@@ -280,6 +283,7 @@ impl From<&HttpSigError> for ErrorCode {
             HttpSigError::ForbiddenParameter(_) => Self::ForbiddenParameter,
             HttpSigError::WrongTag { .. } => Self::WrongTag,
             HttpSigError::AudienceMismatch => Self::AudienceMismatch,
+            HttpSigError::RequestNonceMismatch => Self::RequestNonceMismatch,
             _ => Self::Unmapped,
         }
     }
@@ -446,6 +450,61 @@ pub struct HttpSigVector {
     pub signature: String,
     /// Inputs that MUST be rejected, and why.
     pub negative: Vec<HttpSigNegative>,
+    /// The signed response to this request, when the request asked for one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub response: Option<VectorResponse>,
+}
+
+/// A signed response, and the request-bound checks a client must apply to it.
+///
+/// It lives inside the request vector rather than in a file of its own because
+/// the binding between the two is the point: the request's `nonce` is what must
+/// come back as the response's `wimse-req-nonce`, and the `;req` covered
+/// components resolve from that same request.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct VectorResponse {
+    /// The status code, covered as `@status`.
+    pub status: u16,
+    /// Response header fields as `(name, value)` pairs.
+    pub headers: Vec<(String, String)>,
+    /// The response body the `Content-Digest` header covers.
+    pub body: String,
+    /// The covered component identifiers, in order, including the `;req` ones.
+    pub components: Vec<String>,
+    /// The signature parameters.
+    pub params: VectorParams,
+    /// The expected `Signature-Input` field value.
+    pub signature_input: String,
+    /// The expected `Signature` field value.
+    pub signature: String,
+    /// The nonce the client put on its request, which the response must return.
+    pub expected_req_nonce: String,
+    /// Inputs that MUST be rejected, and why.
+    pub negative: Vec<ResponseNegative>,
+}
+
+/// A response verification input that must fail, and the reason it must fail.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ResponseNegative {
+    /// A stable identifier, unique within the file.
+    pub id: String,
+    /// What makes this input invalid, in prose.
+    pub description: String,
+    /// The reason verification must report.
+    pub expect: ErrorCode,
+    /// Replaces the response's `Signature-Input`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signature_input: Option<String>,
+    /// Replaces the response's `Signature`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signature: Option<String>,
+    /// Replaces the request the response is verified against, which is what the
+    /// `;req` components resolve from.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request: Option<VectorRequest>,
+    /// Replaces the nonce the client claims to have sent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expected_req_nonce: Option<String>,
 }
 
 /// An httpsig verification input that must fail, and the reason it must fail

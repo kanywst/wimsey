@@ -1,5 +1,5 @@
-//! A minimal HTTP request model and the covered-component values derived from
-//! it, per RFC 9421 Section 2.
+//! Minimal HTTP request and response models, and the covered-component values
+//! derived from them, per RFC 9421 Section 2.
 
 use base64::{engine::general_purpose::STANDARD, Engine};
 use sha2::{Digest, Sha256};
@@ -9,8 +9,9 @@ use crate::error::HttpSigError;
 /// A covered component of an HTTP message signature.
 ///
 /// This crate supports the derived components `@method`, `@authority`, `@path`,
-/// `@query` and `@request-target`, plus plain header fields. `@target-uri` and
-/// component parameters (for example `;sf` or `;key`) are not modeled.
+/// `@query`, `@request-target` and `@status`, plus plain header fields and the
+/// `;req` component parameter. `@target-uri` and the other parameters (for
+/// example `;sf` or `;key`) are not modeled.
 #[derive(Debug, Clone)]
 pub enum Component {
     /// The request method (`@method`).
@@ -25,6 +26,15 @@ pub enum Component {
     /// `?` and the query when one is present (RFC 9421 Section 2.2.5,
     /// origin-form). The WIMSE profile requires this component to be signed.
     RequestTarget,
+    /// The response status code (`@status`), RFC 9421 Section 2.2.9. Only
+    /// meaningful on a response.
+    Status,
+    /// A component taken from the *request* a response answers, written with
+    /// the `;req` parameter (RFC 9421 Section 2.4) — for example
+    /// `"@method";req`. The WIMSE profile requires two of these on a signed
+    /// response, so that the response cannot be lifted onto a different
+    /// request.
+    Req(Box<Component>),
     /// A header field, identified by its lowercase name.
     Header(String),
 }
@@ -39,7 +49,9 @@ impl PartialEq for Component {
             | (Self::Authority, Self::Authority)
             | (Self::Path, Self::Path)
             | (Self::Query, Self::Query)
-            | (Self::RequestTarget, Self::RequestTarget) => true,
+            | (Self::RequestTarget, Self::RequestTarget)
+            | (Self::Status, Self::Status) => true,
+            (Self::Req(a), Self::Req(b)) => a == b,
             (Self::Header(a), Self::Header(b)) => a.eq_ignore_ascii_case(b),
             _ => false,
         }
@@ -65,6 +77,9 @@ impl Component {
             Self::Path => "\"@path\"".to_owned(),
             Self::Query => "\"@query\"".to_owned(),
             Self::RequestTarget => "\"@request-target\"".to_owned(),
+            Self::Status => "\"@status\"".to_owned(),
+            // The parameter sits outside the quotes: `"@method";req`.
+            Self::Req(inner) => format!("{};req", inner.quoted_id()),
             Self::Header(name) => format!("\"{name}\""),
         }
     }
@@ -77,6 +92,11 @@ impl Component {
     /// crate does not model (including any carrying parameters), and
     /// [`HttpSigError::Parse`] if the token is not a quoted string.
     pub fn from_quoted_id(token: &str) -> Result<Self, HttpSigError> {
+        // `;req` is the only component parameter this crate models; anything
+        // else carrying a parameter is rejected below as unsupported.
+        if let Some(base) = token.strip_suffix(";req") {
+            return Ok(Self::Req(Box::new(Self::from_quoted_id(base)?)));
+        }
         let inner = token
             .strip_prefix('"')
             .and_then(|t| t.strip_suffix('"'))
@@ -87,6 +107,7 @@ impl Component {
             "@path" => Ok(Self::Path),
             "@query" => Ok(Self::Query),
             "@request-target" => Ok(Self::RequestTarget),
+            "@status" => Ok(Self::Status),
             name if name.starts_with('@') => {
                 Err(HttpSigError::UnsupportedComponent(inner.to_owned()))
             }
@@ -132,6 +153,11 @@ impl HttpRequest {
             Component::Query => Ok(format!("?{}", self.query.as_deref().unwrap_or(""))),
             Component::RequestTarget => Ok(self.request_target()),
             Component::Header(name) => self.header_value(name),
+            // A request has no status, and `;req` on a request signature would
+            // mean "from the request this request answers", which is nothing.
+            Component::Status | Component::Req(_) => {
+                Err(HttpSigError::UnsupportedComponent(component.quoted_id()))
+            }
         }
     }
 
@@ -153,20 +179,82 @@ impl HttpRequest {
         }
     }
 
-    /// The RFC 9421 field value for header `name`: every matching field, each
-    /// trimmed of leading and trailing whitespace, joined with `, `.
+    /// The RFC 9421 field value for header `name`.
     fn header_value(&self, name: &str) -> Result<String, HttpSigError> {
-        let mut values = self
-            .headers
-            .iter()
-            .filter(|(n, _)| n.eq_ignore_ascii_case(name))
-            .map(|(_, v)| v.trim())
-            .peekable();
-        if values.peek().is_none() {
-            return Err(HttpSigError::MissingComponent(name.to_owned()));
-        }
-        Ok(values.collect::<Vec<_>>().join(", "))
+        header_value(&self.headers, name)
     }
+}
+
+/// A minimal HTTP response, sufficient to derive RFC 9421 component values.
+#[derive(Debug, Clone)]
+pub struct HttpResponse {
+    /// The status code, derived as `@status`.
+    pub status: u16,
+    /// Header fields as `(name, value)` pairs; names may be any case.
+    pub headers: Vec<(String, String)>,
+}
+
+/// A response together with the request it answers.
+///
+/// Both are needed to sign or verify a response: `;req` components are taken
+/// from the request, which is what stops a signed response being lifted onto a
+/// different one.
+#[derive(Debug, Clone, Copy)]
+pub struct HttpExchange<'a> {
+    /// The response being signed or verified.
+    pub response: &'a HttpResponse,
+    /// The request it answers.
+    pub request: &'a HttpRequest,
+}
+
+/// Something a signature base can read covered component values from.
+///
+/// Requests and response exchanges resolve components differently, but the
+/// signature base is built by one piece of code over this trait rather than
+/// duplicated per message kind — the base is byte-exact, and two
+/// implementations of it would eventually disagree.
+pub trait ComponentSource {
+    /// The derived value of `component` for this message.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`HttpSigError::MissingComponent`] if a covered header is absent,
+    /// or [`HttpSigError::UnsupportedComponent`] if the component cannot be
+    /// derived from this kind of message.
+    fn component_value(&self, component: &Component) -> Result<String, HttpSigError>;
+}
+
+impl ComponentSource for HttpRequest {
+    fn component_value(&self, component: &Component) -> Result<String, HttpSigError> {
+        HttpRequest::component_value(self, component)
+    }
+}
+
+impl ComponentSource for HttpExchange<'_> {
+    fn component_value(&self, component: &Component) -> Result<String, HttpSigError> {
+        match component {
+            Component::Status => Ok(self.response.status.to_string()),
+            Component::Req(inner) => self.request.component_value(inner),
+            Component::Header(name) => header_value(&self.response.headers, name),
+            // Everything else is a request-only derived component, and on a
+            // response it has to be written `;req` to say so.
+            other => Err(HttpSigError::UnsupportedComponent(other.quoted_id())),
+        }
+    }
+}
+
+/// The RFC 9421 field value for header `name`: every matching field, each
+/// trimmed of leading and trailing whitespace, joined with `, `.
+fn header_value(headers: &[(String, String)], name: &str) -> Result<String, HttpSigError> {
+    let mut values = headers
+        .iter()
+        .filter(|(n, _)| n.eq_ignore_ascii_case(name))
+        .map(|(_, v)| v.trim())
+        .peekable();
+    if values.peek().is_none() {
+        return Err(HttpSigError::MissingComponent(name.to_owned()));
+    }
+    Ok(values.collect::<Vec<_>>().join(", "))
 }
 
 /// Computes a `Content-Digest` field value over `body` using SHA-256, in the

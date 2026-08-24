@@ -10,6 +10,23 @@ silently.
 
 ## [Unreleased]
 
+### Added
+
+- Response signing for `wimsey-httpsig`, closing the last gap against
+  `http-signature-06`: the `@status` and `;req` covered components, the
+  `wimse-req-nonce` parameter, `check_response_profile`, and
+  `VerifyConfig::wimse_response_profile` / `::expected_req_nonce`. Sign an
+  `HttpExchange` — a response together with the request it answers — so the
+  `;req` components resolve from that request and a signed response cannot be
+  lifted onto a different one.
+- Conformance coverage for the four gaps Yaron Sheffer reported after running
+  the vectors against his own RFC 9421 implementation: a signed-response vector
+  with its two bindings, `wimse-sign-response` on the golden request, and a
+  `missing-created` negative. The httpsig negatives now recover the
+  proof-of-possession key from the WIT rather than from the vector's seed, so an
+  implementation cannot skip the WIT-before-signature ordering and still pass.
+  71 assertions, up from 65.
+
 ## [0.3.0] - 2026-08-23
 
 The first release published to crates.io, and the one that brings every draft

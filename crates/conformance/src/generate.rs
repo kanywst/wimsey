@@ -9,7 +9,8 @@
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use ed25519_dalek::{Signer, SigningKey};
 use wimsey_httpsig::{
-    content_digest_sha256, sign, Component, HttpRequest, SignatureParams, WIMSE_TAG,
+    content_digest_sha256, response_components, sign, Component, HttpExchange, HttpRequest,
+    HttpResponse, SignatureParams, WIMSE_TAG,
 };
 use wimsey_identifier::WorkloadIdentifier;
 use wimsey_mtls::WorkloadCa;
@@ -18,8 +19,9 @@ use wimsey_wpt::{issue as issue_wpt, wit_thumbprint, WptClaims};
 
 use crate::vectors::{
     ErrorCode, Header, HttpSigNegative, HttpSigVector, IdentifierAccept, IdentifierReject,
-    IdentifierVector, Manifest, ManifestEntry, MtlsNegative, MtlsVector, VectorParams,
-    VectorRequest, WitNegative, WitVector, WptNegative, WptVector, FORMAT,
+    IdentifierVector, Manifest, ManifestEntry, MtlsNegative, MtlsVector, ResponseNegative,
+    VectorParams, VectorRequest, VectorResponse, WitNegative, WitVector, WptNegative, WptVector,
+    FORMAT,
 };
 
 /// The issuer's Ed25519 seed. Fixed so the vectors are reproducible.
@@ -41,6 +43,8 @@ const EXP: u64 = 1_700_003_600;
 const NONCE: &str = "abcd1111";
 /// The fixed `wimse-aud` for the httpsig vector.
 const AUDIENCE: &str = "https://service.example/transfer";
+/// The responding peer's own `nonce`, distinct from the request's.
+const RESPONSE_NONCE: &str = "abcd2222";
 
 const WIT_SPEC: &str = "draft-ietf-wimse-workload-creds-02";
 const WPT_SPEC: &str = "draft-ietf-wimse-wpt-01";
@@ -440,6 +444,10 @@ pub fn httpsig_vector() -> HttpSigVector {
         nonce: Some(NONCE.to_owned()),
         tag: Some(WIMSE_TAG.to_owned()),
         wimse_aud: Some(AUDIENCE.to_owned()),
+        // The client demands a signed response, which the response vector below
+        // supplies. Exercising the parameter matters: it is a bare RFC 8941
+        // boolean, a shape nothing else in the suite covers.
+        wimse_sign_response: Some(true),
         ..SignatureParams::default()
     };
     let signed = sign(&request, &components, &params, "wimse", &pop_key).expect("sign");
@@ -452,6 +460,7 @@ pub fn httpsig_vector() -> HttpSigVector {
         headers: request.headers.clone(),
     };
     let negative = httpsig_negatives(&vector_request, &request, &components, &params, &pop_key);
+    let response = httpsig_response(&request, &vector_request, &wit, &pop_key);
 
     HttpSigVector {
         header: header(
@@ -471,7 +480,7 @@ pub fn httpsig_vector() -> HttpSigVector {
             nonce: NONCE.to_owned(),
             tag: WIMSE_TAG.to_owned(),
             wimse_aud: AUDIENCE.to_owned(),
-            wimse_sign_response: None,
+            wimse_sign_response: Some(true),
             wimse_req_nonce: None,
         },
         request: vector_request,
@@ -480,6 +489,95 @@ pub fn httpsig_vector() -> HttpSigVector {
         signature_input: signed.signature_input,
         signature: signed.signature,
         negative,
+        response: Some(response),
+    }
+}
+
+/// Builds the signed response to the golden request.
+///
+/// The request set `wimse-sign-response`, so the peer owes a signed answer. The
+/// two bindings that make it an *answer* rather than a free-standing message are
+/// the `;req` covered components, taken from the request, and `wimse-req-nonce`,
+/// which carries the request's own nonce back.
+fn httpsig_response(
+    request: &HttpRequest,
+    vector_request: &VectorRequest,
+    wit: &str,
+    pop_key: &SigningKey,
+) -> VectorResponse {
+    let body = br#"{"status":"accepted"}"#;
+    let response = HttpResponse {
+        status: 200,
+        headers: vec![
+            ("Content-Type".to_owned(), "application/json".to_owned()),
+            ("Content-Digest".to_owned(), content_digest_sha256(body)),
+            ("Workload-Identity-Token".to_owned(), wit.to_owned()),
+        ],
+    };
+    let exchange = HttpExchange {
+        response: &response,
+        request,
+    };
+    let components = response_components(&response.headers);
+    let params = SignatureParams {
+        created: Some(IAT),
+        expires: Some(IAT + 300),
+        nonce: Some(RESPONSE_NONCE.to_owned()),
+        tag: Some(WIMSE_TAG.to_owned()),
+        // No `wimse-aud`: it names the service a request is for, and means
+        // nothing coming back.
+        wimse_req_nonce: Some(NONCE.to_owned()),
+        ..SignatureParams::default()
+    };
+    let signed =
+        sign(&exchange, &components, &params, "wimse", pop_key).expect("sign the response");
+
+    let rerouted = VectorRequest {
+        path: "/admin".to_owned(),
+        ..vector_request.clone()
+    };
+
+    VectorResponse {
+        status: response.status,
+        headers: response.headers.clone(),
+        body: String::from_utf8(body.to_vec()).expect("the fixed body is utf-8"),
+        components: components.iter().map(Component::quoted_id).collect(),
+        params: VectorParams {
+            created: IAT,
+            expires: IAT + 300,
+            nonce: RESPONSE_NONCE.to_owned(),
+            tag: WIMSE_TAG.to_owned(),
+            wimse_aud: String::new(),
+            wimse_sign_response: None,
+            wimse_req_nonce: Some(NONCE.to_owned()),
+        },
+        signature_input: signed.signature_input,
+        signature: signed.signature,
+        expected_req_nonce: NONCE.to_owned(),
+        negative: vec![
+            // The `;req` components resolve from the request, so the same signed
+            // response verified against a different one must fail.
+            ResponseNegative {
+                id: "lifted-onto-another-request".to_owned(),
+                description: "the same signed response, verified against a different request"
+                    .to_owned(),
+                expect: ErrorCode::InvalidSignature,
+                signature_input: None,
+                signature: None,
+                request: Some(rerouted),
+                expected_req_nonce: None,
+            },
+            ResponseNegative {
+                id: "wrong-req-nonce".to_owned(),
+                description: "the client's nonce is not the one the response carries back"
+                    .to_owned(),
+                expect: ErrorCode::RequestNonceMismatch,
+                signature_input: None,
+                signature: None,
+                request: None,
+                expected_req_nonce: Some("some-other-nonce".to_owned()),
+            },
+        ],
     }
 }
 
@@ -528,6 +626,15 @@ fn httpsig_profile_negatives(
             ErrorCode::MissingParameter,
             SignatureParams {
                 nonce: None,
+                ..params.clone()
+            },
+        ),
+        profile_case(
+            "missing-created",
+            "the signature omits the mandatory `created` parameter",
+            ErrorCode::MissingParameter,
+            SignatureParams {
+                created: None,
                 ..params.clone()
             },
         ),

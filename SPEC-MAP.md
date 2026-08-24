@@ -26,7 +26,6 @@ the pinned drafts.
 | Requirement | Draft | Status |
 | --- | --- | --- |
 | ES256 MUST be supported by general-purpose implementations | `workload-creds` §5.1 | Not implemented. This crate is Ed25519-only so signing stays deterministic and vectors stay byte-reproducible. An ES256 `cnf` is reported as unsupported, never silently accepted. |
-| Response signing (`@status`, `;req`, `wimse-req-nonce`) | `http-signature` §3.4 | Parameters are parsed and carried; producing and verifying a response signature is not implemented. |
 | Trust-domain match on the TLS peer certificate | `mutual-tls` §4 | Left to the caller: `wimsey-mtls::verify` returns the identifier and the caller compares it, since chain building and rustls wiring are out of scope. |
 | Chain building, `basicConstraints`, `keyUsage`, name constraints | `mutual-tls` §4 | Not enforced. `verify` is a single-issuer model that checks the directly provided CA only; deployments needing full PKIX path validation should use a dedicated X.509 verifier. |
 

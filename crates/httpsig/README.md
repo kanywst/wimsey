@@ -23,6 +23,11 @@ considerably, and is enforced by opting in with `VerifyConfig::wimse_profile`:
 - `keyid` and `alg` are forbidden — the key travels in the WIT, and its `cnf`
   JWK pins the algorithm.
 
+Responses are signed the same way, with the profile's own rules: `@status` plus
+`@method;req` and `@request-target;req`, and `wimse-req-nonce` carrying back the
+nonce from the request being answered. Both bindings exist so that a signed
+response cannot be lifted onto a different request.
+
 With the profile off, the crate is a plain RFC 9421 implementation.
 
 Part of [`wimsey`](https://github.com/kanywst/wimsey), a vendor-neutral reference

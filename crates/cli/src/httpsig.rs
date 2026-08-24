@@ -464,6 +464,7 @@ fn run_verify(args: VerifyArgs) -> Result<()> {
         label: Some(checked_label(&args.label)?),
         wimse_profile: true,
         expected_audience: Some(args.aud.trim().to_owned()),
+        ..VerifyConfig::default()
     };
     let verified = verify(
         &request,
