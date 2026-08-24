@@ -278,4 +278,10 @@ jobs:
             echo "every publishable crate is already on crates.io; nothing to do"
             exit 0
           fi
-          cargo publish --workspace --locked "${excludes[@]}"
+          if ! cargo publish --workspace --locked "${excludes[@]}"; then
+            # A 403 here is almost always the token's scopes rather than the
+            # code: `publish-new` alone is enough for a first release, when
+            # every crate is new, and then fails on the next one.
+            echo "::error::publish failed. On a 403, check that CARGO_REGISTRY_TOKEN carries both publish-new and publish-update: a release that adds a crate needs both at once."
+            exit 1
+          fi

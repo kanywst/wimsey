@@ -106,7 +106,11 @@ cargo publish --workspace --locked
 Three things have to be set up once:
 
 - **A verified email address** on the crates.io account, at <https://crates.io/settings/profile>. Setting the address is not enough — the confirmation link has to be followed, and until it is, every publish is refused with `400 A verified email address is required`.
-- **`CARGO_REGISTRY_TOKEN`** as a repository secret, from <https://crates.io/settings/tokens>. The first publish needs the `publish-new` scope, which cannot be restricted to crates that do not exist yet; afterwards the token can be rotated for one scoped to `publish-update` on the `wimsey-*` crates only.
+- **`CARGO_REGISTRY_TOKEN`** as a repository secret, from <https://crates.io/settings/tokens>, with **both** `publish-new` and `publish-update`. Both, not either: `publish-new` creates a crate and `publish-update` adds a version to one that exists, and a workspace release routinely does both at once — the run that introduced `wimsey-jose` also shipped new versions of six existing crates.
+
+  A `publish-new`-only token is the trap, because it works perfectly for the first release, when every crate is new, and then fails on the next one with `403 this token does not have the required permissions`. The publish is ordered so nothing uploads before the failure, but the release is still half-done: the GitHub release exists and crates.io has nothing.
+
+  Scoping the token to the `wimsey-*` crates is worth doing and does not help here: crate scoping restricts *which* crates, not *what* may be done to them.
 - **A `crates-io` environment** with a required reviewer, under Settings → Environments. The job names that environment, so adding the rule turns the one irreversible step in the release into something a human has to approve. Without the rule the job still runs, just unattended.
 
 A partial upload is not the exception it sounds like: crates.io rate-limits the creation of *new* crates, so the first release of a workspace this size walks straight into a `429` partway through and stops. The job therefore asks the index which versions already exist and passes the rest to `--exclude`, because `cargo publish --workspace` will otherwise try to re-upload what it already sent and fail on the first one.
