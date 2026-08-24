@@ -42,6 +42,12 @@ jobs:
   fuzz:
     name: fuzz the parsers
     runs-on: ubuntu-latest
+    env:
+      # The workspace-wide `-D warnings` would be appended to cargo-fuzz's own
+      # sanitizer RUSTFLAGS, turning a warning anywhere in the dependency tree
+      # into a failed fuzz build. The workspace lints are enforced by the `test`
+      # job; this one is about the parsers.
+      RUSTFLAGS: ""
     steps:
       - uses: actions/checkout@v7
       # libFuzzer's instrumentation needs the nightly sanitizer flags; the rest
@@ -63,7 +69,9 @@ jobs:
           set -euo pipefail
           for target in identifier_parse wit_verify wpt_verify httpsig_verify wic_parse; do
             echo "::group::$target"
-            cargo fuzz run "$target" -- -max_total_time=30 -print_final_stats=1
+            # rust-toolchain.toml pins the workspace to stable, and libFuzzer's
+            # `-Zsanitizer` needs nightly, so the override is not optional here.
+            cargo +nightly fuzz run "$target" -- -max_total_time=30 -print_final_stats=1
             echo "::endgroup::"
           done
       - name: report any crash
