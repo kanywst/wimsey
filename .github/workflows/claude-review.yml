@@ -58,6 +58,12 @@ jobs:
             exit 1
           fi
 
+      # Everything the reviewer posts is timestamped after this, which is how the
+      # last step tells this run's comments from an earlier push's.
+      - name: Mark the start of the review
+        id: started
+        run: echo "at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
       - uses: anthropics/claude-code-action@dcb57747bfceeaa1fa72638cae52295d1d853d4a # v1
         with:
           # A subscription token, not an API key: runs against the Claude plan
@@ -103,3 +109,55 @@ jobs:
 
           claude_args: |
             --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
+
+      # In practice the reviewer posts when it has a finding and stays silent
+      # when it does not, whatever the prompt asks of it. Silence then means two
+      # things at once — reviewed and clean, or died before it could speak — and
+      # the pull request looks identical either way. The same green check, no
+      # comment, for both. So say the quiet outcome out loud.
+      #
+      # This speaks as the workflow rather than as the reviewer, so a reader can
+      # tell a machine-generated "nothing to say" from a review that said it.
+      - name: Say so when the review found nothing
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+          BASE: ${{ github.event.pull_request.base.ref }}
+          SINCE: ${{ steps.started.outputs.at }}
+        run: |
+          set -euo pipefail
+          # Both surfaces: a review can land as inline comments, as one
+          # top-level comment, or as both.
+          posted=$(
+            {
+              gh api "repos/$GITHUB_REPOSITORY/pulls/$PR/comments" --paginate \
+                --jq '.[] | select(.user.login == "claude[bot]") | .created_at'
+              gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
+                --jq '.[] | select(.user.login == "claude[bot]") | .created_at'
+            } | awk -v since="$SINCE" '$0 >= since' | wc -l | tr -d ' '
+          )
+          if [ "$posted" -gt 0 ]; then
+            echo "the reviewer posted $posted comment(s) on this run"
+            exit 0
+          fi
+
+          # Silence has one more cause than "clean", and the note must not
+          # claim a review happened when it did not: the action refuses to run
+          # when this file differs from the copy on the base branch, so a pull
+          # request touching the reviewer is never reviewed by it. Ask git
+          # rather than guess.
+          git fetch --quiet --depth=1 origin "$BASE"
+          if git diff --quiet FETCH_HEAD HEAD -- .github/workflows/claude-review.yml; then
+            body=$(printf '%s\n\n%s\n' \
+              "Claude review ran against \`$SHA\` and posted no findings." \
+              "Automated note from the workflow, not from the reviewer: it stays silent when it has nothing to report, so this tells a clean review apart from a run that never got to speak.")
+          else
+            body=$(printf '%s\n\n%s\n' \
+              "Claude review did **not** run against \`$SHA\`." \
+              "This pull request modifies \`.github/workflows/claude-review.yml\`, and the action refuses to run from a version of itself that differs from the base branch — a pull request cannot rewrite its own reviewer. Review these changes by hand; the next pull request gets the reviewer back.")
+          fi
+          # Keep exactly one of these, rewritten per push, instead of one per
+          # push: the note is about the current head and nothing else.
+          gh pr comment "$PR" --edit-last --body "$body" 2>/dev/null \
+            || gh pr comment "$PR" --body "$body"
