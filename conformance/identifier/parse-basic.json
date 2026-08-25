@@ -1,5 +1,5 @@
 {
-  "format": "wimse-conformance/v2",
+  "format": "wimse-conformance/v3",
   "suite": "identifier",
   "id": "parse-basic",
   "spec": "draft-ietf-wimse-identifier-03",

@@ -1,5 +1,5 @@
 {
-  "format": "wimse-conformance/v2",
+  "format": "wimse-conformance/v3",
   "suite": "wpt",
   "id": "proof-es256",
   "spec": "draft-ietf-wimse-wpt-01",

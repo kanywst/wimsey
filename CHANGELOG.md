@@ -10,6 +10,22 @@ silently.
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking:** the conformance vector format is now `wimse-conformance/v3`. The
+  httpsig vectors gained an `accepted` array — inputs that differ from the
+  recorded request and MUST still verify — so the suite no longer consists only
+  of rejections, which an over-strict verifier passes. The version moved because
+  a v2 reader skips the new cases silently and would report a pass having run
+  fewer checks than the file asks for.
+
+### Added
+
+- Two conformance cases pinning what a signature does and does not protect,
+  after the question was raised twice on the WIMSE list. Rewriting `@authority`
+  is accepted when the signature does not cover it and rejected when it does.
+  122 assertions, up from 118.
+
 ## [0.4.0] - 2026-08-25
 
 Three breaking changes, so per the pre-1.0 rule this is a minor bump. Cargo

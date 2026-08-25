@@ -18,10 +18,10 @@ use wimsey_wit::{issue as issue_wit, Confirmation, Jwk, WitClaims};
 use wimsey_wpt::{issue as issue_wpt, wit_thumbprint, WptClaims};
 
 use crate::vectors::{
-    ErrorCode, Header, HttpSigNegative, HttpSigVector, IdentifierAccept, IdentifierReject,
-    IdentifierVector, Manifest, ManifestEntry, MtlsNegative, MtlsVector, ResponseNegative,
-    VectorParams, VectorRequest, VectorResponse, WitNegative, WitVector, WptNegative, WptVector,
-    FORMAT,
+    ErrorCode, Header, HttpSigAccepted, HttpSigNegative, HttpSigVector, IdentifierAccept,
+    IdentifierReject, IdentifierVector, Manifest, ManifestEntry, MtlsNegative, MtlsVector,
+    ResponseNegative, VectorParams, VectorRequest, VectorResponse, WitNegative, WitVector,
+    WptNegative, WptVector, FORMAT,
 };
 
 /// Builds a signing key of `algorithm` from a fixed seed.
@@ -478,6 +478,7 @@ pub fn httpsig_vector(algorithm: Algorithm) -> HttpSigVector {
         headers: request.headers.clone(),
     };
     let negative = httpsig_negatives(&vector_request, &request, &components, &params, &pop_key);
+    let accepted = httpsig_accepted(&vector_request);
     let response = httpsig_response(&request, &vector_request, &wit, &pop_key);
 
     HttpSigVector {
@@ -510,8 +511,31 @@ pub fn httpsig_vector(algorithm: Algorithm) -> HttpSigVector {
         signature_input: signed.signature_input,
         signature: signed.signature,
         negative,
+        accepted,
         response: Some(response),
     }
+}
+
+/// The authority the boundary cases rewrite the request to.
+const REWRITTEN_AUTHORITY: &str = "attacker.example.net";
+
+/// Altered requests that must still verify.
+///
+/// `@authority` is not in the set Section 3 mandates, so rewriting the host
+/// leaves the signature valid. Paired with `authority-rewritten-inside-the-
+/// covered-set`, which covers it and therefore rejects the same rewrite.
+fn httpsig_accepted(signed_request: &VectorRequest) -> Vec<HttpSigAccepted> {
+    vec![HttpSigAccepted {
+        id: "authority-rewritten-outside-the-covered-set".to_owned(),
+        description:
+            "`@authority` is not covered, so a rewritten host leaves the signature valid: a \
+             signature protects the components it covers and no others"
+                .to_owned(),
+        request: Some(VectorRequest {
+            authority: REWRITTEN_AUTHORITY.to_owned(),
+            ..signed_request.clone()
+        }),
+    }]
 }
 
 /// Builds the signed response to the golden request.
@@ -703,6 +727,19 @@ fn httpsig_negatives(
         path: "/admin".to_owned(),
         ..signed_request.clone()
     };
+    let rehosted = VectorRequest {
+        authority: REWRITTEN_AUTHORITY.to_owned(),
+        ..signed_request.clone()
+    };
+    // The same rewrite the `accepted` case tolerates, signed over a component
+    // set that does include `@authority`.
+    let covering_authority: Vec<Component> = components
+        .iter()
+        .cloned()
+        .chain([Component::Authority])
+        .collect();
+    let signed_over_authority = sign(request, &covering_authority, params, "wimse", pop_key)
+        .expect("the fixed request is signable over `@authority`");
 
     let mut cases = httpsig_profile_negatives(request, components, params, pop_key);
     cases.extend([
@@ -727,6 +764,17 @@ fn httpsig_negatives(
             ..httpsig_neg(
                 "rerouted-path",
                 "an intermediary changed `@path` after the signature was made",
+                ErrorCode::InvalidSignature,
+            )
+        },
+        HttpSigNegative {
+            request: Some(rehosted),
+            signature_input: Some(signed_over_authority.signature_input),
+            signature: Some(signed_over_authority.signature),
+            ..httpsig_neg(
+                "authority-rewritten-inside-the-covered-set",
+                "this signature does cover `@authority`, so the same rewritten host that the \
+                 accepted case tolerates now breaks the signature",
                 ErrorCode::InvalidSignature,
             )
         },

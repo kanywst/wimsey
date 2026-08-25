@@ -1,5 +1,5 @@
 {
-  "format": "wimse-conformance/v2",
+  "format": "wimse-conformance/v3",
   "vectors": [
     {
       "suite": "identifier",

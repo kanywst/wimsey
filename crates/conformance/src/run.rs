@@ -594,6 +594,7 @@ pub fn run_httpsig(vector: &HttpSigVector, report: &mut Report) {
     );
 
     run_httpsig_negatives(vector, &covered, &name, report);
+    run_httpsig_accepted(vector, &covered, &name, report);
     if let Some(response) = &vector.response {
         run_httpsig_response(vector, response, &name, report);
     }
@@ -611,11 +612,7 @@ fn run_httpsig_response(
     name: &str,
     report: &mut Report,
 ) {
-    let pop_key = match verifying_key(&vector.issuer_verifying_key).and_then(|issuer| {
-        verify_wit(&vector.wit, &issuer, &WitValidation::at(vector.verify_now))
-            .map(|verified| verified.pop_key)
-            .map_err(|e| format!("the carried WIT did not verify: {e}"))
-    }) {
+    let pop_key = match httpsig_pop_key(vector) {
         Ok(key) => key,
         Err(detail) => {
             report.fail(name, "response/recover the key from the WIT", detail);
@@ -763,6 +760,61 @@ fn run_response_negatives(
     }
 }
 
+/// Recovers the proof-of-possession key the way a receiver has to.
+///
+/// Section 3 requires validating the WIT before the message signature, so this
+/// takes the key from the token rather than from the vector's recorded seed —
+/// otherwise an implementation could skip the WIT entirely and still pass.
+fn httpsig_pop_key(vector: &HttpSigVector) -> Result<VerifyingKey, String> {
+    let issuer = verifying_key(&vector.issuer_verifying_key)?;
+    verify_wit(&vector.wit, &issuer, &WitValidation::at(vector.verify_now))
+        .map(|verified| verified.pop_key)
+        .map_err(|e| format!("the carried WIT did not verify: {e}"))
+}
+
+/// Runs the inputs that differ from the recorded request and must still verify.
+fn run_httpsig_accepted(
+    vector: &HttpSigVector,
+    covered: &[Component],
+    name: &str,
+    report: &mut Report,
+) {
+    if vector.accepted.is_empty() {
+        return;
+    }
+    let pop_key = match httpsig_pop_key(vector) {
+        Ok(key) => key,
+        Err(detail) => {
+            report.fail(name, "accept/recover the key from the WIT", detail);
+            return;
+        }
+    };
+    let config = VerifyConfig {
+        now: Some(vector.verify_now),
+        required_components: covered.to_vec(),
+        wimse_profile: true,
+        expected_audience: Some(vector.params.wimse_aud.clone()),
+        ..VerifyConfig::default()
+    };
+
+    for case in &vector.accepted {
+        let request = case.request.as_ref().unwrap_or(&vector.request);
+        report.record(
+            name,
+            &format!("accept/{}", case.id),
+            verify_httpsig(
+                &http_request(request),
+                &vector.signature_input,
+                &vector.signature,
+                &pop_key,
+                &config,
+            )
+            .map(|_| ())
+            .map_err(|e| format!("must still verify, but was rejected: {e}")),
+        );
+    }
+}
+
 /// Runs the httpsig rejection cases.
 fn run_httpsig_negatives(
     vector: &HttpSigVector,
@@ -770,14 +822,7 @@ fn run_httpsig_negatives(
     name: &str,
     report: &mut Report,
 ) {
-    // Section 3 requires validating the WIT before the message signature, so the
-    // negatives recover the key from it rather than from the vector's seed —
-    // otherwise an implementation could skip the WIT entirely and still pass.
-    let pop_key = match verifying_key(&vector.issuer_verifying_key).and_then(|issuer| {
-        verify_wit(&vector.wit, &issuer, &WitValidation::at(vector.verify_now))
-            .map(|verified| verified.pop_key)
-            .map_err(|e| format!("the carried WIT did not verify: {e}"))
-    }) {
+    let pop_key = match httpsig_pop_key(vector) {
         Ok(key) => key,
         Err(detail) => {
             report.fail(
