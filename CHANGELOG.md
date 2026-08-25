@@ -10,6 +10,24 @@ silently.
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking:** the conformance vector format is now `wimse-conformance/v3`. The
+  httpsig vectors gained an `accepted` array: inputs that differ from the
+  recorded request and MUST still verify. Every assertion the suite had until
+  now is one an implementation can pass by refusing more than the spec asks, so
+  the suite could not tell a careful verifier from an over-strict one. A v2
+  reader skips the new cases silently rather than failing, which is the kind of
+  quiet under-checking the version field exists to announce.
+
+### Added
+
+- Two conformance cases pinning what a signature does and does not protect,
+  after the question was raised twice on the WIMSE list. Rewriting `@authority`
+  is accepted when the signature does not cover it and rejected when it does;
+  `wimse-aud` does not pin the host, because it names the service the request is
+  for rather than where it was routed. 122 assertions, up from 118.
+
 ## [0.4.0] - 2026-08-25
 
 Three breaking changes, so per the pre-1.0 rule this is a minor bump. Cargo

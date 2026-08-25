@@ -5,8 +5,11 @@ These vectors are a contract, not a snapshot of what `wimsey` happens to emit. A
 1. Given the recorded inputs, do I produce the recorded bytes?
 2. Do I accept the positive case?
 3. Do I reject every negative case **for the reason recorded**, not merely reject it?
+4. Do I still accept every `accepted` case, which differs from the recorded input in a way the signature does not cover?
 
 The third question is the one that matters most and the one a byte-diff of regenerated output can never answer. An implementation that rejects an expired token because it failed to parse the payload is still wrong, and it will still interoperate badly.
+
+The fourth exists because the first three can all be passed by refusing more than the spec asks. Over-strictness reads as diligence and shows up only as an interoperability failure against someone else's signer, so the suite pins that edge too.
 
 Signing is EdDSA over Ed25519 (RFC 8037) or ES256 (ECDSA P-256), and both are deterministic — ES256 through its RFC 6979 nonce — so the recorded bytes are reproducible. Time is an input (`verify_now`), never a wall clock.
 
@@ -38,10 +41,12 @@ Start at `manifest.json`. Do not glob the directories — the manifest is the li
 Every file, including the manifest, carries a `format` field:
 
 ```json
-{ "format": "wimse-conformance/v2" }
+{ "format": "wimse-conformance/v3" }
 ```
 
 **v2 replaced the raw key bytes of v1 with JWKs.** v1 recorded a public key as 32 base64url bytes, which only worked because every v1 vector was Ed25519 — the bytes do not say which algorithm they are for. A JWK carries its own `alg`, so one suite can hold vectors for both. A private key is a JWK with `d`, so a consumer can re-sign from scratch as before.
+
+**v3 added the `accepted` array to the httpsig vectors.** Until then a suite could only say what must be rejected, and a verifier that rejects everything passes a suite made entirely of rejections. A v2 reader silently skips these cases rather than failing, which is exactly the quiet under-checking the version exists to prevent.
 
 Reject a file whose `format` you do not recognise rather than guessing at its shape. The version changes when the format changes, not when a vector is added.
 
@@ -161,6 +166,9 @@ Note `wit-binding-mismatch`: the substituted WIT is itself perfectly valid and s
 - Enforce the profile in Section 3 of the http-signature draft: `created`, `expires`, `nonce` and `tag` must be present, `tag` must be `wimse-workload-to-workload`, `wimse-aud` must be present and must equal the audience the verifier answers to, and `keyid` and `alg` must be absent.
 - Check `verify_content_digest(Content-Digest header, body)`.
 - Run every negative case. `required_components`, `accept_label`, `accept_audience` and `max_age` are verifier configuration, not message content: they describe how strict the receiver is, and the case asserts that a receiver configured that way rejects the message.
+- Run every `accepted` case the same way, except that verification MUST succeed. Each entry overrides fields of the positive case exactly as a negative one does.
+
+The `authority` pair is the reason the `accepted` array exists. `@authority` is not in the set Section 3 mandates, so `authority-rewritten-outside-the-covered-set` rewrites the host and must **still verify**: a signature protects the components it covers and no others. `wimse-aud` does not pin the host — it names the service the request is for, and is unchanged by where the message was routed. The paired `authority-rewritten-inside-the-covered-set` carries its own signature over a component set that does include `@authority`, and the same rewrite then fails. What changes the outcome is the coverage, not the verifier being more or less careful. A deployment that needs the host bound covers `@authority`.
 
 The `tampered-body` case is deliberately not a signature failure. The signature covers the `Content-Digest` **header string**, which is untouched, so the signature still verifies — the body is caught by the digest check alone. An implementation that only verifies signatures and never re-hashes the body will accept a swapped payload.
 

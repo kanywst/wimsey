@@ -594,6 +594,7 @@ pub fn run_httpsig(vector: &HttpSigVector, report: &mut Report) {
     );
 
     run_httpsig_negatives(vector, &covered, &name, report);
+    run_httpsig_accepted(vector, &covered, &name, report);
     if let Some(response) = &vector.response {
         run_httpsig_response(vector, response, &name, report);
     }
@@ -764,6 +765,57 @@ fn run_response_negatives(
 }
 
 /// Runs the httpsig rejection cases.
+/// Runs the inputs that differ from the recorded request and must still verify.
+///
+/// These fail an implementation that checks more than it was asked to cover,
+/// which no negative case can catch: over-strictness looks like diligence and
+/// only shows up as an interoperability failure against someone else's signer.
+fn run_httpsig_accepted(
+    vector: &HttpSigVector,
+    covered: &[Component],
+    name: &str,
+    report: &mut Report,
+) {
+    if vector.accepted.is_empty() {
+        return;
+    }
+    let pop_key = match verifying_key(&vector.issuer_verifying_key).and_then(|issuer| {
+        verify_wit(&vector.wit, &issuer, &WitValidation::at(vector.verify_now))
+            .map(|verified| verified.pop_key)
+            .map_err(|e| format!("the carried WIT did not verify: {e}"))
+    }) {
+        Ok(key) => key,
+        Err(detail) => {
+            report.fail(name, "accept/recover the key from the WIT", detail);
+            return;
+        }
+    };
+
+    for case in &vector.accepted {
+        let request = case.request.as_ref().unwrap_or(&vector.request);
+        let config = VerifyConfig {
+            now: Some(vector.verify_now),
+            required_components: covered.to_vec(),
+            wimse_profile: true,
+            expected_audience: Some(vector.params.wimse_aud.clone()),
+            ..VerifyConfig::default()
+        };
+        report.record(
+            name,
+            &format!("accept/{}", case.id),
+            verify_httpsig(
+                &http_request(request),
+                &vector.signature_input,
+                &vector.signature,
+                &pop_key,
+                &config,
+            )
+            .map(|_| ())
+            .map_err(|e| format!("must still verify, but was rejected: {e}")),
+        );
+    }
+}
+
 fn run_httpsig_negatives(
     vector: &HttpSigVector,
     covered: &[Component],

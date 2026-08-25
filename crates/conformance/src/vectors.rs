@@ -23,7 +23,11 @@ use wimsey_wpt::{WptClaims, WptError};
 /// 32 base64url bytes, which only worked because every v1 vector was Ed25519;
 /// a JWK carries its own algorithm, so one suite can hold both `EdDSA` and
 /// `ES256` vectors.
-pub const FORMAT: &str = "wimse-conformance/v2";
+///
+/// v3 added the `accepted` array to the httpsig vectors. Until then a suite
+/// could only say what MUST be rejected, which an implementation that rejects
+/// everything passes. Recording what MUST still verify pins the other edge.
+pub const FORMAT: &str = "wimse-conformance/v3";
 
 /// The index of every vector in the suite, written to `manifest.json`.
 ///
@@ -464,9 +468,31 @@ pub struct HttpSigVector {
     pub signature: String,
     /// Inputs that MUST be rejected, and why.
     pub negative: Vec<HttpSigNegative>,
+    /// Altered inputs that MUST still verify, and why.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub accepted: Vec<HttpSigAccepted>,
     /// The signed response to this request, when the request asked for one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub response: Option<VectorResponse>,
+}
+
+/// A verification input that differs from the recorded one and MUST still be
+/// accepted.
+///
+/// A signature carries exactly the components it covers, so a message can be
+/// altered outside that set and remain valid. Recording only rejections leaves
+/// that edge undefined, and an implementation that tightens past the spec — by
+/// checking something it was never asked to cover — reads as *more* careful
+/// while breaking interoperability. These cases fail it loudly instead.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct HttpSigAccepted {
+    /// A stable identifier, unique within the file.
+    pub id: String,
+    /// Why the altered input is still valid, in prose.
+    pub description: String,
+    /// Replaces the positive case's `request`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request: Option<VectorRequest>,
 }
 
 /// A signed response, and the request-bound checks a client must apply to it.
