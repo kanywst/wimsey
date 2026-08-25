@@ -10,6 +10,18 @@ silently.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-08-25
+
+Nothing in the published crates changed. Every API is the same as 0.4.0, and a
+caller upgrading has nothing to do.
+
+The break is in the conformance vectors, which `wimsey-conformance` owns and
+which is not published to crates.io — so this could have been a patch release as
+far as the registry is concerned. It is a minor bump because the vectors are a
+contract other implementations validate against, and two of them are reading it
+right now. Versioning them by whether the break is inconvenient to announce is
+how a contract stops being one.
+
 ### Changed
 
 - **Breaking:** the conformance vector format is now `wimse-conformance/v3`. The
@@ -225,7 +237,8 @@ public API.
 - Project governance, security policy, contributing guide (DCO), and OpenSSF
   Scorecard automation.
 
-[Unreleased]: https://github.com/kanywst/wimsey/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/kanywst/wimsey/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/kanywst/wimsey/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/kanywst/wimsey/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/kanywst/wimsey/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/kanywst/wimsey/compare/v0.1.0...v0.2.0
