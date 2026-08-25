@@ -45,11 +45,12 @@ Append after the existing `## Cofide` block.
   does not remember the ones it has seen.
 * License: Apache 2.0
 * Contact:
-* Last updated: 24-Aug-2026
+* Last updated: 25-Aug-2026
 * Notes: Publishes cross-implementation test vectors whose negative cases each
-  name the reason the input must be rejected:
-  <https://github.com/kanywst/wimsey/tree/main/conformance>. Yaron Sheffer ran
-  them against his own RFC 9421 implementation and reported that they pass.
+  name the reason the input must be rejected, with one vector per signature
+  algorithm: <https://github.com/kanywst/wimsey/tree/main/conformance>. Yaron
+  Sheffer ran them against his own RFC 9421 implementation and reported that
+  they pass.
 ```
 
 ### `draft-ietf-wimse-workload-creds`
@@ -66,13 +67,14 @@ Append after the existing SPIFFE entry.
     * Workload Identity Certificate: alpha, not for production
 * Coverage: WIT issuance and verification with the mandatory `sub`, `exp` and
   `cnf` claims, the optional `iss`, `iat` and `jti`, and the required `alg`
-  member inside the `cnf` JWK. WIC issuance and verification with the
-  identifier in a URI SAN. EdDSA/Ed25519 only: ES256 is recognised and
-  reported as unsupported rather than implemented, so that signatures stay
-  deterministic and test vectors stay byte-reproducible.
+  member inside the `cnf` JWK, which is enforced as the algorithm the proof
+  must use. Both `EdDSA` and `ES256`, in any combination — an EdDSA issuer with
+  an ES256 confirmation key is exercised by a conformance vector. WIC issuance
+  and verification with the identifier in a URI SAN; certificates are Ed25519
+  only, since the mutual-TLS draft carries no equivalent of Section 5.1.
 * License: Apache 2.0
 * Contact:
-* Last updated: 24-Aug-2026
+* Last updated: 25-Aug-2026
 ```
 
 ### `draft-ietf-wimse-wpt`
@@ -87,13 +89,14 @@ Needs the section boilerplate.
 * Maturity:
     * Workload Proof Token: alpha, not for production
 * Coverage: Issuance and verification with the mandatory `aud`, `exp`, `jti`
-  and `wth` claims and the optional `ath`. Verification recomputes `wth` from
-  the WIT actually presented and takes the proof-of-possession key from that
-  WIT, so a proof cannot be replayed against a different credential.
-  Single-use `jti` tracking is left to the caller.
+  and `wth` claims and the optional `ath`, under `EdDSA` or `ES256`.
+  Verification recomputes `wth` from the WIT actually presented and takes the
+  proof-of-possession key from that WIT, and requires the proof's `alg` to be
+  the one that WIT's `cnf` names. Single-use `jti` tracking is left to the
+  caller.
 * License: Apache 2.0
 * Contact:
-* Last updated: 24-Aug-2026
+* Last updated: 25-Aug-2026
 ```
 
 ### `draft-ietf-wimse-mutual-tls`
@@ -115,7 +118,7 @@ Needs the section boilerplate.
   or name constraints. Wiring into a TLS stack is left to the caller.
 * License: Apache 2.0
 * Contact:
-* Last updated: 24-Aug-2026
+* Last updated: 25-Aug-2026
 ```
 
 ### `draft-ietf-wimse-identifier`
@@ -139,7 +142,7 @@ Needs the section boilerplate.
   an open question raised on the mailing list.
 * License: Apache 2.0
 * Contact:
-* Last updated: 24-Aug-2026
+* Last updated: 25-Aug-2026
 ```
 
 ## Section boilerplate
