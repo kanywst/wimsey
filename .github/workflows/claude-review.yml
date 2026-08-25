@@ -123,6 +123,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
           SHA: ${{ github.event.pull_request.head.sha }}
+          BASE: ${{ github.event.pull_request.base.ref }}
           SINCE: ${{ steps.started.outputs.at }}
         run: |
           set -euo pipefail
@@ -140,9 +141,22 @@ jobs:
             echo "the reviewer posted $posted comment(s) on this run"
             exit 0
           fi
-          body=$(printf '%s\n\n%s\n' \
-            "Claude review ran against \`$SHA\` and posted no findings." \
-            "Automated note from the workflow, not from the reviewer: it stays silent when it has nothing to report, so this tells a clean review apart from a run that never got to speak.")
+
+          # Silence has one more cause than "clean", and the note must not
+          # claim a review happened when it did not: the action refuses to run
+          # when this file differs from the copy on the base branch, so a pull
+          # request touching the reviewer is never reviewed by it. Ask git
+          # rather than guess.
+          git fetch --quiet --depth=1 origin "$BASE"
+          if git diff --quiet FETCH_HEAD HEAD -- .github/workflows/claude-review.yml; then
+            body=$(printf '%s\n\n%s\n' \
+              "Claude review ran against \`$SHA\` and posted no findings." \
+              "Automated note from the workflow, not from the reviewer: it stays silent when it has nothing to report, so this tells a clean review apart from a run that never got to speak.")
+          else
+            body=$(printf '%s\n\n%s\n' \
+              "Claude review did **not** run against \`$SHA\`." \
+              "This pull request modifies \`.github/workflows/claude-review.yml\`, and the action refuses to run from a version of itself that differs from the base branch — a pull request cannot rewrite its own reviewer. Review these changes by hand; the next pull request gets the reviewer back.")
+          fi
           # Keep exactly one of these, rewritten per push, instead of one per
           # push: the note is about the current head and nothing else.
           gh pr comment "$PR" --edit-last --body "$body" 2>/dev/null \
