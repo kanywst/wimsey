@@ -24,9 +24,8 @@ use wimsey_wpt::{WptClaims, WptError};
 /// a JWK carries its own algorithm, so one suite can hold both `EdDSA` and
 /// `ES256` vectors.
 ///
-/// v3 added the `accepted` array to the httpsig vectors. Until then a suite
-/// could only say what MUST be rejected, which an implementation that rejects
-/// everything passes. Recording what MUST still verify pins the other edge.
+/// v3 added the `accepted` array to the httpsig vectors, so a suite can say
+/// what MUST still verify and not only what MUST be rejected.
 pub const FORMAT: &str = "wimse-conformance/v3";
 
 /// The index of every vector in the suite, written to `manifest.json`.
@@ -480,10 +479,9 @@ pub struct HttpSigVector {
 /// accepted.
 ///
 /// A signature carries exactly the components it covers, so a message can be
-/// altered outside that set and remain valid. Recording only rejections leaves
-/// that edge undefined, and an implementation that tightens past the spec — by
-/// checking something it was never asked to cover — reads as *more* careful
-/// while breaking interoperability. These cases fail it loudly instead.
+/// altered outside that set and stay valid. A suite of rejections alone cannot
+/// tell that apart from an implementation that checks more than it was asked
+/// to — which reads as careful, and breaks interoperability.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct HttpSigAccepted {
     /// A stable identifier, unique within the file.

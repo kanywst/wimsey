@@ -521,13 +521,9 @@ const REWRITTEN_AUTHORITY: &str = "attacker.example.net";
 
 /// Altered requests that must still verify.
 ///
-/// The signature covers the set Section 3 mandates, and `@authority` is not in
-/// it, so rewriting the host leaves the signature valid. That surprises people —
-/// it was raised twice on the WIMSE list as a possible flaw — because
-/// `wimse-aud` looks like it should pin the host. It does not: the audience
-/// names the *service* the request is for, and stays whatever the signer said
-/// regardless of where the message was routed. A deployment that wants the host
-/// bound covers `@authority`, which the paired negative case shows working.
+/// `@authority` is not in the set Section 3 mandates, so rewriting the host
+/// leaves the signature valid. Paired with `authority-rewritten-inside-the-
+/// covered-set`, which covers it and therefore rejects the same rewrite.
 fn httpsig_accepted(signed_request: &VectorRequest) -> Vec<HttpSigAccepted> {
     vec![HttpSigAccepted {
         id: "authority-rewritten-outside-the-covered-set".to_owned(),
@@ -736,8 +732,7 @@ fn httpsig_negatives(
         ..signed_request.clone()
     };
     // The same rewrite the `accepted` case tolerates, signed over a component
-    // set that does include `@authority`. The pair is the point: what changes
-    // the outcome is the coverage, not the verifier being more or less careful.
+    // set that does include `@authority`.
     let covering_authority: Vec<Component> = components
         .iter()
         .cloned()
