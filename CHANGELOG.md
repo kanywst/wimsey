@@ -28,8 +28,11 @@ silently.
   vector exercised it, so an implementation that verified a response signature
   without applying the profile passed. They include the two rules that differ
   from the request profile: `wimse-aud` is forbidden on a response rather than
-  required, and `wimse-req-nonce` is required in its place. 140 assertions, up
-  from 122.
+  required, and `wimse-req-nonce` is required in its place.
+- A `missing-tag` case on each side. `wrong-tag` covered a `tag` with the wrong
+  value; omitting it altogether is a different rule and neither profile had a
+  vector for it. Every branch of both profiles now has a case. 144 assertions,
+  up from 122.
 - The conformance README documents the response half of the httpsig vectors,
   which it had not since response signing landed in 0.4.0.
 

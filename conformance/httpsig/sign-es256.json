@@ -111,6 +111,13 @@
       "signature": "wimse=:6G7wvweqVAi44AxX3+Z2Y9fvptFh44pEjmEYzCLtXneNU5qljON5r/1nE8Dn1emZRQh5HPPILfpb9YAhqQiSEw==:"
     },
     {
+      "id": "missing-tag",
+      "description": "the signature omits `tag` altogether, which is a different rule from carrying the wrong one",
+      "expect": "missing_parameter",
+      "signature_input": "wimse=(\"@method\" \"@request-target\" \"content-type\" \"content-digest\" \"workload-identity-token\");created=1700000000;expires=1700000300;nonce=\"abcd1111\";wimse-aud=\"https://service.example/transfer\";wimse-sign-response",
+      "signature": "wimse=:qgtov/PODO/PDwN4YtF8353YuUTQ1biwVWvznETCNyl7BBNsJGPbnuud9ZRw+JolzlXUG6pay1YJvXySspTtqA==:"
+    },
+    {
       "id": "audience-mismatch",
       "description": "the signature was minted for a different service than the one verifying it",
       "expect": "audience_mismatch",
@@ -329,6 +336,13 @@
         "expect": "wrong_tag",
         "signature_input": "wimse=(\"@status\" \"@method\";req \"@request-target\";req \"content-type\" \"content-digest\" \"workload-identity-token\");created=1700000000;expires=1700000300;nonce=\"abcd2222\";tag=\"some-other-protocol\";wimse-req-nonce=\"abcd1111\"",
         "signature": "wimse=:z6BspOJyjOZKCfl/cR4vQHPgN7mGMpUciXLtmZo9Gu3RR5clxhV/yCUBYVXk+262okd0Deh+XcdKfxz9wDODog==:"
+      },
+      {
+        "id": "response-missing-tag",
+        "description": "the response signature omits `tag` altogether",
+        "expect": "missing_parameter",
+        "signature_input": "wimse=(\"@status\" \"@method\";req \"@request-target\";req \"content-type\" \"content-digest\" \"workload-identity-token\");created=1700000000;expires=1700000300;nonce=\"abcd2222\";wimse-req-nonce=\"abcd1111\"",
+        "signature": "wimse=:3kjZxAhF++58KXUPJBeSgMTzxKrdbHObBrNAX/jQPcMJsCBTXNojLe+WvkX5Qlf98T1jBq0BSkhm7XcN5mxSTw==:"
       },
       {
         "id": "lifted-onto-another-request",

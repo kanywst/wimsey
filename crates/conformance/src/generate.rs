@@ -758,6 +758,15 @@ fn response_profile_negatives(
                 ..params.clone()
             },
         ),
+        profile_case(
+            "response-missing-tag",
+            "the response signature omits `tag` altogether",
+            ErrorCode::MissingParameter,
+            SignatureParams {
+                tag: None,
+                ..params.clone()
+            },
+        ),
     ]
 }
 
@@ -842,6 +851,16 @@ fn httpsig_profile_negatives(
             ErrorCode::WrongTag,
             SignatureParams {
                 tag: Some("some-other-protocol".to_owned()),
+                ..params.clone()
+            },
+        ),
+        profile_case(
+            "missing-tag",
+            "the signature omits `tag` altogether, which is a different rule from carrying the \
+             wrong one",
+            ErrorCode::MissingParameter,
+            SignatureParams {
+                tag: None,
                 ..params.clone()
             },
         ),
