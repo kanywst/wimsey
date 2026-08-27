@@ -23,8 +23,13 @@ silently.
 ### Added
 
 - A response case that substitutes the request's WIT for the responder's and
-  must be rejected, which is what closes the gap above. 124 assertions, up from
-  122.
+  must be rejected, which is what closes the gap above.
+- Eight response-profile cases. The profile has been enforced since 0.4.0 but no
+  vector exercised it, so an implementation that verified a response signature
+  without applying the profile passed. They include the two rules that differ
+  from the request profile: `wimse-aud` is forbidden on a response rather than
+  required, and `wimse-req-nonce` is required in its place. 140 assertions, up
+  from 122.
 - The conformance README documents the response half of the httpsig vectors,
   which it had not since response signing landed in 0.4.0.
 

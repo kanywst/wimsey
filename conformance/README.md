@@ -173,6 +173,8 @@ Note `wit-binding-mismatch`: the substituted WIT is itself perfectly valid and s
 
 The responder is a different workload from the caller — a different identifier, a different WIT, a different key. `verified-with-the-requester-key` substitutes the request's WIT and must fail: a client that carries request-side identity state into the response check passes every other assertion here.
 
+The response profile is not the request profile, and the `response-` cases enforce the difference: `wimse-aud` names the service a request is for and is **forbidden** coming back, while `wimse-req-nonce` is required whenever the client asked for a signed response. The rest — `created`, `expires`, `nonce`, `tag`, and the ban on `keyid` and `alg` — match the request side. Each case is a genuinely valid signature, so an implementation that verifies responses without applying the profile accepts all eight.
+
 The `authority` pair answers a question that has come up twice on the WIMSE list. `@authority` is not in the set Section 3 mandates, so `authority-rewritten-outside-the-covered-set` rewrites the host and must **still verify** — `wimse-aud` names the service a request is for, not where it was routed. Its pair carries a signature that does cover `@authority`, and the same rewrite then fails. Cover it if you need the host bound.
 
 The `tampered-body` case is deliberately not a signature failure. The signature covers the `Content-Digest` **header string**, which is untouched, so the signature still verifies — the body is caught by the digest check alone. An implementation that only verifies signatures and never re-hashes the body will accept a swapped payload.

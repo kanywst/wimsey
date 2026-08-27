@@ -158,6 +158,19 @@ fn httpsig_neg(id: &str, description: &str, expect: ErrorCode) -> HttpSigNegativ
     }
 }
 
+fn response_neg(id: &str, description: &str, expect: ErrorCode) -> ResponseNegative {
+    ResponseNegative {
+        id: id.to_owned(),
+        description: description.to_owned(),
+        expect,
+        signature_input: None,
+        signature: None,
+        request: None,
+        wit: None,
+        expected_req_nonce: None,
+    }
+}
+
 /// Re-signs a token's payload under a different JOSE header.
 ///
 /// Used to mint negative cases that are *validly signed* but wrong in some other
@@ -615,43 +628,137 @@ fn httpsig_response(
         signature_input: signed.signature_input,
         signature: signed.signature,
         expected_req_nonce: NONCE.to_owned(),
-        negative: vec![
-            ResponseNegative {
-                id: "lifted-onto-another-request".to_owned(),
-                description: "the same signed response, verified against a different request"
-                    .to_owned(),
-                expect: ErrorCode::InvalidSignature,
-                signature_input: None,
-                signature: None,
-                request: Some(rerouted),
-                wit: None,
-                expected_req_nonce: None,
-            },
-            ResponseNegative {
-                id: "wrong-req-nonce".to_owned(),
-                description: "the client's nonce is not the one the response carries back"
-                    .to_owned(),
-                expect: ErrorCode::RequestNonceMismatch,
-                signature_input: None,
-                signature: None,
-                request: None,
-                wit: None,
-                expected_req_nonce: Some("some-other-nonce".to_owned()),
-            },
-            ResponseNegative {
-                id: "verified-with-the-requester-key".to_owned(),
-                description: "the response is verified against the identity in the request's \
-                              WIT rather than the one it carries itself"
-                    .to_owned(),
-                expect: ErrorCode::InvalidSignature,
-                signature_input: None,
-                signature: None,
-                request: None,
-                wit: Some(request_wit.to_owned()),
-                expected_req_nonce: None,
-            },
-        ],
+        negative: {
+            let mut cases = response_profile_negatives(&exchange, &components, &params, &pop_key);
+            cases.extend([
+                ResponseNegative {
+                    request: Some(rerouted),
+                    ..response_neg(
+                        "lifted-onto-another-request",
+                        "the same signed response, verified against a different request",
+                        ErrorCode::InvalidSignature,
+                    )
+                },
+                ResponseNegative {
+                    expected_req_nonce: Some("some-other-nonce".to_owned()),
+                    ..response_neg(
+                        "wrong-req-nonce",
+                        "the client's nonce is not the one the response carries back",
+                        ErrorCode::RequestNonceMismatch,
+                    )
+                },
+                ResponseNegative {
+                    wit: Some(request_wit.to_owned()),
+                    ..response_neg(
+                        "verified-with-the-requester-key",
+                        "the response is verified against the identity in the request's WIT \
+                         rather than the one it carries itself",
+                        ErrorCode::InvalidSignature,
+                    )
+                },
+            ]);
+            cases
+        },
     }
+}
+
+/// The response-profile rejection cases, one broken rule each.
+///
+/// The response profile is not the request one: `wimse-aud` is forbidden rather
+/// than required, and `wimse-req-nonce` takes its place. Every case is a
+/// genuinely signed response, so what turns it away is the rule.
+fn response_profile_negatives(
+    exchange: &HttpExchange<'_>,
+    components: &[Component],
+    params: &SignatureParams,
+    pop_key: &SigningKey,
+) -> Vec<ResponseNegative> {
+    let profile_case = |id: &str, description: &str, expect, altered: SignatureParams| {
+        let signed = sign(exchange, components, &altered, "wimse", pop_key)
+            .expect("the fixed response-profile inputs are signable");
+        ResponseNegative {
+            signature_input: Some(signed.signature_input),
+            signature: Some(signed.signature),
+            ..response_neg(id, description, expect)
+        }
+    };
+
+    vec![
+        profile_case(
+            "response-carries-wimse-aud",
+            "the response signature carries `wimse-aud`, which names the service a *request* is \
+             for and is forbidden coming back",
+            ErrorCode::ForbiddenParameter,
+            SignatureParams {
+                wimse_aud: Some(AUDIENCE.to_owned()),
+                ..params.clone()
+            },
+        ),
+        profile_case(
+            "response-missing-req-nonce",
+            "the client asked for a signed response, so the response must carry back its \
+             `wimse-req-nonce`",
+            ErrorCode::MissingParameter,
+            SignatureParams {
+                wimse_req_nonce: None,
+                ..params.clone()
+            },
+        ),
+        profile_case(
+            "response-forbidden-alg-parameter",
+            "the response signature carries the `alg` parameter, which the profile forbids",
+            ErrorCode::ForbiddenParameter,
+            SignatureParams {
+                alg: Some("ed25519".to_owned()),
+                ..params.clone()
+            },
+        ),
+        profile_case(
+            "response-forbidden-keyid-parameter",
+            "the response signature carries the `keyid` parameter, which the profile forbids",
+            ErrorCode::ForbiddenParameter,
+            SignatureParams {
+                keyid: Some(KID.to_owned()),
+                ..params.clone()
+            },
+        ),
+        profile_case(
+            "response-missing-created",
+            "the response signature omits the mandatory `created` parameter",
+            ErrorCode::MissingParameter,
+            SignatureParams {
+                created: None,
+                ..params.clone()
+            },
+        ),
+        profile_case(
+            "response-missing-expires",
+            "the response signature omits the mandatory `expires` parameter",
+            ErrorCode::MissingParameter,
+            SignatureParams {
+                expires: None,
+                ..params.clone()
+            },
+        ),
+        profile_case(
+            "response-missing-nonce",
+            "the response signature omits the mandatory `nonce` parameter",
+            ErrorCode::MissingParameter,
+            SignatureParams {
+                nonce: None,
+                ..params.clone()
+            },
+        ),
+        profile_case(
+            "response-wrong-tag",
+            "the response signature's `tag` is not `wimse-workload-to-workload`",
+            ErrorCode::WrongTag,
+            SignatureParams {
+                tag: Some("some-other-protocol".to_owned()),
+                ..params.clone()
+            },
+        ),
+    ]
 }
 
 /// The rejection cases that break one rule of the WIMSE profile each.

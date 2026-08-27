@@ -272,6 +272,62 @@
     "expected_req_nonce": "abcd1111",
     "negative": [
       {
+        "id": "response-carries-wimse-aud",
+        "description": "the response signature carries `wimse-aud`, which names the service a *request* is for and is forbidden coming back",
+        "expect": "forbidden_parameter",
+        "signature_input": "wimse=(\"@status\" \"@method\";req \"@request-target\";req \"content-type\" \"content-digest\" \"workload-identity-token\");created=1700000000;expires=1700000300;nonce=\"abcd2222\";tag=\"wimse-workload-to-workload\";wimse-aud=\"https://service.example/transfer\";wimse-req-nonce=\"abcd1111\"",
+        "signature": "wimse=:2DDcnU0LZ37pRaByN4xC1CYiuaQ3lheSzmndTIpK5+SOA0kFvGK9Y4SJ4MGkLTdqJOKDB4WwqQjy+nMpvrFiDA==:"
+      },
+      {
+        "id": "response-missing-req-nonce",
+        "description": "the client asked for a signed response, so the response must carry back its `wimse-req-nonce`",
+        "expect": "missing_parameter",
+        "signature_input": "wimse=(\"@status\" \"@method\";req \"@request-target\";req \"content-type\" \"content-digest\" \"workload-identity-token\");created=1700000000;expires=1700000300;nonce=\"abcd2222\";tag=\"wimse-workload-to-workload\"",
+        "signature": "wimse=:qT/EjgkLU5q14lBQWx1AlTata06uQigdLw17mgmhFTJc27uwpnayufsUjyAY/Tm7g1fmeWr9szPdPB6VmPFeAA==:"
+      },
+      {
+        "id": "response-forbidden-alg-parameter",
+        "description": "the response signature carries the `alg` parameter, which the profile forbids",
+        "expect": "forbidden_parameter",
+        "signature_input": "wimse=(\"@status\" \"@method\";req \"@request-target\";req \"content-type\" \"content-digest\" \"workload-identity-token\");created=1700000000;expires=1700000300;alg=\"ed25519\";nonce=\"abcd2222\";tag=\"wimse-workload-to-workload\";wimse-req-nonce=\"abcd1111\"",
+        "signature": "wimse=:lpsxJkAL6MuvxprCUdj62Yv4FNnomMV5GW6bmLQj/HxrsIvfwcVxOngJnE6YT5zlNaYMPf3hDlLeraHeXqR9CA==:"
+      },
+      {
+        "id": "response-forbidden-keyid-parameter",
+        "description": "the response signature carries the `keyid` parameter, which the profile forbids",
+        "expect": "forbidden_parameter",
+        "signature_input": "wimse=(\"@status\" \"@method\";req \"@request-target\";req \"content-type\" \"content-digest\" \"workload-identity-token\");created=1700000000;expires=1700000300;keyid=\"issuer-key-1\";nonce=\"abcd2222\";tag=\"wimse-workload-to-workload\";wimse-req-nonce=\"abcd1111\"",
+        "signature": "wimse=:PRWRxW/iLd37+hVUtlflPOJtOoGDeyGfIwFv2+S605e8gE8bLISBHdNtLzrah/DSlzcaKQFgbpAn6EAxj8jODA==:"
+      },
+      {
+        "id": "response-missing-created",
+        "description": "the response signature omits the mandatory `created` parameter",
+        "expect": "missing_parameter",
+        "signature_input": "wimse=(\"@status\" \"@method\";req \"@request-target\";req \"content-type\" \"content-digest\" \"workload-identity-token\");expires=1700000300;nonce=\"abcd2222\";tag=\"wimse-workload-to-workload\";wimse-req-nonce=\"abcd1111\"",
+        "signature": "wimse=:cUprxw658Zb6YdoMNjFSVrjV9b13Mpn0RNZ36NB7SpKHtGD+34PoBowt2kDS5xT8P9bjMAbqS/v4XowDZV1GDA==:"
+      },
+      {
+        "id": "response-missing-expires",
+        "description": "the response signature omits the mandatory `expires` parameter",
+        "expect": "missing_parameter",
+        "signature_input": "wimse=(\"@status\" \"@method\";req \"@request-target\";req \"content-type\" \"content-digest\" \"workload-identity-token\");created=1700000000;nonce=\"abcd2222\";tag=\"wimse-workload-to-workload\";wimse-req-nonce=\"abcd1111\"",
+        "signature": "wimse=:9bcYIASDt18JXPVpacQui6d5AQtP6oQFFtyJBKepE8T9HLGEdOQN/l1sRCmiuRg/VTzzxuyl8EhgJwt2TnssAQ==:"
+      },
+      {
+        "id": "response-missing-nonce",
+        "description": "the response signature omits the mandatory `nonce` parameter",
+        "expect": "missing_parameter",
+        "signature_input": "wimse=(\"@status\" \"@method\";req \"@request-target\";req \"content-type\" \"content-digest\" \"workload-identity-token\");created=1700000000;expires=1700000300;tag=\"wimse-workload-to-workload\";wimse-req-nonce=\"abcd1111\"",
+        "signature": "wimse=:Sa5CKh+VrfH6Dd+WH8A38IeSnzJgzQTB0fAQy3EQAy32fTLLRdcGtzytM0r4Mr65BkqTpwFK3zhZmzmKNKe8Dg==:"
+      },
+      {
+        "id": "response-wrong-tag",
+        "description": "the response signature's `tag` is not `wimse-workload-to-workload`",
+        "expect": "wrong_tag",
+        "signature_input": "wimse=(\"@status\" \"@method\";req \"@request-target\";req \"content-type\" \"content-digest\" \"workload-identity-token\");created=1700000000;expires=1700000300;nonce=\"abcd2222\";tag=\"some-other-protocol\";wimse-req-nonce=\"abcd1111\"",
+        "signature": "wimse=:w3yyGy5mp35yWec1kj9RMlEttOAE8WYD94nR0IHY5bp4kF3xfmGiwj7zRkekpNQdNaJMlVPp57QX/78LGT8gCA==:"
+      },
+      {
         "id": "lifted-onto-another-request",
         "description": "the same signed response, verified against a different request",
         "expect": "invalid_signature",
