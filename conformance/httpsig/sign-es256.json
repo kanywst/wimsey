@@ -1,5 +1,5 @@
 {
-  "format": "wimse-conformance/v3",
+  "format": "wimse-conformance/v4",
   "suite": "httpsig",
   "id": "sign-es256",
   "spec": "draft-ietf-wimse-http-signature-06",
@@ -229,6 +229,15 @@
     }
   ],
   "response": {
+    "wit": "eyJ0eXAiOiJ3aXQrand0IiwiYWxnIjoiRVMyNTYiLCJraWQiOiJpc3N1ZXIta2V5LTEifQ.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvbGVkZ2VyIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDM2MDAsImp0aSI6ImExYjJjMyIsImNuZiI6eyJqd2siOnsiYWxnIjoiRVMyNTYiLCJrdHkiOiJFQyIsImNydiI6IlAtMjU2IiwieCI6IklKd3hlMk41TmQwOW9jVlBZMGxkLXpINWZTazk4SVZ4QXlCWlhKcXN1RDgiLCJ5IjoiM2VUR244RjZESFRDRE1hU1ppOEVtSks2TjZTNlI5TEhETmlwbVlZNUg1cyJ9fX0.P6xUSOgllCajLrIFNlpojweNDRV8arYd1eDQ1QC9BZTYjXOq_0fqlNGcDNCd53XbTJx_2I3z72rCQxH-ugsM9w",
+    "pop_signing_key": {
+      "alg": "ES256",
+      "kty": "EC",
+      "crv": "P-256",
+      "x": "IJwxe2N5Nd09ocVPY0ld-zH5fSk98IVxAyBZXJqsuD8",
+      "y": "3eTGn8F6DHTCDMaSZi8EmJK6N6S6R9LHDNipmYY5H5s",
+      "d": "CwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCws"
+    },
     "status": 200,
     "headers": [
       [
@@ -241,7 +250,7 @@
       ],
       [
         "Workload-Identity-Token",
-        "eyJ0eXAiOiJ3aXQrand0IiwiYWxnIjoiRVMyNTYiLCJraWQiOiJpc3N1ZXIta2V5LTEifQ.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvYXBpIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDM2MDAsImp0aSI6ImExYjJjMyIsImNuZiI6eyJqd2siOnsiYWxnIjoiRVMyNTYiLCJrdHkiOiJFQyIsImNydiI6IlAtMjU2IiwieCI6ImNUWDZUOWs2Q2R6cGk3OW9HMHY4OVE1OERXTlU1aXI3Q184cU5DbGhlR1UiLCJ5IjoiN1V3ZkF0MjVBajdsYWxWLVVWMXFuY1pzRWZJZ2xnM2xsRE5OOVloM1p5USJ9fX0.5hgKPe0utuP-jgVBlaXzEfWSWyU_cCmKUVGEO6q159Hs-cH-XogDwFVyl7qgKXf6uFTEmPtO2nQrY3G1jxyAiw"
+        "eyJ0eXAiOiJ3aXQrand0IiwiYWxnIjoiRVMyNTYiLCJraWQiOiJpc3N1ZXIta2V5LTEifQ.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvbGVkZ2VyIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDM2MDAsImp0aSI6ImExYjJjMyIsImNuZiI6eyJqd2siOnsiYWxnIjoiRVMyNTYiLCJrdHkiOiJFQyIsImNydiI6IlAtMjU2IiwieCI6IklKd3hlMk41TmQwOW9jVlBZMGxkLXpINWZTazk4SVZ4QXlCWlhKcXN1RDgiLCJ5IjoiM2VUR244RjZESFRDRE1hU1ppOEVtSks2TjZTNlI5TEhETmlwbVlZNUg1cyJ9fX0.P6xUSOgllCajLrIFNlpojweNDRV8arYd1eDQ1QC9BZTYjXOq_0fqlNGcDNCd53XbTJx_2I3z72rCQxH-ugsM9w"
       ]
     ],
     "body": "{\"status\":\"accepted\"}",
@@ -262,7 +271,7 @@
       "wimse_req_nonce": "abcd1111"
     },
     "signature_input": "wimse=(\"@status\" \"@method\";req \"@request-target\";req \"content-type\" \"content-digest\" \"workload-identity-token\");created=1700000000;expires=1700000300;nonce=\"abcd2222\";tag=\"wimse-workload-to-workload\";wimse-req-nonce=\"abcd1111\"",
-    "signature": "wimse=:STqol0k/8g39/0mIkKfPAUpRBtqryVtgBcfDaf3ENDv1gbeHe2ILsQqPjZy/jwEYqMYCIR+IfX5Ezj7dV7P8+A==:",
+    "signature": "wimse=:6Az1mZeMvDlT+oc4OapL3Oq+bKZzLF8bbninxsM0d5kiI4xtJ0hj8OTFwtv0jqSbAnQVxz+rCUU+ZdrZXZZN0g==:",
     "expected_req_nonce": "abcd1111",
     "negative": [
       {
@@ -295,6 +304,12 @@
         "description": "the client's nonce is not the one the response carries back",
         "expect": "request_nonce_mismatch",
         "expected_req_nonce": "some-other-nonce"
+      },
+      {
+        "id": "verified-with-the-requester-key",
+        "description": "the response is verified against the identity in the request's WIT rather than the one it carries itself",
+        "expect": "invalid_signature",
+        "wit": "eyJ0eXAiOiJ3aXQrand0IiwiYWxnIjoiRVMyNTYiLCJraWQiOiJpc3N1ZXIta2V5LTEifQ.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvYXBpIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDM2MDAsImp0aSI6ImExYjJjMyIsImNuZiI6eyJqd2siOnsiYWxnIjoiRVMyNTYiLCJrdHkiOiJFQyIsImNydiI6IlAtMjU2IiwieCI6ImNUWDZUOWs2Q2R6cGk3OW9HMHY4OVE1OERXTlU1aXI3Q184cU5DbGhlR1UiLCJ5IjoiN1V3ZkF0MjVBajdsYWxWLVVWMXFuY1pzRWZJZ2xnM2xsRE5OOVloM1p5USJ9fX0.5hgKPe0utuP-jgVBlaXzEfWSWyU_cCmKUVGEO6q159Hs-cH-XogDwFVyl7qgKXf6uFTEmPtO2nQrY3G1jxyAiw"
       }
     ]
   }

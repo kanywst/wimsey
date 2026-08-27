@@ -50,9 +50,13 @@ const OTHER_ISSUER_SEED: [u8; 32] = [2u8; 32];
 const WIT_POP_SEED: [u8; 32] = [7u8; 32];
 /// The proof-of-possession seed used by the WPT and httpsig vectors.
 const POP_SEED: [u8; 32] = [9u8; 32];
+/// The responding workload's own proof-of-possession seed.
+const RESPONDER_POP_SEED: [u8; 32] = [11u8; 32];
 
 const ISSUER: &str = "https://issuer.example";
 const SUBJECT: &str = "spiffe://example.org/workload/api";
+/// The responding workload.
+const RESPONDER_SUBJECT: &str = "spiffe://example.org/workload/ledger";
 const KID: &str = "issuer-key-1";
 const IAT: u64 = 1_700_000_000;
 const EXP: u64 = 1_700_003_600;
@@ -479,7 +483,7 @@ pub fn httpsig_vector(algorithm: Algorithm) -> HttpSigVector {
     };
     let negative = httpsig_negatives(&vector_request, &request, &components, &params, &pop_key);
     let accepted = httpsig_accepted(&vector_request);
-    let response = httpsig_response(&request, &vector_request, &wit, &pop_key);
+    let response = httpsig_response(&request, &vector_request, &wit, &issuer_key, algorithm);
 
     HttpSigVector {
         header: header(
@@ -547,16 +551,26 @@ fn httpsig_accepted(signed_request: &VectorRequest) -> Vec<HttpSigAccepted> {
 fn httpsig_response(
     request: &HttpRequest,
     vector_request: &VectorRequest,
-    wit: &str,
-    pop_key: &SigningKey,
+    request_wit: &str,
+    issuer_key: &SigningKey,
+    algorithm: Algorithm,
 ) -> VectorResponse {
+    // Its own key and its own WIT, from the same issuer.
+    let pop_key = key(algorithm, RESPONDER_POP_SEED);
+    let wit = issue_wit(
+        &wit_claims(RESPONDER_SUBJECT, &pop_key),
+        Some(KID),
+        issuer_key,
+    )
+    .expect("issue the responder's WIT");
+
     let body = br#"{"status":"accepted"}"#;
     let response = HttpResponse {
         status: 200,
         headers: vec![
             ("Content-Type".to_owned(), "application/json".to_owned()),
             ("Content-Digest".to_owned(), content_digest_sha256(body)),
-            ("Workload-Identity-Token".to_owned(), wit.to_owned()),
+            ("Workload-Identity-Token".to_owned(), wit.clone()),
         ],
     };
     let exchange = HttpExchange {
@@ -575,7 +589,7 @@ fn httpsig_response(
         ..SignatureParams::default()
     };
     let signed =
-        sign(&exchange, &components, &params, "wimse", pop_key).expect("sign the response");
+        sign(&exchange, &components, &params, "wimse", &pop_key).expect("sign the response");
 
     let rerouted = VectorRequest {
         path: "/admin".to_owned(),
@@ -583,6 +597,8 @@ fn httpsig_response(
     };
 
     VectorResponse {
+        wit: wit.clone(),
+        pop_signing_key: PrivateJwk::from_signing_key(&pop_key),
         status: response.status,
         headers: response.headers.clone(),
         body: String::from_utf8(body.to_vec()).expect("the fixed body is utf-8"),
@@ -608,6 +624,7 @@ fn httpsig_response(
                 signature_input: None,
                 signature: None,
                 request: Some(rerouted),
+                wit: None,
                 expected_req_nonce: None,
             },
             ResponseNegative {
@@ -618,7 +635,20 @@ fn httpsig_response(
                 signature_input: None,
                 signature: None,
                 request: None,
+                wit: None,
                 expected_req_nonce: Some("some-other-nonce".to_owned()),
+            },
+            ResponseNegative {
+                id: "verified-with-the-requester-key".to_owned(),
+                description: "the response is verified against the identity in the request's \
+                              WIT rather than the one it carries itself"
+                    .to_owned(),
+                expect: ErrorCode::InvalidSignature,
+                signature_input: None,
+                signature: None,
+                request: None,
+                wit: Some(request_wit.to_owned()),
+                expected_req_nonce: None,
             },
         ],
     }
