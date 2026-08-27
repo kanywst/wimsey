@@ -10,6 +10,20 @@ silently.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-08-27
+
+Nothing in the published crates changed, again: every API is the same as 0.5.0.
+The break is in the conformance vectors, and it is a minor bump for the same
+reason 0.5.0 was — they are a contract other implementations validate against,
+and versioning them by how convenient the break is to announce is how a contract
+stops being one.
+
+What changed is what the vectors can catch. The response half was covered by
+three cases, all about bindings, and reused the requester's identity throughout.
+An implementation could verify a peer's response against the caller's own key,
+or skip the response profile entirely, and pass. Both are closed, and every
+branch of both profiles now has a case.
+
 ### Changed
 
 - **Breaking:** the conformance vector format is now `wimse-conformance/v4`. The
@@ -263,7 +277,8 @@ public API.
 - Project governance, security policy, contributing guide (DCO), and OpenSSF
   Scorecard automation.
 
-[Unreleased]: https://github.com/kanywst/wimsey/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/kanywst/wimsey/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/kanywst/wimsey/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/kanywst/wimsey/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/kanywst/wimsey/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/kanywst/wimsey/compare/v0.2.0...v0.3.0
