@@ -38,7 +38,12 @@
     },
     {
       "suite": "mtls",
-      "path": "mtls/wic-basic.json",
+      "path": "mtls/wic-eddsa.json",
+      "spec": "draft-ietf-wimse-mutual-tls-02"
+    },
+    {
+      "suite": "mtls",
+      "path": "mtls/wic-es256.json",
       "spec": "draft-ietf-wimse-mutual-tls-02"
     }
   ]

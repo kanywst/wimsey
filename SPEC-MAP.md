@@ -26,7 +26,6 @@ the pinned drafts.
 | Requirement | Draft | Status |
 | --- | --- | --- |
 | Trust-domain match on the TLS peer certificate | `mutual-tls` §4 | Left to the caller: `wimsey-mtls::verify` returns the identifier and the caller compares it, since chain building and rustls wiring are out of scope. |
-| ES256 for the mTLS certificate path | `mutual-tls` | Not implemented. The token path supports ES256; certificates are still Ed25519-only, and `WorkloadCa::issue` refuses a P-256 key rather than certifying it under a mismatched algorithm identifier. The mutual-TLS draft does not require ES256 the way `workload-creds` does. |
 | Chain building, `basicConstraints`, `keyUsage`, name constraints | `mutual-tls` §4 | Not enforced. `verify` is a single-issuer model that checks the directly provided CA only; deployments needing full PKIX path validation should use a dedicated X.509 verifier. |
 
 ## Related specs

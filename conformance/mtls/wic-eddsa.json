@@ -1,9 +1,9 @@
 {
   "format": "wimse-conformance/v4",
   "suite": "mtls",
-  "id": "wic-basic",
+  "id": "wic-eddsa",
   "spec": "draft-ietf-wimse-mutual-tls-02",
-  "description": "Workload Identity Certificate issuance over a workload-supplied public key, plus the inputs a verifier must reject",
+  "description": "Workload Identity Certificate issuance over a workload-supplied public key (EdDSA), plus the inputs a verifier must reject",
   "ca_signing_key": {
     "alg": "EdDSA",
     "kty": "OKP",
@@ -56,6 +56,12 @@
       "description": "the presented bytes are not DER X.509 at all",
       "expect": "certificate_parse_error",
       "wic_der_b64u": "bm90IGEgY2VydGlmaWNhdGU"
+    },
+    {
+      "id": "ca-of-the-other-algorithm",
+      "description": "verified against a CA whose key cannot have produced this signature algorithm",
+      "expect": "unsupported_alg",
+      "ca_certificate_der_b64u": "MIIBdjCCARygAwIBAgIUZvOTaRJ1edINXqzUWZAFX8udiGkwCgYIKoZIzj0EAwIwITEfMB0GA1UEAwwWcmNnZW4gc2VsZiBzaWduZWQgY2VydDAeFw0yMDA5MTMxMjI2NDBaFw0zMDAzMTcxNzQ2NDBaMCExHzAdBgNVBAMMFnJjZ2VuIHNlbGYgc2lnbmVkIGNlcnQwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAARzED7DCzzPV9quCOk1NK7xRKNZQM9ru6EqDPfL1dZaZNgsjJnp08RfkkW6myeYLJrqjsHblLGcRHlZQsDrIqoyozIwMDAdBgNVHQ4EFgQU7WMRF-4vGz_UW429ORWvZ1Dwy14wDwYDVR0TAQH_BAUwAwEB_zAKBggqhkjOPQQDAgNIADBFAiBT951gyqEgttOyVocBxXJYYT8RCY7AsCkadxe6BceO9AIhANRHB3DR-yI0A_w4RWyjvdPa5FwK6vXYOLqjDbRGmoG4"
     }
   ]
 }

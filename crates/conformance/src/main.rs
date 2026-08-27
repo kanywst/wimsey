@@ -79,8 +79,12 @@ fn write_vectors(out: &Path) -> std::io::Result<()> {
             &out.join(format!("httpsig/sign-{suffix}.json")),
             &generate::httpsig_vector(algorithm),
         )?;
+        write_json(
+            &out.join(format!("mtls/wic-{suffix}.json")),
+            &generate::mtls_vector(algorithm),
+        )?;
     }
-    write_json(&out.join("mtls/wic-basic.json"), &generate::mtls_vector())
+    Ok(())
 }
 
 fn main() -> ExitCode {

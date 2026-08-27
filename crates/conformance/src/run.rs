@@ -290,7 +290,8 @@ pub fn run_mtls(vector: &MtlsVector, report: &mut Report) {
         }
     };
 
-    let ca = match WorkloadCa::from_ed25519(&ca_key, vector.ca_not_before, vector.ca_not_after) {
+    let ca = match WorkloadCa::from_signing_key(&ca_key, vector.ca_not_before, vector.ca_not_after)
+    {
         Ok(ca) => ca,
         Err(e) => {
             report.fail(&name, "rebuild the CA", format!("{e}"));
