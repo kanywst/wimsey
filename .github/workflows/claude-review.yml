@@ -107,6 +107,11 @@ jobs:
             `file:line`. If the diff is clean against all of the above, say so
             in one line rather than manufacturing nits.
 
+            Do not sign your comments. No "Generated with Claude Code" footer,
+            no co-author trailer, no tool attribution of any kind: this
+            repository does not carry them, and a review is read for what it
+            found rather than for what produced it.
+
           claude_args: |
             --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
 
