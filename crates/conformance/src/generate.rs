@@ -50,9 +50,13 @@ const OTHER_ISSUER_SEED: [u8; 32] = [2u8; 32];
 const WIT_POP_SEED: [u8; 32] = [7u8; 32];
 /// The proof-of-possession seed used by the WPT and httpsig vectors.
 const POP_SEED: [u8; 32] = [9u8; 32];
+/// The responding workload's own proof-of-possession seed.
+const RESPONDER_POP_SEED: [u8; 32] = [11u8; 32];
 
 const ISSUER: &str = "https://issuer.example";
 const SUBJECT: &str = "spiffe://example.org/workload/api";
+/// The responding workload.
+const RESPONDER_SUBJECT: &str = "spiffe://example.org/workload/ledger";
 const KID: &str = "issuer-key-1";
 const IAT: u64 = 1_700_000_000;
 const EXP: u64 = 1_700_003_600;
@@ -151,6 +155,19 @@ fn httpsig_neg(id: &str, description: &str, expect: ErrorCode) -> HttpSigNegativ
         accept_audience: None,
         max_age: None,
         required_components: None,
+    }
+}
+
+fn response_neg(id: &str, description: &str, expect: ErrorCode) -> ResponseNegative {
+    ResponseNegative {
+        id: id.to_owned(),
+        description: description.to_owned(),
+        expect,
+        signature_input: None,
+        signature: None,
+        request: None,
+        wit: None,
+        expected_req_nonce: None,
     }
 }
 
@@ -479,7 +496,7 @@ pub fn httpsig_vector(algorithm: Algorithm) -> HttpSigVector {
     };
     let negative = httpsig_negatives(&vector_request, &request, &components, &params, &pop_key);
     let accepted = httpsig_accepted(&vector_request);
-    let response = httpsig_response(&request, &vector_request, &wit, &pop_key);
+    let response = httpsig_response(&request, &vector_request, &wit, &issuer_key, algorithm);
 
     HttpSigVector {
         header: header(
@@ -547,16 +564,26 @@ fn httpsig_accepted(signed_request: &VectorRequest) -> Vec<HttpSigAccepted> {
 fn httpsig_response(
     request: &HttpRequest,
     vector_request: &VectorRequest,
-    wit: &str,
-    pop_key: &SigningKey,
+    request_wit: &str,
+    issuer_key: &SigningKey,
+    algorithm: Algorithm,
 ) -> VectorResponse {
+    // Its own key and its own WIT, from the same issuer.
+    let pop_key = key(algorithm, RESPONDER_POP_SEED);
+    let wit = issue_wit(
+        &wit_claims(RESPONDER_SUBJECT, &pop_key),
+        Some(KID),
+        issuer_key,
+    )
+    .expect("issue the responder's WIT");
+
     let body = br#"{"status":"accepted"}"#;
     let response = HttpResponse {
         status: 200,
         headers: vec![
             ("Content-Type".to_owned(), "application/json".to_owned()),
             ("Content-Digest".to_owned(), content_digest_sha256(body)),
-            ("Workload-Identity-Token".to_owned(), wit.to_owned()),
+            ("Workload-Identity-Token".to_owned(), wit.clone()),
         ],
     };
     let exchange = HttpExchange {
@@ -575,7 +602,7 @@ fn httpsig_response(
         ..SignatureParams::default()
     };
     let signed =
-        sign(&exchange, &components, &params, "wimse", pop_key).expect("sign the response");
+        sign(&exchange, &components, &params, "wimse", &pop_key).expect("sign the response");
 
     let rerouted = VectorRequest {
         path: "/admin".to_owned(),
@@ -583,6 +610,8 @@ fn httpsig_response(
     };
 
     VectorResponse {
+        wit: wit.clone(),
+        pop_signing_key: PrivateJwk::from_signing_key(&pop_key),
         status: response.status,
         headers: response.headers.clone(),
         body: String::from_utf8(body.to_vec()).expect("the fixed body is utf-8"),
@@ -599,29 +628,146 @@ fn httpsig_response(
         signature_input: signed.signature_input,
         signature: signed.signature,
         expected_req_nonce: NONCE.to_owned(),
-        negative: vec![
-            ResponseNegative {
-                id: "lifted-onto-another-request".to_owned(),
-                description: "the same signed response, verified against a different request"
-                    .to_owned(),
-                expect: ErrorCode::InvalidSignature,
-                signature_input: None,
-                signature: None,
-                request: Some(rerouted),
-                expected_req_nonce: None,
-            },
-            ResponseNegative {
-                id: "wrong-req-nonce".to_owned(),
-                description: "the client's nonce is not the one the response carries back"
-                    .to_owned(),
-                expect: ErrorCode::RequestNonceMismatch,
-                signature_input: None,
-                signature: None,
-                request: None,
-                expected_req_nonce: Some("some-other-nonce".to_owned()),
-            },
-        ],
+        negative: {
+            let mut cases = response_profile_negatives(&exchange, &components, &params, &pop_key);
+            cases.extend([
+                ResponseNegative {
+                    request: Some(rerouted),
+                    ..response_neg(
+                        "lifted-onto-another-request",
+                        "the same signed response, verified against a different request",
+                        ErrorCode::InvalidSignature,
+                    )
+                },
+                ResponseNegative {
+                    expected_req_nonce: Some("some-other-nonce".to_owned()),
+                    ..response_neg(
+                        "wrong-req-nonce",
+                        "the client's nonce is not the one the response carries back",
+                        ErrorCode::RequestNonceMismatch,
+                    )
+                },
+                ResponseNegative {
+                    wit: Some(request_wit.to_owned()),
+                    ..response_neg(
+                        "verified-with-the-requester-key",
+                        "the response is verified against the identity in the request's WIT \
+                         rather than the one it carries itself",
+                        ErrorCode::InvalidSignature,
+                    )
+                },
+            ]);
+            cases
+        },
     }
+}
+
+/// The response-profile rejection cases, one broken rule each.
+///
+/// The response profile is not the request one: `wimse-aud` is forbidden rather
+/// than required, and `wimse-req-nonce` takes its place. Every case is a
+/// genuinely signed response, so what turns it away is the rule.
+fn response_profile_negatives(
+    exchange: &HttpExchange<'_>,
+    components: &[Component],
+    params: &SignatureParams,
+    pop_key: &SigningKey,
+) -> Vec<ResponseNegative> {
+    let profile_case = |id: &str, description: &str, expect, altered: SignatureParams| {
+        let signed = sign(exchange, components, &altered, "wimse", pop_key)
+            .expect("the fixed response-profile inputs are signable");
+        ResponseNegative {
+            signature_input: Some(signed.signature_input),
+            signature: Some(signed.signature),
+            ..response_neg(id, description, expect)
+        }
+    };
+
+    vec![
+        profile_case(
+            "response-carries-wimse-aud",
+            "the response signature carries `wimse-aud`, which names the service a *request* is \
+             for and is forbidden coming back",
+            ErrorCode::ForbiddenParameter,
+            SignatureParams {
+                wimse_aud: Some(AUDIENCE.to_owned()),
+                ..params.clone()
+            },
+        ),
+        profile_case(
+            "response-missing-req-nonce",
+            "the client asked for a signed response, so the response must carry back its \
+             `wimse-req-nonce`",
+            ErrorCode::MissingParameter,
+            SignatureParams {
+                wimse_req_nonce: None,
+                ..params.clone()
+            },
+        ),
+        profile_case(
+            "response-forbidden-alg-parameter",
+            "the response signature carries the `alg` parameter, which the profile forbids",
+            ErrorCode::ForbiddenParameter,
+            SignatureParams {
+                alg: Some("ed25519".to_owned()),
+                ..params.clone()
+            },
+        ),
+        profile_case(
+            "response-forbidden-keyid-parameter",
+            "the response signature carries the `keyid` parameter, which the profile forbids",
+            ErrorCode::ForbiddenParameter,
+            SignatureParams {
+                keyid: Some(KID.to_owned()),
+                ..params.clone()
+            },
+        ),
+        profile_case(
+            "response-missing-created",
+            "the response signature omits the mandatory `created` parameter",
+            ErrorCode::MissingParameter,
+            SignatureParams {
+                created: None,
+                ..params.clone()
+            },
+        ),
+        profile_case(
+            "response-missing-expires",
+            "the response signature omits the mandatory `expires` parameter",
+            ErrorCode::MissingParameter,
+            SignatureParams {
+                expires: None,
+                ..params.clone()
+            },
+        ),
+        profile_case(
+            "response-missing-nonce",
+            "the response signature omits the mandatory `nonce` parameter",
+            ErrorCode::MissingParameter,
+            SignatureParams {
+                nonce: None,
+                ..params.clone()
+            },
+        ),
+        profile_case(
+            "response-wrong-tag",
+            "the response signature's `tag` is not `wimse-workload-to-workload`",
+            ErrorCode::WrongTag,
+            SignatureParams {
+                tag: Some("some-other-protocol".to_owned()),
+                ..params.clone()
+            },
+        ),
+        profile_case(
+            "response-missing-tag",
+            "the response signature omits `tag` altogether",
+            ErrorCode::MissingParameter,
+            SignatureParams {
+                tag: None,
+                ..params.clone()
+            },
+        ),
+    ]
 }
 
 /// The rejection cases that break one rule of the WIMSE profile each.
@@ -705,6 +851,16 @@ fn httpsig_profile_negatives(
             ErrorCode::WrongTag,
             SignatureParams {
                 tag: Some("some-other-protocol".to_owned()),
+                ..params.clone()
+            },
+        ),
+        profile_case(
+            "missing-tag",
+            "the signature omits `tag` altogether, which is a different rule from carrying the \
+             wrong one",
+            ErrorCode::MissingParameter,
+            SignatureParams {
+                tag: None,
                 ..params.clone()
             },
         ),

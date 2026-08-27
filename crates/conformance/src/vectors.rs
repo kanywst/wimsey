@@ -26,7 +26,11 @@ use wimsey_wpt::{WptClaims, WptError};
 ///
 /// v3 added the `accepted` array to the httpsig vectors, so a suite can say
 /// what MUST still verify and not only what MUST be rejected.
-pub const FORMAT: &str = "wimse-conformance/v3";
+///
+/// v4 gave the responder its own identity. Until then the response reused the
+/// requester's WIT and key, so a consumer that verified a response against
+/// request-side identity state passed anyway.
+pub const FORMAT: &str = "wimse-conformance/v4";
 
 /// The index of every vector in the suite, written to `manifest.json`.
 ///
@@ -499,8 +503,19 @@ pub struct HttpSigAccepted {
 /// the binding between the two is the point: the request's `nonce` is what must
 /// come back as the response's `wimse-req-nonce`, and the `;req` covered
 /// components resolve from that same request.
+///
+/// The responder is a different workload from the caller, with its own
+/// identifier, WIT and proof-of-possession key. A client verifies the response
+/// against the identity the *response* carries; reaching for the request's is
+/// the mistake `verified-with-the-requester-key` exists to catch.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct VectorResponse {
+    /// The responder's WIT, carried in the response's
+    /// `Workload-Identity-Token` header.
+    pub wit: String,
+    /// The responder's proof-of-possession private key, so a consumer can
+    /// re-sign the response from scratch.
+    pub pop_signing_key: PrivateJwk,
     /// The status code, covered as `@status`.
     pub status: u16,
     /// Response header fields as `(name, value)` pairs.
@@ -536,6 +551,10 @@ pub struct ResponseNegative {
     /// Replaces the response's `Signature`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub signature: Option<String>,
+    /// Replaces the WIT the verifying key is recovered from, which is how a
+    /// case asks what happens when a client reaches for the wrong identity.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wit: Option<String>,
     /// Replaces the request the response is verified against, which is what the
     /// `;req` components resolve from.
     #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -10,6 +10,32 @@ silently.
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking:** the conformance vector format is now `wimse-conformance/v4`. The
+  responder in the httpsig vectors has its own identifier, WIT and
+  proof-of-possession key, recorded as `response.wit` and
+  `response.pop_signing_key`; through v3 it reused the requester's, so the suite
+  could not tell a client that verifies a response against the identity the
+  response carries from one that reaches for the request's. A v3 reader fails to
+  verify the response rather than passing quietly, so the break is loud.
+
+### Added
+
+- A response case that substitutes the request's WIT for the responder's and
+  must be rejected, which is what closes the gap above.
+- Eight response-profile cases. The profile has been enforced since 0.4.0 but no
+  vector exercised it, so an implementation that verified a response signature
+  without applying the profile passed. They include the two rules that differ
+  from the request profile: `wimse-aud` is forbidden on a response rather than
+  required, and `wimse-req-nonce` is required in its place.
+- A `missing-tag` case on each side. `wrong-tag` covered a `tag` with the wrong
+  value; omitting it altogether is a different rule and neither profile had a
+  vector for it. Every branch of both profiles now has a case. 144 assertions,
+  up from 122.
+- The conformance README documents the response half of the httpsig vectors,
+  which it had not since response signing landed in 0.4.0.
+
 ## [0.5.0] - 2026-08-25
 
 Nothing in the published crates changed. Every API is the same as 0.4.0, and a

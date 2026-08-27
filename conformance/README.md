@@ -48,6 +48,8 @@ Every file, including the manifest, carries a `format` field:
 
 **v3 added the `accepted` array to the httpsig vectors**, so a file can record what must still verify and not only what must be rejected. It is a version bump rather than a plain addition because a v2 reader skips the new cases silently: it would report a pass having run fewer checks than the file asks for.
 
+**v4 gave the responder its own identity.** The response now carries `wit` and `pop_signing_key` of its own, where through v3 it reused the requester's. A v3 reader recovers the key from the request's WIT and fails to verify the response, which is loud rather than silent — but it fails for the wrong reason, so update the reader rather than reading the failure as a bad signature.
+
 Reject a file whose `format` you do not recognise rather than guessing at its shape. The version changes when the format changes, not when a vector is added.
 
 Each vector file additionally carries `suite`, `id`, `spec` (the pinned Internet-Draft revision it was generated against) and a prose `description`.
@@ -167,6 +169,11 @@ Note `wit-binding-mismatch`: the substituted WIT is itself perfectly valid and s
 - Check `verify_content_digest(Content-Digest header, body)`.
 - Run every negative case. `required_components`, `accept_label`, `accept_audience` and `max_age` are verifier configuration, not message content: they describe how strict the receiver is, and the case asserts that a receiver configured that way rejects the message.
 - Run every `accepted` case the same way, except that verification MUST succeed. Each entry overrides fields of the positive case exactly as a negative one does.
+- Run the `response` half. It carries its own `wit` and `pop_signing_key`, and the covered components include `@status` and the `;req` ones, which resolve from the request in the same file. Verify it against the key in **its own** WIT, check `wimse-req-nonce` equals the `nonce` the request sent, and run its negative cases.
+
+The responder is a different workload from the caller — a different identifier, a different WIT, a different key. `verified-with-the-requester-key` substitutes the request's WIT and must fail: a client that carries request-side identity state into the response check passes every other assertion here.
+
+The response profile is not the request profile, and the `response-` cases enforce the difference: `wimse-aud` names the service a request is for and is **forbidden** coming back, while `wimse-req-nonce` is required whenever the client asked for a signed response. The rest — `created`, `expires`, `nonce`, `tag`, and the ban on `keyid` and `alg` — match the request side. Each case is a genuinely valid signature, so an implementation that verifies responses without applying the profile accepts all eight.
 
 The `authority` pair answers a question that has come up twice on the WIMSE list. `@authority` is not in the set Section 3 mandates, so `authority-rewritten-outside-the-covered-set` rewrites the host and must **still verify** — `wimse-aud` names the service a request is for, not where it was routed. Its pair carries a signature that does cover `@authority`, and the same rewrite then fails. Cover it if you need the host bound.
 

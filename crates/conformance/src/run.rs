@@ -612,7 +612,9 @@ fn run_httpsig_response(
     name: &str,
     report: &mut Report,
 ) {
-    let pop_key = match httpsig_pop_key(vector) {
+    // The responder's WIT, not the request's: a response is verified against
+    // the identity it carries.
+    let pop_key = match pop_key_from_wit(&response.wit, vector) {
         Ok(key) => key,
         Err(detail) => {
             report.fail(name, "response/recover the key from the WIT", detail);
@@ -647,7 +649,7 @@ fn run_httpsig_response(
     };
     // Re-signing needs the private half; verification below uses the public half
     // recovered from the WIT, so the two checks stay independent.
-    let signing = match signing_key(&vector.pop_signing_key) {
+    let signing = match signing_key(&response.pop_signing_key) {
         Ok(key) => key,
         Err(detail) => {
             report.fail(name, "response/load the signing key", detail);
@@ -707,15 +709,7 @@ fn run_httpsig_response(
         },
     );
 
-    run_response_negatives(
-        vector,
-        response,
-        &http_response,
-        &pop_key,
-        &config,
-        name,
-        report,
-    );
+    run_response_negatives(vector, response, &http_response, &config, name, report);
 }
 
 /// Runs the signed-response rejection cases.
@@ -723,7 +717,6 @@ fn run_response_negatives(
     vector: &HttpSigVector,
     response: &VectorResponse,
     http_response: &HttpResponse,
-    pop_key: &VerifyingKey,
     config: &impl Fn(&str) -> VerifyConfig,
     name: &str,
     report: &mut Report,
@@ -741,22 +734,26 @@ fn run_response_negatives(
             .expected_req_nonce
             .as_deref()
             .unwrap_or(&response.expected_req_nonce);
-        let actual = verify_httpsig(
-            &case_exchange,
-            case.signature_input
-                .as_deref()
-                .unwrap_or(&response.signature_input),
-            case.signature.as_deref().unwrap_or(&response.signature),
-            pop_key,
-            &config(expected_nonce),
-        )
-        .map(|_| ())
-        .map_err(|e| ErrorCode::from(&e));
-        report.record(
-            name,
-            &format!("response/reject/{}", case.id),
-            expect_reject(case.expect, actual),
-        );
+        // Recovered per case: a case that substitutes the WIT is asking what a
+        // client verifying against the wrong identity would conclude.
+        let result = match pop_key_from_wit(case.wit.as_deref().unwrap_or(&response.wit), vector) {
+            Err(detail) => Err(detail),
+            Ok(key) => expect_reject(
+                case.expect,
+                verify_httpsig(
+                    &case_exchange,
+                    case.signature_input
+                        .as_deref()
+                        .unwrap_or(&response.signature_input),
+                    case.signature.as_deref().unwrap_or(&response.signature),
+                    &key,
+                    &config(expected_nonce),
+                )
+                .map(|_| ())
+                .map_err(|e| ErrorCode::from(&e)),
+            ),
+        };
+        report.record(name, &format!("response/reject/{}", case.id), result);
     }
 }
 
@@ -766,8 +763,13 @@ fn run_response_negatives(
 /// takes the key from the token rather than from the vector's recorded seed —
 /// otherwise an implementation could skip the WIT entirely and still pass.
 fn httpsig_pop_key(vector: &HttpSigVector) -> Result<VerifyingKey, String> {
+    pop_key_from_wit(&vector.wit, vector)
+}
+
+/// Recovers the key from a specific WIT, against the vector's issuer and clock.
+fn pop_key_from_wit(wit: &str, vector: &HttpSigVector) -> Result<VerifyingKey, String> {
     let issuer = verifying_key(&vector.issuer_verifying_key)?;
-    verify_wit(&vector.wit, &issuer, &WitValidation::at(vector.verify_now))
+    verify_wit(wit, &issuer, &WitValidation::at(vector.verify_now))
         .map(|verified| verified.pop_key)
         .map_err(|e| format!("the carried WIT did not verify: {e}"))
 }
