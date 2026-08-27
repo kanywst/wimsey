@@ -10,6 +10,14 @@ silently.
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-08-27
+
+A patch release: nothing breaks, and every API from 0.6.0 still works.
+
+It closes the last divergence in `SPEC-MAP.md` this implementation could close
+on its own. The two that remain are deliberate decisions about where chain
+building belongs, not things left undone.
+
 ### Added
 
 - **ES256 for the certificate path**, which closes the last divergence this
@@ -310,7 +318,8 @@ public API.
 - Project governance, security policy, contributing guide (DCO), and OpenSSF
   Scorecard automation.
 
-[Unreleased]: https://github.com/kanywst/wimsey/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/kanywst/wimsey/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/kanywst/wimsey/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/kanywst/wimsey/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/kanywst/wimsey/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/kanywst/wimsey/compare/v0.3.0...v0.4.0
