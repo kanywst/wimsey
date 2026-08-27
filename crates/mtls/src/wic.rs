@@ -378,8 +378,10 @@ pub fn workload_identifier(wic_der: &[u8]) -> Result<WorkloadIdentifier, MtlsErr
 /// Verifies a WIC against a CA certificate at time `now` (Unix seconds) and
 /// returns the workload identifier.
 ///
-/// Checks that both the certificate signature and the CA key are Ed25519, the
-/// CA signature over the tbsCertificate, that both the CA and leaf are within
+/// Both Ed25519 and ES256 are accepted, but which one is decided by the CA's
+/// own key rather than by the certificate's claim, so a certificate cannot name
+/// one algorithm and be checked under another. Beyond that it checks the CA
+/// signature over the tbsCertificate, that both the CA and leaf are within
 /// their validity windows, and that the leaf carries exactly one URI SAN.
 ///
 /// # Errors

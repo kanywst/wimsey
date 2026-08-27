@@ -62,7 +62,7 @@ jq -c '[.claims.cnf.jwk // empty, .issuer_verifying_key // empty,
 # Certificates are base64url in the vector and raw DER to the parser.
 jq -r '[.wic_der_b64u, .ca_certificate_der_b64u]
        + [.negative[].wic_der_b64u // empty] | .[]' \
-  "$vectors/mtls/wic-basic.json" |
+  "$vectors"/mtls/wic-*.json |
   while IFS= read -r b64u; do
     printf '%s' "$b64u" | tr '_-' '/+' | base64 -d 2>/dev/null |
       write wic_parse "wic-$(printf '%s' "$b64u" | shasum | cut -c1-8)" || true

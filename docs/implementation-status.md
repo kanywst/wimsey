@@ -45,7 +45,7 @@ Append after the existing `## Cofide` block.
   does not remember the ones it has seen.
 * License: Apache 2.0
 * Contact:
-* Last updated: 25-Aug-2026
+* Last updated: 27-Aug-2026
 * Notes: Publishes cross-implementation test vectors whose negative cases each
   name the reason the input must be rejected, with one vector per signature
   algorithm: <https://github.com/kanywst/wimsey/tree/main/conformance>. Yaron
@@ -70,11 +70,10 @@ Append after the existing SPIFFE entry.
   member inside the `cnf` JWK, which is enforced as the algorithm the proof
   must use. Both `EdDSA` and `ES256`, in any combination — an EdDSA issuer with
   an ES256 confirmation key is exercised by a conformance vector. WIC issuance
-  and verification with the identifier in a URI SAN; certificates are Ed25519
-  only, since the mutual-TLS draft carries no equivalent of Section 5.1.
+  and verification with the identifier in a URI SAN, under either algorithm.
 * License: Apache 2.0
 * Contact:
-* Last updated: 25-Aug-2026
+* Last updated: 27-Aug-2026
 ```
 
 ### `draft-ietf-wimse-wpt`
@@ -96,7 +95,7 @@ Needs the section boilerplate.
   caller.
 * License: Apache 2.0
 * Contact:
-* Last updated: 25-Aug-2026
+* Last updated: 27-Aug-2026
 ```
 
 ### `draft-ietf-wimse-mutual-tls`
@@ -111,14 +110,16 @@ Needs the section boilerplate.
 * Maturity:
     * Workload Identity Certificate: alpha, not for production
 * Coverage: Issues and verifies a WIC carrying the identifier in a URI SAN,
-  with `id-kp-clientAuth` and `id-kp-serverAuth`. Issuance takes the
-  workload's public key only, so the CA never holds the key it certifies.
+  with `id-kp-clientAuth` and `id-kp-serverAuth`, under `EdDSA` or `ES256`.
+  The signature algorithm a verifier accepts follows the CA's own key rather
+  than the certificate's claim. Issuance takes the workload's public key only,
+  so the CA never holds the key it certifies.
   Verification is a single-issuer model against a directly provided CA: it
   does not build a chain, and does not enforce `basicConstraints`, `keyUsage`
   or name constraints. Wiring into a TLS stack is left to the caller.
 * License: Apache 2.0
 * Contact:
-* Last updated: 25-Aug-2026
+* Last updated: 27-Aug-2026
 ```
 
 ### `draft-ietf-wimse-identifier`
@@ -142,7 +143,7 @@ Needs the section boilerplate.
   an open question raised on the mailing list.
 * License: Apache 2.0
 * Contact:
-* Last updated: 25-Aug-2026
+* Last updated: 27-Aug-2026
 ```
 
 ## Section boilerplate

@@ -25,15 +25,15 @@
 //! The underlying default would be a certificate valid until the year 4096,
 //! which is not a lifetime anyone would pick deliberately.
 //!
-//! Certificates are Ed25519-only. The mutual-TLS draft does not require ES256
-//! the way `workload-creds` does for the token path, so a P-256 key is refused
-//! by [`WorkloadCa::issue`] rather than certified under an algorithm identifier
-//! that would not match it.
+//! A CA of either supported algorithm certifies a public key of either, so a
+//! workload with an `ES256` proof-of-possession key can hold a certificate as
+//! well as a token. `ES256` signs through the RFC 6979 nonce rather than
+//! rcgen's randomized ECDSA, so a certificate stays reproducible.
 //!
 //! # Scope and limitations
 //!
-//! [`verify`] checks that the WIC is signed by the *directly provided* CA
-//! (Ed25519), is within its validity window, and carries a URI SAN. It is a
+//! [`verify`] checks that the WIC is signed by the *directly provided* CA, is
+//! within its validity window, and carries a URI SAN. It is a
 //! single-issuer trust model: it does not build or validate a chain, and does
 //! not yet enforce `basicConstraints`, `keyUsage` or name constraints. Callers
 //! needing full path validation should use a dedicated X.509 verifier.

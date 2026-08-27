@@ -10,10 +10,11 @@ pub enum MtlsError {
     /// The certificate could not be parsed as DER X.509.
     #[error("could not parse the certificate")]
     Parse,
-    /// The certificate is not signed with Ed25519.
-    #[error("unexpected signature algorithm, expected Ed25519")]
+    /// The certificate's signature algorithm is not one the CA's key could
+    /// have produced, or is neither Ed25519 nor ES256.
+    #[error("unexpected signature algorithm, expected Ed25519 or ES256")]
     UnsupportedAlgorithm,
-    /// A key could not be decoded into an Ed25519 key.
+    /// A key could not be decoded as the algorithm it claims.
     #[error("invalid key")]
     InvalidKey,
     /// The certificate signature did not verify against the CA.
