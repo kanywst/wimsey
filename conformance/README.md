@@ -25,14 +25,14 @@ conformance/
   wpt/proof-es256.json             draft-ietf-wimse-wpt-01
   httpsig/sign-eddsa.json          draft-ietf-wimse-http-signature-06
   httpsig/sign-es256.json          draft-ietf-wimse-http-signature-06
-  mtls/wic-basic.json              draft-ietf-wimse-mutual-tls-02
+  mtls/wic-eddsa.json              draft-ietf-wimse-mutual-tls-02
+  mtls/wic-es256.json              draft-ietf-wimse-mutual-tls-02
 ```
 
-Each token suite has one vector per signature algorithm. `ES256` is not an
-extra credit: Section 5.1 of `draft-ietf-wimse-workload-creds` requires it of
-general-purpose implementations, and the draft's own example WIT is signed with
-it, so passing only the `eddsa` half is not passing. Certificates are Ed25519
-only, because the mutual-TLS draft makes no such requirement.
+Every suite has one vector per signature algorithm. `ES256` is not extra credit:
+Section 5.1 of `draft-ietf-wimse-workload-creds` requires it of general-purpose
+implementations, and the draft's own example WIT is signed with it, so passing
+only the `eddsa` half is not passing.
 
 Start at `manifest.json`. Do not glob the directories — the manifest is the list, and a runner that globs will silently skip a vector whose suite it does not recognise.
 
@@ -188,7 +188,9 @@ The six profile cases (`forbidden-alg-parameter`, `forbidden-keyid-parameter`, `
 - Verify `wic_der_b64u` against `ca_certificate_der_b64u` at `verify_now`; the URI SAN must decode to `identifier`.
 - Run every negative case.
 
-Certificates are usually a poor fit for byte-exact vectors, because issuing one normally invents a key and a serial. Neither happens here. The workload generates its own key pair and sends only the public half, so there is no per-issuance secret, and the serial is derived from that public key rather than drawn at random. That leaves nothing non-deterministic, so a consumer can re-issue from seeds instead of taking a frozen blob on trust.
+Certificates are usually a poor fit for byte-exact vectors, because issuing one normally invents a key and a serial, and an ECDSA signature normally invents a nonce. None of the three happens here. The workload generates its own key pair and sends only the public half, so there is no per-issuance secret; the serial is derived from that public key rather than drawn at random; and `ES256` signs through the RFC 6979 nonce. That leaves nothing non-deterministic, so a consumer can re-issue from seeds instead of taking a frozen blob on trust.
+
+`ca-of-the-other-algorithm` is the case worth reading twice. The CA it substitutes is valid and correctly formed, but holds a key that could not have produced the signature algorithm the certificate names, so it must be refused for the algorithm rather than for a bad signature. A verifier that decides the algorithm from the certificate's own claim rather than from the CA's key will reach for the wrong verification and report the wrong reason.
 
 The `no-uri-san` case is the one worth reading twice: the input is the CA's own certificate, which is validly signed by the CA it is checked against and entirely well-formed. It simply carries no workload identifier. An implementation that verifies the signature and stops will accept it and then have nothing to authorize.
 

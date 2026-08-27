@@ -1016,7 +1016,12 @@ pub fn manifest() -> Manifest {
             },
             ManifestEntry {
                 suite: "mtls".to_owned(),
-                path: "mtls/wic-basic.json".to_owned(),
+                path: "mtls/wic-eddsa.json".to_owned(),
+                spec: MTLS_SPEC.to_owned(),
+            },
+            ManifestEntry {
+                suite: "mtls".to_owned(),
+                path: "mtls/wic-es256.json".to_owned(),
                 spec: MTLS_SPEC.to_owned(),
             },
         ],
@@ -1240,23 +1245,29 @@ fn mtls_neg(id: &str, description: &str, expect: ErrorCode) -> MtlsNegative {
 /// Panics if the fixed inputs stop being valid, which would mean the
 /// implementation can no longer issue its own reference certificates.
 #[must_use]
-pub fn mtls_vector() -> MtlsVector {
-    let ca_key = SigningKey::from_ed25519_seed(&CA_SEED);
-    let workload_key = SigningKey::from_ed25519_seed(&POP_SEED);
+pub fn mtls_vector(algorithm: Algorithm) -> MtlsVector {
+    let ca_key = key(algorithm, CA_SEED);
+    let workload_key = key(algorithm, POP_SEED);
     let identifier =
         WorkloadIdentifier::parse(SUBJECT).expect("the fixed subject is a valid identifier");
 
-    let ca = WorkloadCa::from_ed25519(&ca_key, CA_NBF, CA_NAF).expect("load the fixed CA");
+    let ca = WorkloadCa::from_signing_key(&ca_key, CA_NBF, CA_NAF).expect("load the fixed CA");
     let wic = ca
         .issue(&identifier, &workload_key.verifying_key(), WIC_NBF, WIC_NAF)
         .expect("issue the fixed WIC");
 
-    let other_ca = WorkloadCa::from_ed25519(
-        &SigningKey::from_ed25519_seed(&OTHER_CA_SEED),
-        CA_NBF,
-        CA_NAF,
-    )
-    .expect("load the second CA");
+    let other_ca = WorkloadCa::from_signing_key(&key(algorithm, OTHER_CA_SEED), CA_NBF, CA_NAF)
+        .expect("load the second CA");
+    // A CA of the other algorithm entirely. It must be turned away for the
+    // algorithm rather than for a bad signature: which key type the CA holds is
+    // what decides the signature algorithm a certificate may claim.
+    let other_algorithm = match algorithm {
+        Algorithm::Es256 => Algorithm::EdDsa,
+        _ => Algorithm::Es256,
+    };
+    let cross_ca =
+        WorkloadCa::from_signing_key(&key(other_algorithm, OTHER_CA_SEED), CA_NBF, CA_NAF)
+            .expect("load a CA of the other algorithm");
 
     let negative = vec![
         MtlsNegative {
@@ -1302,14 +1313,25 @@ pub fn mtls_vector() -> MtlsVector {
                 ErrorCode::CertificateParseError,
             )
         },
+        MtlsNegative {
+            ca_certificate_der_b64u: Some(URL_SAFE_NO_PAD.encode(cross_ca.certificate_der())),
+            ..mtls_neg(
+                "ca-of-the-other-algorithm",
+                "verified against a CA whose key cannot have produced this signature algorithm",
+                ErrorCode::UnsupportedAlg,
+            )
+        },
     ];
 
     MtlsVector {
         header: header(
             "mtls",
-            "wic-basic",
+            vector_id("wic", algorithm),
             MTLS_SPEC,
-            "Workload Identity Certificate issuance over a workload-supplied public key, plus the inputs a verifier must reject",
+            &format!(
+                "Workload Identity Certificate issuance over a workload-supplied public key ({}), plus the inputs a verifier must reject",
+                algorithm.as_str()
+            ),
         ),
         ca_signing_key: PrivateJwk::from_signing_key(&ca_key),
         ca_not_before: CA_NBF,

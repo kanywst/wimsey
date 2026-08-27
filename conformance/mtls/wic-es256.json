@@ -1,0 +1,69 @@
+{
+  "format": "wimse-conformance/v4",
+  "suite": "mtls",
+  "id": "wic-es256",
+  "spec": "draft-ietf-wimse-mutual-tls-02",
+  "description": "Workload Identity Certificate issuance over a workload-supplied public key (ES256), plus the inputs a verifier must reject",
+  "ca_signing_key": {
+    "alg": "ES256",
+    "kty": "EC",
+    "crv": "P-256",
+    "x": "WRq3ceu8_W2cuQlNEGUordGmnUTCwfYn8InsWLnGGt8",
+    "y": "n05qvw0EXAxpOjxorXyXynK-ZN70om_s0mPdmKkngPA",
+    "d": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+  },
+  "ca_not_before": 1600000000,
+  "ca_not_after": 1900000000,
+  "workload_signing_key": {
+    "alg": "ES256",
+    "kty": "EC",
+    "crv": "P-256",
+    "x": "cTX6T9k6Cdzpi79oG0v89Q58DWNU5ir7C_8qNClheGU",
+    "y": "7UwfAt25Aj7lalV-UV1qncZsEfIglg3llDNN9Yh3ZyQ",
+    "d": "CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk"
+  },
+  "identifier": "spiffe://example.org/workload/api",
+  "not_before": 1700000000,
+  "not_after": 1700086400,
+  "ca_certificate_der_b64u": "MIIBdjCCARygAwIBAgIUUCyecGLU1wwUIAfhFaE89A6-cKQwCgYIKoZIzj0EAwIwITEfMB0GA1UEAwwWcmNnZW4gc2VsZiBzaWduZWQgY2VydDAeFw0yMDA5MTMxMjI2NDBaFw0zMDAzMTcxNzQ2NDBaMCExHzAdBgNVBAMMFnJjZ2VuIHNlbGYgc2lnbmVkIGNlcnQwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAARZGrdx67z9bZy5CU0QZSit0aadRMLB9ifwiexYucYa359Oar8NBFwMaTo8aK18l8pyvmTe9KJv7NJj3ZipJ4DwozIwMDAdBgNVHQ4EFgQU34LOYICw79CNSuY6IkT_bL6ppUcwDwYDVR0TAQH_BAUwAwEB_zAKBggqhkjOPQQDAgNIADBFAiEA5hPv0NBRGs93dWOCdOXnsB5tIuid2suzeyoopMpsIdICIAd4mPqf7xJECdNy6H8QFEyMo-9ZhcIC9XLthbC-EQdh",
+  "wic_der_b64u": "MIIBlDCCATmgAwIBAgIUWMawxwRPq7v-bDBSn96iYvNaZrswCgYIKoZIzj0EAwIwITEfMB0GA1UEAwwWcmNnZW4gc2VsZiBzaWduZWQgY2VydDAeFw0yMzExMTQyMjEzMjBaFw0yMzExMTUyMjEzMjBaMCExHzAdBgNVBAMMFnJjZ2VuIHNlbGYgc2lnbmVkIGNlcnQwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAARxNfpP2ToJ3OmLv2gbS_z1DnwNY1TmKvsL_yo0KWF4Ze1MHwLduQI-5WpVflFdap3GbBHyIJYN5ZQzTfWId2cko08wTTAsBgNVHREEJTAjhiFzcGlmZmU6Ly9leGFtcGxlLm9yZy93b3JrbG9hZC9hcGkwHQYDVR0lBBYwFAYIKwYBBQUHAwIGCCsGAQUFBwMBMAoGCCqGSM49BAMCA0kAMEYCIQDl5NfQ0CICId8d1Y8ac6-DCb8oVEfPbBKjDI91IbV3GwIhAKJJPqBQ1S4_nrLA88kzTqsf4ZM0UW8EOBsYqfkcWXP1",
+  "verify_now": 1700000100,
+  "negative": [
+    {
+      "id": "wrong-ca",
+      "description": "verified against a CA that did not sign the certificate",
+      "expect": "invalid_signature",
+      "ca_certificate_der_b64u": "MIIBdjCCARygAwIBAgIUZvOTaRJ1edINXqzUWZAFX8udiGkwCgYIKoZIzj0EAwIwITEfMB0GA1UEAwwWcmNnZW4gc2VsZiBzaWduZWQgY2VydDAeFw0yMDA5MTMxMjI2NDBaFw0zMDAzMTcxNzQ2NDBaMCExHzAdBgNVBAMMFnJjZ2VuIHNlbGYgc2lnbmVkIGNlcnQwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAARzED7DCzzPV9quCOk1NK7xRKNZQM9ru6EqDPfL1dZaZNgsjJnp08RfkkW6myeYLJrqjsHblLGcRHlZQsDrIqoyozIwMDAdBgNVHQ4EFgQU7WMRF-4vGz_UW429ORWvZ1Dwy14wDwYDVR0TAQH_BAUwAwEB_zAKBggqhkjOPQQDAgNIADBFAiBT951gyqEgttOyVocBxXJYYT8RCY7AsCkadxe6BceO9AIhANRHB3DR-yI0A_w4RWyjvdPa5FwK6vXYOLqjDbRGmoG4"
+    },
+    {
+      "id": "expired",
+      "description": "verified one second after the certificate's notAfter",
+      "expect": "certificate_not_valid",
+      "verify_now": 1700086401
+    },
+    {
+      "id": "not-yet-valid",
+      "description": "verified one second before the certificate's notBefore",
+      "expect": "certificate_not_valid",
+      "verify_now": 1699999999
+    },
+    {
+      "id": "no-uri-san",
+      "description": "a validly signed certificate that carries no workload identifier",
+      "expect": "missing_identifier",
+      "wic_der_b64u": "MIIBdjCCARygAwIBAgIUUCyecGLU1wwUIAfhFaE89A6-cKQwCgYIKoZIzj0EAwIwITEfMB0GA1UEAwwWcmNnZW4gc2VsZiBzaWduZWQgY2VydDAeFw0yMDA5MTMxMjI2NDBaFw0zMDAzMTcxNzQ2NDBaMCExHzAdBgNVBAMMFnJjZ2VuIHNlbGYgc2lnbmVkIGNlcnQwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAARZGrdx67z9bZy5CU0QZSit0aadRMLB9ifwiexYucYa359Oar8NBFwMaTo8aK18l8pyvmTe9KJv7NJj3ZipJ4DwozIwMDAdBgNVHQ4EFgQU34LOYICw79CNSuY6IkT_bL6ppUcwDwYDVR0TAQH_BAUwAwEB_zAKBggqhkjOPQQDAgNIADBFAiEA5hPv0NBRGs93dWOCdOXnsB5tIuid2suzeyoopMpsIdICIAd4mPqf7xJECdNy6H8QFEyMo-9ZhcIC9XLthbC-EQdh"
+    },
+    {
+      "id": "not-a-certificate",
+      "description": "the presented bytes are not DER X.509 at all",
+      "expect": "certificate_parse_error",
+      "wic_der_b64u": "bm90IGEgY2VydGlmaWNhdGU"
+    },
+    {
+      "id": "ca-of-the-other-algorithm",
+      "description": "verified against a CA whose key cannot have produced this signature algorithm",
+      "expect": "unsupported_alg",
+      "ca_certificate_der_b64u": "MIIBNTCB6KADAgECAhRFuUDtP2XDkZZd6ClfxdJfR0-lezAFBgMrZXAwITEfMB0GA1UEAwwWcmNnZW4gc2VsZiBzaWduZWQgY2VydDAeFw0yMDA5MTMxMjI2NDBaFw0zMDAzMTcxNzQ2NDBaMCExHzAdBgNVBAMMFnJjZ2VuIHNlbGYgc2lnbmVkIGNlcnQwKjAFBgMrZXADIQDKk6wXBRhwcdZ7g8f_Dv6BCOjsRTBXXXcmh5Mz29q-fKMyMDAwHQYDVR0OBBYEFNAW3z2DNzYXwGteHWNZyqBu66izMA8GA1UdEwEB_wQFMAMBAf8wBQYDK2VwA0EA_W8ElpJ9F4_sA4aJyWl09vzteSABhWo8eOfiND4JurTf9tlrkGTqDz2hp3cfeGvZix94USVMqrE-z1iuCCeaCw"
+    }
+  ]
+}

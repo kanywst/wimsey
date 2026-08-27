@@ -10,6 +10,39 @@ silently.
 
 ## [Unreleased]
 
+### Added
+
+- **ES256 for the certificate path**, which closes the last divergence this
+  implementation could close on its own: `SPEC-MAP.md` is down from three to
+  two, and both survivors are deliberate scope decisions rather than gaps. A
+  workload whose proof-of-possession key is `ES256` could already get a WIT and
+  sign a request with it, but could not get a certificate at all, so the token
+  path and the certificate path disagreed about which algorithms a workload may
+  use. `WorkloadCa::from_signing_key` builds a CA of either algorithm, `issue`
+  certifies a public key of either, and `verify` decides the acceptable
+  signature algorithm from the CA's own key rather than from the certificate's
+  claim.
+
+  The determinism invariant survives, which is the part that took the work.
+  rcgen signs ECDSA through `ring`, which draws a random nonce, so a P-256 CA
+  built the obvious way emits a different certificate every run — verified,
+  rather than assumed. Signing goes through `wimsey-jose` and its RFC 6979
+  nonce instead, so an `ES256` certificate is as reproducible as an Ed25519
+  one and can be a recorded vector.
+
+- mTLS conformance vectors per algorithm, `mtls/wic-eddsa.json` and
+  `mtls/wic-es256.json`, replacing `mtls/wic-basic.json`. Each adds a case for
+  a CA whose key could not have produced the signature algorithm the
+  certificate claims, which must be refused for the algorithm rather than for
+  a bad signature. 154 assertions, up from 144. The format is unchanged: a
+  consumer reads `manifest.json` rather than globbing, so a renamed file is not
+  a shape change.
+
+### Fixed
+
+- `WorkloadCa::from_pkcs8_der` accepts PKCS#8 v2. It read the v1 layout only,
+  which rejected the keys rcgen itself emits.
+
 ## [0.6.0] - 2026-08-27
 
 Nothing in the published crates changed, again: every API is the same as 0.5.0.
