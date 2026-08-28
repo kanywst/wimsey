@@ -1,7 +1,8 @@
 //! `wimsey` — a command-line tool for WIMSE workload credentials.
 //!
-//! Issues, verifies and inspects Workload Identity Tokens and Workload Proof
-//! Tokens, with `EdDSA` (Ed25519) or `ES256` (P-256) keys stored as JSON Web Keys.
+//! Issues, verifies and inspects Workload Identity Tokens, Workload Proof
+//! Tokens and Workload Identity Certificates, with `EdDSA` (Ed25519) or `ES256`
+//! (P-256) keys stored as JSON Web Keys.
 
 mod httpsig;
 mod key;
@@ -48,6 +49,11 @@ enum Command {
     Wpt {
         #[command(subcommand)]
         cmd: WptCmd,
+    },
+    /// Workload Identity Certificate (WIC) operations.
+    Wic {
+        #[command(subcommand)]
+        cmd: WicCmd,
     },
     /// HTTP Message Signature (RFC 9421) operations.
     Httpsig {
@@ -204,6 +210,7 @@ fn run(cli: Cli) -> Result<()> {
         Command::Key { cmd } => run_key(cmd),
         Command::Wit { cmd } => run_wit(cmd),
         Command::Wpt { cmd } => run_wpt(cmd),
+        Command::Wic { cmd } => run_wic(cmd),
         Command::Httpsig { cmd } => httpsig::run(*cmd),
     }
 }
@@ -250,6 +257,128 @@ fn run_key(cmd: KeyCmd) -> Result<()> {
             emit(&key::to_json(&jwk.to_public())?, out.as_deref())
         }
     }
+}
+
+#[derive(Subcommand)]
+enum WicCmd {
+    /// Issue a WIC for a workload's public key, signed by a workload CA.
+    ///
+    /// The CA never sees the workload's private key: pass the public half.
+    Issue {
+        /// The CA's private key file.
+        #[arg(long, value_name = "FILE")]
+        ca_key: PathBuf,
+        /// The workload's key file. Only its public half is used.
+        #[arg(long, value_name = "FILE")]
+        key: PathBuf,
+        /// The workload identifier, placed in a URI subjectAltName.
+        #[arg(long)]
+        sub: String,
+        /// Certificate lifetime in seconds.
+        #[arg(long, default_value_t = 3600)]
+        ttl: u64,
+        /// The CA certificate's lifetime in seconds.
+        #[arg(long, default_value_t = 315_360_000)]
+        ca_ttl: u64,
+        /// Write the CA certificate here as well, so a peer can verify.
+        #[arg(long, value_name = "FILE")]
+        ca_out: Option<PathBuf>,
+        /// Write the certificate to this file instead of stdout.
+        #[arg(long, value_name = "FILE")]
+        out: Option<PathBuf>,
+        /// Override the current time (Unix seconds).
+        #[arg(long)]
+        now: Option<u64>,
+    },
+    /// Verify a WIC against a CA certificate and print the identifier.
+    Verify {
+        /// The certificate to verify, PEM or DER.
+        #[arg(long, value_name = "FILE")]
+        cert: PathBuf,
+        /// The CA certificate, PEM or DER.
+        #[arg(long, value_name = "FILE")]
+        ca: PathBuf,
+        /// Override the current time (Unix seconds). For testing only.
+        #[arg(long)]
+        now: Option<u64>,
+    },
+}
+
+fn run_wic(cmd: WicCmd) -> Result<()> {
+    match cmd {
+        WicCmd::Issue {
+            ca_key,
+            key,
+            sub,
+            ttl,
+            ca_ttl,
+            ca_out,
+            out,
+            now,
+        } => {
+            let ca_key = key::load(&ca_key)?.signing_key()?;
+            let workload = key::load(&key)?.verifying_key()?;
+            let nbf = now.unwrap_or_else(wimsey_wit::now_unix);
+            let naf = nbf
+                .checked_add(ttl)
+                .ok_or("ttl overflows the expiry time")?;
+            let ca_naf = nbf
+                .checked_add(ca_ttl)
+                .ok_or("ca-ttl overflows the expiry time")?;
+            // The CA certificate is derived from the key and its window, so the
+            // same inputs always rebuild the same CA. Nothing is kept between
+            // runs and nothing needs to be.
+            let ca = wimsey_mtls::WorkloadCa::from_signing_key(&ca_key, nbf, ca_naf)?;
+            let identifier = WorkloadIdentifier::parse(sub.trim())?;
+            let wic = ca.issue(&identifier, &workload, nbf, naf)?;
+            if let Some(path) = ca_out {
+                emit(&pem("CERTIFICATE", ca.certificate_der()), Some(&path))?;
+            }
+            emit(&pem("CERTIFICATE", &wic), out.as_deref())?;
+            Ok(())
+        }
+        WicCmd::Verify { cert, ca, now } => {
+            let wic = read_certificate(&cert)?;
+            let ca = read_certificate(&ca)?;
+            let at = now.unwrap_or_else(wimsey_wit::now_unix);
+            let identifier = wimsey_mtls::verify(&wic, &ca, at)?;
+            let out = json!({ "sub": identifier.as_str() });
+            println!("{}", serde_json::to_string_pretty(&out)?);
+            Ok(())
+        }
+    }
+}
+
+/// Wraps DER as PEM, which is the form every other tool reads.
+fn pem(label: &str, der: &[u8]) -> String {
+    use base64::engine::general_purpose::STANDARD;
+    use std::fmt::Write as _;
+    let body = STANDARD.encode(der);
+    let mut out = format!("-----BEGIN {label}-----\n");
+    for line in body.as_bytes().chunks(64) {
+        out.push_str(std::str::from_utf8(line).expect("base64 is ascii"));
+        out.push('\n');
+    }
+    let _ = writeln!(out, "-----END {label}-----");
+    out
+}
+
+/// Reads a certificate as PEM or as raw DER, whichever the file holds.
+fn read_certificate(path: &Path) -> Result<Vec<u8>> {
+    use base64::engine::general_purpose::STANDARD;
+    let bytes = std::fs::read(path)?;
+    let Ok(text) = std::str::from_utf8(&bytes) else {
+        return Ok(bytes);
+    };
+    let Some(start) = text.find("-----BEGIN CERTIFICATE-----") else {
+        return Ok(bytes);
+    };
+    let body = &text[start + "-----BEGIN CERTIFICATE-----".len()..];
+    let end = body
+        .find("-----END CERTIFICATE-----")
+        .ok_or("PEM has a BEGIN line but no END line")?;
+    let body: String = body[..end].split_whitespace().collect();
+    Ok(STANDARD.decode(body)?)
 }
 
 fn run_wit(cmd: WitCmd) -> Result<()> {

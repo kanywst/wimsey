@@ -2,8 +2,8 @@
 //! workload identifier in a URI subjectAltName, signed by a workload CA.
 
 use rcgen::{
-    BasicConstraints, CertificateParams, ExtendedKeyUsagePurpose, IsCa, Issuer, KeyPair,
-    PublicKeyData, SanType, SignatureAlgorithm, SigningKey as RcgenSigningKey,
+    BasicConstraints, CertificateParams, DistinguishedName, DnType, ExtendedKeyUsagePurpose, IsCa,
+    Issuer, KeyPair, PublicKeyData, SanType, SignatureAlgorithm, SigningKey as RcgenSigningKey,
     SubjectPublicKeyInfo, PKCS_ECDSA_P256_SHA256, PKCS_ED25519,
 };
 use wimsey_identifier::WorkloadIdentifier;
@@ -196,6 +196,20 @@ fn ed25519_seed_from_pkcs8(der: &[u8]) -> Result<[u8; 32], MtlsError> {
         .ok_or(MtlsError::InvalidKey)
 }
 
+/// The CA's common name. Distinct from any workload identifier, so a leaf is
+/// never mistaken for its own issuer.
+const CA_COMMON_NAME: &str = "wimsey workload CA";
+
+/// Builds a one-entry distinguished name.
+///
+/// X.509-SVID puts the identity in the URI SAN and leaves the subject
+/// unconstrained, so this exists only to keep issuer and subject apart.
+fn distinguished_name(common_name: &str) -> DistinguishedName {
+    let mut dn = DistinguishedName::new();
+    dn.push(DnType::CommonName, common_name);
+    dn
+}
+
 /// Wraps a public key as the `SubjectPublicKeyInfo` rcgen certifies.
 fn spki(public_key: &VerifyingKey) -> Result<SubjectPublicKeyInfo, MtlsError> {
     let raw = public_key.to_raw_bytes();
@@ -294,6 +308,13 @@ impl WorkloadCa {
 
     fn from_key(key: CaKey, not_before: u64, not_after: u64) -> Result<Self, MtlsError> {
         let mut params = CertificateParams::new(Vec::new())?;
+        // A leaf whose subject equals its issuer reads as self-signed to a
+        // standard X.509 verifier, which then refuses to chain it — OpenSSL
+        // reports `error 18 ... self-signed certificate`. rcgen names both the
+        // same by default, so the CA and the certificates it issues have to be
+        // told apart here. The identity itself lives in the URI SAN; these
+        // names exist only so the two are distinguishable.
+        params.distinguished_name = distinguished_name(CA_COMMON_NAME);
         params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
         params.not_before = to_time(not_before)?;
         params.not_after = to_time(not_after)?;
@@ -334,6 +355,7 @@ impl WorkloadCa {
         not_after: u64,
     ) -> Result<Vec<u8>, MtlsError> {
         let mut params = CertificateParams::new(Vec::new())?;
+        params.distinguished_name = distinguished_name(identifier.as_str());
         params.subject_alt_names = vec![SanType::URI(
             identifier
                 .as_str()
@@ -488,6 +510,9 @@ mod tests {
     use wimsey_identifier::WorkloadIdentifier;
 
     use wimsey_jose::SigningKey;
+
+    use x509_parser::certificate::X509Certificate;
+    use x509_parser::prelude::FromDer;
 
     use super::{verify, workload_identifier, WorkloadCa};
     use crate::error::MtlsError;
@@ -675,6 +700,26 @@ mod tests {
         ] {
             assert!(super::ecdsa_signature_from_der(bad).is_err(), "{bad:02x?}");
         }
+    }
+
+    /// A leaf whose subject equals its issuer reads as self-signed to a
+    /// standard X.509 verifier, which then refuses to chain it. This crate's
+    /// own `verify` compares against a directly provided CA and never notices,
+    /// so nothing else here would catch it — OpenSSL reported
+    /// `error 18 ... self-signed certificate` until the two were named apart.
+    #[test]
+    fn a_leaf_is_distinguishable_from_its_issuer() {
+        let ca = ca();
+        let wic = ca
+            .issue(&id(), &workload_key().verifying_key(), NBF, NAF)
+            .unwrap();
+        let subject = |der: &[u8]| {
+            let (_, cert) = X509Certificate::from_der(der).unwrap();
+            cert.subject().to_string()
+        };
+        let (_, leaf) = X509Certificate::from_der(&wic).unwrap();
+        assert_ne!(subject(&wic), subject(ca.certificate_der()));
+        assert_eq!(leaf.issuer().to_string(), subject(ca.certificate_der()));
     }
 
     #[test]
