@@ -10,6 +10,12 @@ silently.
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-08-29
+
+A patch release. It ships one defect that no test in this repository could have
+found, because the code that issues a certificate and the code that verifies it
+are both here and agreed with each other. OpenSSL disagreed.
+
 ### Fixed
 
 - **A workload certificate could not be chained by a standard X.509 verifier.**
@@ -345,7 +351,8 @@ public API.
 - Project governance, security policy, contributing guide (DCO), and OpenSSF
   Scorecard automation.
 
-[Unreleased]: https://github.com/kanywst/wimsey/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/kanywst/wimsey/compare/v0.6.2...HEAD
+[0.6.2]: https://github.com/kanywst/wimsey/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/kanywst/wimsey/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/kanywst/wimsey/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/kanywst/wimsey/compare/v0.4.0...v0.5.0
