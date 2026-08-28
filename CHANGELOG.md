@@ -16,9 +16,11 @@ silently.
   rcgen names every certificate `CN=rcgen self signed cert` by default, so a WIC
   carried the same subject as the CA that issued it, and OpenSSL read the leaf
   as self-signed and refused it: `error 18 at 0 depth lookup: self-signed
-  certificate`. The CA is `CN=wimsey workload CA` now and a leaf carries its
-  identifier, so the two are distinguishable. The identity itself is still the
-  URI SAN, per X.509-SVID.
+  certificate`. The CA is `CN=wimsey workload CA` now and a leaf is
+  `CN=wimsey workload`, so the two are distinguishable. The identifier stays
+  in the URI SAN alone: X.509-SVID does not use the subject to identify
+  anything, and RFC 5280 caps a common name at 64 characters, which a workload
+  identifier can exceed.
 
   Nothing in this repository could have caught it. `wimsey-mtls::verify` is a
   single-issuer model that compares against the CA it was handed, so it never

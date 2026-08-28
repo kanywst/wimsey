@@ -196,14 +196,19 @@ fn ed25519_seed_from_pkcs8(der: &[u8]) -> Result<[u8; 32], MtlsError> {
         .ok_or(MtlsError::InvalidKey)
 }
 
-/// The CA's common name. Distinct from any workload identifier, so a leaf is
-/// never mistaken for its own issuer.
+/// The CA's common name.
 const CA_COMMON_NAME: &str = "wimsey workload CA";
 
-/// Builds a one-entry distinguished name.
+/// A leaf's common name. Constant, and deliberately not the identifier.
 ///
-/// X.509-SVID puts the identity in the URI SAN and leaves the subject
-/// unconstrained, so this exists only to keep issuer and subject apart.
+/// X.509-SVID puts the identity in the URI SAN and does not use the subject to
+/// identify anything, so repeating the identifier here would duplicate it into
+/// a field nothing reads — and RFC 5280 caps a common name at 64 characters
+/// (`ub-common-name`), which a workload identifier can exceed. All this name
+/// has to do is differ from the CA's.
+const LEAF_COMMON_NAME: &str = "wimsey workload";
+
+/// Builds a one-entry distinguished name.
 fn distinguished_name(common_name: &str) -> DistinguishedName {
     let mut dn = DistinguishedName::new();
     dn.push(DnType::CommonName, common_name);
@@ -355,7 +360,7 @@ impl WorkloadCa {
         not_after: u64,
     ) -> Result<Vec<u8>, MtlsError> {
         let mut params = CertificateParams::new(Vec::new())?;
-        params.distinguished_name = distinguished_name(identifier.as_str());
+        params.distinguished_name = distinguished_name(LEAF_COMMON_NAME);
         params.subject_alt_names = vec![SanType::URI(
             identifier
                 .as_str()
