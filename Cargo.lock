@@ -1381,6 +1381,7 @@ dependencies = [
  "wimsey-httpsig",
  "wimsey-identifier",
  "wimsey-jose",
+ "wimsey-mtls",
  "wimsey-wit",
  "wimsey-wpt",
 ]

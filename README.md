@@ -121,8 +121,18 @@ wimsey httpsig sign --pop-key pop.jwk --authority service.example \
   --aud https://service.example/transfer
 ```
 
-Or in an mTLS client certificate. Run `wimsey --help`, or start the issuer with
-`cargo run -p wimsey-issuer`.
+Or in an mTLS client certificate. The CA never sees the workload's private key:
+
+```bash
+wimsey key generate --alg ES256 --out ca.jwk
+wimsey wic issue --ca-key ca.jwk --key pop.jwk \
+  --sub spiffe://example.org/api --ca-out ca.pem --out wic.pem
+wimsey wic verify --cert wic.pem --ca ca.pem
+```
+
+Both algorithms work everywhere: pass `--alg ES256` to `key generate` and the
+rest follows. Run `wimsey --help` for the whole surface, or start the
+experimental issuer with `cargo run -p wimsey-issuer`.
 
 ## Documentation
 

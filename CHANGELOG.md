@@ -10,6 +10,33 @@ silently.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A workload certificate could not be chained by a standard X.509 verifier.**
+  rcgen names every certificate `CN=rcgen self signed cert` by default, so a WIC
+  carried the same subject as the CA that issued it, and OpenSSL read the leaf
+  as self-signed and refused it: `error 18 at 0 depth lookup: self-signed
+  certificate`. The CA is `CN=wimsey workload CA` now and a leaf is
+  `CN=wimsey workload`, so the two are distinguishable. The identifier stays
+  in the URI SAN alone: X.509-SVID does not use the subject to identify
+  anything, and RFC 5280 caps a common name at 64 characters, which a workload
+  identifier can exceed.
+
+  Nothing in this repository could have caught it. `wimsey-mtls::verify` is a
+  single-issuer model that compares against the CA it was handed, so it never
+  looks at the subject, and every test agreed with it. OpenSSL found it in the
+  first minute it was pointed at one of these certificates — which is the point
+  of the binding, since a TLS stack is what consumes them.
+
+  The mTLS conformance vectors change accordingly.
+
+### Added
+
+- `wimsey wic issue` and `wimsey wic verify`. The mTLS binding was the only one
+  of the four with no command-line surface, so the README pointed readers at
+  `wimsey --help` for something that was not there. Issuance takes the
+  workload's public key only, and both algorithms work.
+
 ## [0.6.1] - 2026-08-27
 
 A patch release: nothing breaks, and every API from 0.6.0 still works.
