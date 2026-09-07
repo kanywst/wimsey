@@ -49,10 +49,19 @@ pub enum WptError {
     /// The `wth` claim did not match the hash of the presented WIT.
     #[error("WIT binding mismatch")]
     WitBindingMismatch,
-    /// The `ath` claim and the presented access token did not agree (one was
+    /// The `tth` claim and the presented Txn-Token did not agree (one was
     /// present without the other, or the hashes differed).
-    #[error("access token binding mismatch")]
-    AccessTokenBindingMismatch,
+    #[error("transaction token binding mismatch")]
+    TxnTokenBindingMismatch,
+    /// An `oth` entry did not agree with the presented context tokens: the
+    /// claim named a header the recipient did not receive — an entry it cannot
+    /// understand, which the draft requires it to reject — or the hashes
+    /// differed.
+    #[error("context token binding mismatch for `{name}`")]
+    OtherTokenBindingMismatch {
+        /// The lowercased header field name the `oth` entry is keyed by.
+        name: String,
+    },
     /// The proof's lifetime (`exp - now`) exceeds the configured maximum.
     #[error("proof lifetime exceeds the configured maximum")]
     LifetimeTooLong,

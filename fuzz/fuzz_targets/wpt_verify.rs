@@ -13,12 +13,16 @@ struct Input<'a> {
     proof: &'a str,
     wit: &'a str,
     audience: &'a str,
-    access_token: Option<&'a str>,
+    txn_token: Option<&'a str>,
+    other_tokens: Vec<(&'a str, &'a str)>,
 }
 
 fuzz_target!(|input: Input<'_>| {
     let mut validation = Validation::new(1_700_000_000, input.audience, input.wit);
-    validation.access_token = input.access_token;
+    validation.txn_token = input.txn_token;
+    for (name, value) in input.other_tokens {
+        validation = validation.with_other_token(name, value);
+    }
     for key in [
         SigningKey::from_ed25519_seed(&[9u8; 32]),
         SigningKey::from_p256_scalar(&[9u8; 32]).expect("a fixed valid scalar"),

@@ -1,6 +1,6 @@
 //! `wimsey-wpt` — WIMSE Workload Proof Token (WPT) issuance and verification.
 //!
-//! Target spec: `draft-ietf-wimse-wpt-01`. A WPT is a short-lived JWT with JOSE
+//! Target spec: `draft-ietf-wimse-wpt-02`. A WPT is a short-lived JWT with JOSE
 //! header `typ: wpt+jwt`, signed by the workload's proof-of-possession key — the
 //! key whose public half is carried in the bound WIT's `cnf` claim. It proves
 //! the presenter holds that key for a specific audience and a specific WIT.
@@ -9,6 +9,18 @@
 //! Base64url-encoded SHA-256 hash of the WIT's ASCII value. Verification
 //! recomputes `wth` from the presented WIT and checks the audience, so a proof
 //! cannot be replayed against a different WIT or a different service.
+//!
+//! `tth` and `oth` bind tokens carrying *end-user* identity or authorization
+//! context — a Txn-Token and anything else in its own header field — each
+//! mandatory exactly when the corresponding token is in the request. They are
+//! not for authenticating the caller: the draft gives the WPT sole occupancy of
+//! the `Authorization` header field precisely so a bearer token cannot be
+//! mistaken for the calling workload's credential.
+//!
+//! This crate is the token, not its transport. Draft -02 conveys a WPT with the
+//! `WPT` HTTP authentication scheme (`Authorization: WPT <proof>`) and answers a
+//! rejection with `401` and a `WWW-Authenticate: WPT` challenge; wiring that
+//! into a server is the caller's job.
 //!
 //! The proof is signed with whatever algorithm the bound WIT's `cnf` JWK names
 //! — `EdDSA` or `ES256` — and verification requires the header to match the key
@@ -27,7 +39,8 @@
 //!     exp: 1_700_000_300,
 //!     jti: "0123456789abcdef".to_owned(),
 //!     wth: wit_thumbprint(wit),
-//!     ath: None,
+//!     tth: None,
+//!     oth: None,
 //! };
 //!
 //! let proof = issue(&claims, &pop_key).unwrap();
@@ -43,7 +56,10 @@ mod token;
 
 pub use claims::WptClaims;
 pub use error::WptError;
-pub use token::{issue, verify, wit_thumbprint, Validation, VerifiedWpt, ALG, MAX_TOKEN_LEN, TYP};
+pub use token::{
+    issue, other_token_entry, txn_token_thumbprint, verify, wit_thumbprint, Validation,
+    VerifiedWpt, ALG, MAX_TOKEN_LEN, TYP,
+};
 
 // Re-exported so callers can name the key types without a direct dependency.
 pub use wimsey_jose::{Algorithm, SigningKey, VerifyingKey};

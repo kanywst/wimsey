@@ -463,7 +463,8 @@ fn run_wpt(cmd: WptCmd) -> Result<()> {
                 exp,
                 jti: jti.map_or_else(random_id, Ok)?,
                 wth: wimsey_wpt::wit_thumbprint(wit.trim()),
-                ath: None,
+                tth: None,
+                oth: None,
             };
             let proof = wimsey_wpt::issue(&claims, &pop)?;
             println!("{proof}");

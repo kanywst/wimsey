@@ -1,5 +1,5 @@
 {
-  "format": "wimse-conformance/v4",
+  "format": "wimse-conformance/v5",
   "suite": "mtls",
   "id": "wic-eddsa",
   "spec": "draft-ietf-wimse-mutual-tls-02",

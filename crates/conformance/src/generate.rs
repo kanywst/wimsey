@@ -6,6 +6,8 @@
 //! so an unintended encoding change shows up as a failing build rather than as a
 //! silent interop break.
 
+use std::collections::BTreeMap;
+
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use wimsey_httpsig::{
     content_digest_sha256, response_components, sign, Component, HttpExchange, HttpRequest,
@@ -15,7 +17,9 @@ use wimsey_identifier::WorkloadIdentifier;
 use wimsey_jose::{Algorithm, Jwk as JoseJwk, PrivateJwk, SigningKey};
 use wimsey_mtls::WorkloadCa;
 use wimsey_wit::{issue as issue_wit, Confirmation, Jwk, WitClaims};
-use wimsey_wpt::{issue as issue_wpt, wit_thumbprint, WptClaims};
+use wimsey_wpt::{
+    issue as issue_wpt, other_token_entry, txn_token_thumbprint, wit_thumbprint, WptClaims,
+};
 
 use crate::vectors::{
     ErrorCode, Header, HttpSigAccepted, HttpSigNegative, HttpSigVector, IdentifierAccept,
@@ -69,7 +73,7 @@ const AUDIENCE: &str = "https://service.example/transfer";
 const RESPONSE_NONCE: &str = "abcd2222";
 
 const WIT_SPEC: &str = "draft-ietf-wimse-workload-creds-02";
-const WPT_SPEC: &str = "draft-ietf-wimse-wpt-01";
+const WPT_SPEC: &str = "draft-ietf-wimse-wpt-02";
 const HTTPSIG_SPEC: &str = "draft-ietf-wimse-http-signature-06";
 
 /// Names a vector after what it covers and which algorithm it covers it with.
@@ -138,6 +142,9 @@ fn wpt_neg(id: &str, description: &str, expect: ErrorCode) -> WptNegative {
         verify_now: None,
         audience: None,
         wit: None,
+        txn_token: None,
+        no_txn_token: false,
+        other_tokens: None,
     }
 }
 
@@ -341,38 +348,18 @@ pub fn wit_vector(algorithm: Algorithm) -> WitVector {
     }
 }
 
-/// Builds the WPT vector.
+/// The WPT inputs a verifier MUST reject, and the reason each must be rejected
+/// with.
 ///
-/// # Panics
-///
-/// Panics if the fixed inputs in this module stop being valid — which would
-/// mean the implementation can no longer issue its own reference credentials.
-#[must_use]
-pub fn wpt_vector(algorithm: Algorithm) -> WptVector {
-    let issuer_key = key(algorithm, ISSUER_SEED);
-    let pop_key = key(algorithm, POP_SEED);
-
-    let wit = issue_wit(&wit_claims(SUBJECT, &pop_key), Some(KID), &issuer_key).expect("issue WIT");
-    // A second, equally valid WIT for the same key: the proof is bound to the
-    // first one, so presenting it with this one must fail on `wth`.
-    let other_wit = issue_wit(
-        &wit_claims("spiffe://example.org/workload/other", &pop_key),
-        Some(KID),
-        &issuer_key,
-    )
-    .expect("issue the second WIT");
-
-    let audience = "https://workload.example.com/path".to_owned();
-    let claims = WptClaims {
-        aud: audience.clone(),
-        exp: 1_700_000_300,
-        jti: "0123456789abcdef".to_owned(),
-        wth: wit_thumbprint(&wit),
-        ath: None,
-    };
-    let proof = issue_wpt(&claims, &pop_key).expect("issue WPT");
-
-    let negative = vec![
+/// Split out from [`wpt_vector`] so that adding a case does not push the vector
+/// builder past the line limit and force an unrelated refactor at the same time.
+fn wpt_negatives(
+    proof: &str,
+    claims: &WptClaims,
+    other_wit: String,
+    pop_key: &SigningKey,
+) -> Vec<WptNegative> {
+    vec![
         WptNegative {
             verify_now: Some(claims.exp + 1),
             ..wpt_neg(
@@ -399,9 +386,9 @@ pub fn wpt_vector(algorithm: Algorithm) -> WptVector {
         },
         WptNegative {
             proof: Some(resign_with_header(
-                &proof,
+                proof,
                 r#"{"typ":"jwt","alg":"EdDSA"}"#,
-                &pop_key,
+                pop_key,
             )),
             ..wpt_neg(
                 "wrong-typ",
@@ -411,7 +398,7 @@ pub fn wpt_vector(algorithm: Algorithm) -> WptVector {
         },
         WptNegative {
             proof: Some(tamper_payload(
-                &proof,
+                proof,
                 "0123456789abcdef",
                 "0123456789abcdee",
             )),
@@ -421,7 +408,91 @@ pub fn wpt_vector(algorithm: Algorithm) -> WptVector {
                 ErrorCode::InvalidSignature,
             )
         },
-    ];
+        WptNegative {
+            txn_token: Some("txn-token-fedcba9876543210".to_owned()),
+            ..wpt_neg(
+                "txn-token-mismatch",
+                "replayed against a request carrying a different Txn-Token",
+                ErrorCode::TxnTokenBindingMismatch,
+            )
+        },
+        WptNegative {
+            no_txn_token: true,
+            ..wpt_neg(
+                "txn-token-absent",
+                "`tth` is present but the request carries no Txn-Token",
+                ErrorCode::TxnTokenBindingMismatch,
+            )
+        },
+        WptNegative {
+            other_tokens: Some(BTreeMap::from([(
+                "ctx-token".to_owned(),
+                "ctx-token-fedcba9876543210".to_owned(),
+            )])),
+            ..wpt_neg(
+                "context-token-mismatch",
+                "replayed against a request carrying a different context token",
+                ErrorCode::OtherTokenBindingMismatch,
+            )
+        },
+        WptNegative {
+            other_tokens: Some(BTreeMap::new()),
+            ..wpt_neg(
+                "context-token-absent",
+                "`oth` names a header the request does not carry, so the entry \
+                 cannot be understood and the proof must be rejected",
+                ErrorCode::OtherTokenBindingMismatch,
+            )
+        },
+    ]
+}
+
+/// Builds the WPT vector.
+///
+/// # Panics
+///
+/// Panics if the fixed inputs in this module stop being valid — which would
+/// mean the implementation can no longer issue its own reference credentials.
+#[must_use]
+pub fn wpt_vector(algorithm: Algorithm) -> WptVector {
+    let issuer_key = key(algorithm, ISSUER_SEED);
+    let pop_key = key(algorithm, POP_SEED);
+
+    let wit = issue_wit(&wit_claims(SUBJECT, &pop_key), Some(KID), &issuer_key).expect("issue WIT");
+    // A second, equally valid WIT for the same key: the proof is bound to the
+    // first one, so presenting it with this one must fail on `wth`.
+    let other_wit = issue_wit(
+        &wit_claims("spiffe://example.org/workload/other", &pop_key),
+        Some(KID),
+        &issuer_key,
+    )
+    .expect("issue the second WIT");
+
+    let audience = "https://workload.example.com/path".to_owned();
+    // Context tokens: these carry the *end user's* identity, not the caller's,
+    // and draft-02 binds them with `tth` and `oth` so a proof cannot be lifted
+    // onto a request carrying different ones.
+    let txn_token = "txn-token-0123456789abcdef".to_owned();
+    let other_tokens = BTreeMap::from([(
+        "ctx-token".to_owned(),
+        "ctx-token-0123456789abcdef".to_owned(),
+    )]);
+    let claims = WptClaims {
+        aud: audience.clone(),
+        exp: 1_700_000_300,
+        jti: "0123456789abcdef".to_owned(),
+        wth: wit_thumbprint(&wit),
+        tth: Some(txn_token_thumbprint(&txn_token)),
+        oth: Some(
+            other_tokens
+                .iter()
+                .map(|(name, value)| other_token_entry(name, value))
+                .collect(),
+        ),
+    };
+    let proof = issue_wpt(&claims, &pop_key).expect("issue WPT");
+
+    let negative = wpt_negatives(&proof, &claims, other_wit, &pop_key);
 
     WptVector {
         header: header(
@@ -436,6 +507,8 @@ pub fn wpt_vector(algorithm: Algorithm) -> WptVector {
         verify_now: IAT,
         audience,
         wit,
+        txn_token: Some(txn_token),
+        other_tokens,
         claims,
         proof,
         negative,

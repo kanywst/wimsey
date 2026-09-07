@@ -11,12 +11,12 @@ revision**. Bumping a pin is a deliberate, reviewed change.
 | `draft-ietf-wimse-arch` | -08 | — | Architecture; design guidance only |
 | `draft-ietf-wimse-identifier` | -03 | `wimsey-identifier` | URI scheme; `spiffe` and `wimse` |
 | `draft-ietf-wimse-workload-creds` | -02 | `wimsey-wit` | Defines WIT and WIC |
-| `draft-ietf-wimse-wpt` | -01 | `wimsey-wpt` | Workload Proof Token (DPoP-style PoP) |
+| `draft-ietf-wimse-wpt` | -02 | `wimsey-wpt` | Workload Proof Token (DPoP-style PoP) |
 | `draft-ietf-wimse-http-signature` | -06 | `wimsey-httpsig` | Profile of RFC 9421 |
 | `draft-ietf-wimse-mutual-tls` | -02 | `wimsey-mtls` | mTLS binding, client cert = WIC |
 | `draft-ietf-wimse-workload-identity-practices` | -06 | — | Informational; with the IESG |
 
-Every pin above is the current revision as of 2026-08-23.
+Every pin above is the current revision as of 2026-09-07.
 
 ## Known divergences
 
@@ -27,6 +27,7 @@ the pinned drafts.
 | --- | --- | --- |
 | Trust-domain match on the TLS peer certificate | `mutual-tls` §4 | Left to the caller: `wimsey-mtls::verify` returns the identifier and the caller compares it, since chain building and rustls wiring are out of scope. |
 | Chain building, `basicConstraints`, `keyUsage`, name constraints | `mutual-tls` §4 | Not enforced. `verify` is a single-issuer model that checks the directly provided CA only; deployments needing full PKIX path validation should use a dedicated X.509 verifier. |
+| The `WPT` HTTP authentication scheme and its `WWW-Authenticate` challenge | `wpt` §2, §2.1 | Not implemented. `wimsey-wpt` is the token, not its transport: it issues and verifies the proof, and placing it in `Authorization: WPT <proof>` — and answering a rejection with `401` and `WWW-Authenticate: WPT` — is the caller's. The `wpt` CLI subcommand prints the bare proof for the same reason. |
 
 ## Related specs
 

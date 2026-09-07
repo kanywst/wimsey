@@ -88,11 +88,12 @@ Needs the section boilerplate.
 * Maturity:
     * Workload Proof Token: alpha, not for production
 * Coverage: Issuance and verification with the mandatory `aud`, `exp`, `jti`
-  and `wth` claims and the optional `ath`, under `EdDSA` or `ES256`.
-  Verification recomputes `wth` from the WIT actually presented and takes the
-  proof-of-possession key from that WIT, and requires the proof's `alg` to be
-  the one that WIT's `cnf` names. Single-use `jti` tracking is left to the
-  caller.
+  and `wth` claims and the conditional `tth` and `oth`, under `EdDSA` or
+  `ES256`. Verification recomputes `wth` from the WIT actually presented and
+  takes the proof-of-possession key from that WIT, and requires the proof's
+  `alg` to be the one that WIT's `cnf` names. Single-use `jti` tracking is left
+  to the caller, as is the `WPT` HTTP authentication scheme that conveys the
+  proof — this is the token, not its transport.
 * License: Apache 2.0
 * Contact:
 * Last updated: 27-Aug-2026

@@ -1,5 +1,5 @@
 {
-  "format": "wimse-conformance/v4",
+  "format": "wimse-conformance/v5",
   "suite": "wit",
   "id": "issue-es256",
   "spec": "draft-ietf-wimse-workload-creds-02",
