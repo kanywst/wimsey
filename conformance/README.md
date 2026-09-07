@@ -21,8 +21,8 @@ conformance/
   identifier/parse-basic.json      draft-ietf-wimse-identifier-03
   wit/issue-eddsa.json             draft-ietf-wimse-workload-creds-02
   wit/issue-es256.json             draft-ietf-wimse-workload-creds-02
-  wpt/proof-eddsa.json             draft-ietf-wimse-wpt-01
-  wpt/proof-es256.json             draft-ietf-wimse-wpt-01
+  wpt/proof-eddsa.json             draft-ietf-wimse-wpt-02
+  wpt/proof-es256.json             draft-ietf-wimse-wpt-02
   httpsig/sign-eddsa.json          draft-ietf-wimse-http-signature-06
   httpsig/sign-es256.json          draft-ietf-wimse-http-signature-06
   mtls/wic-eddsa.json              draft-ietf-wimse-mutual-tls-02
@@ -41,7 +41,7 @@ Start at `manifest.json`. Do not glob the directories — the manifest is the li
 Every file, including the manifest, carries a `format` field:
 
 ```json
-{ "format": "wimse-conformance/v3" }
+{ "format": "wimse-conformance/v5" }
 ```
 
 **v2 replaced the raw key bytes of v1 with JWKs.** v1 recorded a public key as 32 base64url bytes, which only worked because every v1 vector was Ed25519 — the bytes do not say which algorithm they are for. A JWK carries its own `alg`, so one suite can hold vectors for both. A private key is a JWK with `d`, so a consumer can re-sign from scratch as before.
@@ -49,6 +49,8 @@ Every file, including the manifest, carries a `format` field:
 **v3 added the `accepted` array to the httpsig vectors**, so a file can record what must still verify and not only what must be rejected. It is a version bump rather than a plain addition because a v2 reader skips the new cases silently: it would report a pass having run fewer checks than the file asks for.
 
 **v4 gave the responder its own identity.** The response now carries `wit` and `pop_signing_key` of its own, where through v3 it reused the requester's. A v3 reader recovers the key from the request's WIT and fails to verify the response, which is loud rather than silent — but it fails for the wrong reason, so update the reader rather than reading the failure as a bad signature.
+
+**v5 added the context tokens a WPT binds.** The wpt vectors now carry `txn_token` and `other_tokens` — the Txn-Token and the other end-user-context tokens the request presents alongside the proof — because `draft-ietf-wimse-wpt-02` binds them with the `tth` and `oth` claims. A v4 reader has nowhere to put them, so it verifies the positive case having checked neither binding and reports a pass, which is the silent kind of wrong. The same revision removed `ath`: draft-02 gives the WPT sole occupancy of the `Authorization` header field, so there is no access token beside it left to bind.
 
 Reject a file whose `format` you do not recognise rather than guessing at its shape. The version changes when the format changes, not when a vector is added.
 
@@ -95,7 +97,8 @@ Every vector has a `negative` array. Each entry records **only the fields it ove
 | `invalid_key` | A key could not be decoded |
 | `audience_mismatch` | `aud` did not match the expected audience |
 | `wit_binding_mismatch` | `wth` did not match the hash of the presented WIT |
-| `access_token_binding_mismatch` | `ath` and the presented access token disagreed |
+| `txn_token_binding_mismatch` | `tth` and the presented Txn-Token disagreed |
+| `other_token_binding_mismatch` | An `oth` entry disagreed with the presented context tokens, or named a header the recipient did not receive |
 | `lifetime_too_long` | The proof's remaining lifetime exceeded the maximum |
 | `missing_component` | A covered component was absent from the message |
 | `unsupported_component` | A component identifier was not supported |

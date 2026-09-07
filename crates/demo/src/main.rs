@@ -195,7 +195,8 @@ fn proof_token_instead(issuer_key: &SigningKey, pop_key: &SigningKey, wit: &str)
         exp: NOW + 120,
         jti: "wpt-0001".to_owned(),
         wth: wit_thumbprint(wit),
-        ath: None,
+        tth: None,
+        oth: None,
     };
     let proof = wimsey_wpt::issue(&claims, pop_key)?;
 

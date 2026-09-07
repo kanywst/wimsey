@@ -1,12 +1,18 @@
 //! The claim set carried by a Workload Proof Token.
 
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 
-/// The claims of a Workload Proof Token (`draft-ietf-wimse-wpt-01`).
+/// The claims of a Workload Proof Token (`draft-ietf-wimse-wpt-02`).
 ///
-/// `aud`, `exp`, `jti` and `wth` are mandatory. `ath` (the hash of an
-/// accompanying OAuth access token) is included only when such a token is
-/// present in the request. The field order is fixed so issued proofs are
+/// `aud`, `exp`, `jti` and `wth` are mandatory. `tth` and `oth` bind tokens that
+/// convey *end-user* identity or authorization context rather than the calling
+/// workload's, and each is mandatory exactly when the corresponding token is in
+/// the request (draft §2).
+///
+/// The field order is fixed and `oth` is a [`BTreeMap`], so the JSON
+/// serialization is a function of the values alone and an issued proof is
 /// byte-for-byte reproducible for a given key and input.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WptClaims {
@@ -22,8 +28,19 @@ pub struct WptClaims {
     /// The Base64url-encoded SHA-256 hash of the ASCII WIT value this proof is
     /// bound to.
     pub wth: String,
-    /// The Base64url-encoded SHA-256 hash of an accompanying OAuth access
-    /// token, present only if such a token is in the request.
+    /// The Base64url-encoded SHA-256 hash of an accompanying Txn-Token
+    /// (`draft-ietf-oauth-transaction-tokens`), present only if such a token is
+    /// in the request.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub ath: Option<String>,
+    pub tth: Option<String>,
+    /// Hashes of any other tokens in the request that convey end-user identity
+    /// or authorization context, keyed by the **lowercased** name of the header
+    /// field carrying each one. Each value is the Base64url-encoded SHA-256 hash
+    /// of the ASCII header field value with leading and trailing spaces removed.
+    ///
+    /// This claim names exactly the tokens the proof binds. A recipient MUST NOT
+    /// make authorization decisions using a context token the claim does not
+    /// cover.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub oth: Option<BTreeMap<String, String>>,
 }

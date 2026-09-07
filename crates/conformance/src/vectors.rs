@@ -6,6 +6,8 @@
 //! variant. A negative case only records the fields it overrides; anything it
 //! omits is taken from the positive case in the same file.
 
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 use wimsey_httpsig::HttpSigError;
 use wimsey_identifier::ParseError;
@@ -30,7 +32,12 @@ use wimsey_wpt::{WptClaims, WptError};
 /// v4 gave the responder its own identity. Until then the response reused the
 /// requester's WIT and key, so a consumer that verified a response against
 /// request-side identity state passed anyway.
-pub const FORMAT: &str = "wimse-conformance/v4";
+///
+/// v5 added the context tokens a WPT binds — `txn_token` and `other_tokens` —
+/// which `draft-ietf-wimse-wpt-02` covers with the `tth` and `oth` claims. A v4
+/// reader has nowhere to put them, so it verifies the positive case having
+/// checked neither binding and reports a pass.
+pub const FORMAT: &str = "wimse-conformance/v5";
 
 /// The index of every vector in the suite, written to `manifest.json`.
 ///
@@ -106,8 +113,11 @@ pub enum ErrorCode {
     AudienceMismatch,
     /// The proof's `wth` did not match the hash of the presented WIT.
     WitBindingMismatch,
-    /// The proof's `ath` and the presented access token did not agree.
-    AccessTokenBindingMismatch,
+    /// The proof's `tth` and the presented Txn-Token did not agree.
+    TxnTokenBindingMismatch,
+    /// An `oth` entry did not agree with the presented context tokens, or named
+    /// a header the recipient did not receive.
+    OtherTokenBindingMismatch,
     /// The proof's remaining lifetime exceeded the verifier's maximum.
     LifetimeTooLong,
     /// A covered component was absent from the message.
@@ -269,7 +279,8 @@ impl From<&WptError> for ErrorCode {
             WptError::Expired => Self::Expired,
             WptError::AudienceMismatch => Self::AudienceMismatch,
             WptError::WitBindingMismatch => Self::WitBindingMismatch,
-            WptError::AccessTokenBindingMismatch => Self::AccessTokenBindingMismatch,
+            WptError::TxnTokenBindingMismatch => Self::TxnTokenBindingMismatch,
+            WptError::OtherTokenBindingMismatch { .. } => Self::OtherTokenBindingMismatch,
             WptError::LifetimeTooLong => Self::LifetimeTooLong,
             _ => Self::Unmapped,
         }
@@ -373,6 +384,14 @@ pub struct WptVector {
     pub audience: String,
     /// The WIT the proof is bound to; its `cnf` is the proof-of-possession key.
     pub wit: String,
+    /// The Txn-Token the request presents alongside the proof, which `tth`
+    /// binds. Absent when the request carries none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub txn_token: Option<String>,
+    /// The other context tokens the request presents, as raw header field
+    /// values keyed by the lowercased field name. These are what `oth` binds.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub other_tokens: BTreeMap<String, String>,
     /// The claims the proof encodes.
     pub claims: WptClaims,
     /// The expected proof, byte for byte.
@@ -402,6 +421,18 @@ pub struct WptNegative {
     /// Replaces the positive case's `wit`, so `wth` no longer matches.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub wit: Option<String>,
+    /// Replaces the positive case's `txn_token`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub txn_token: Option<String>,
+    /// Presents no Txn-Token at all, whatever the positive case carries. A
+    /// separate flag because omitting `txn_token` means "unchanged", which is
+    /// not the same as "absent".
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub no_txn_token: bool,
+    /// Replaces the positive case's `other_tokens` wholesale. An empty object
+    /// presents none, which is distinct from omitting the field.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub other_tokens: Option<BTreeMap<String, String>>,
 }
 
 /// The HTTP request a signature covers, in the shape the signature base needs.

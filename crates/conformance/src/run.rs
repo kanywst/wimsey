@@ -5,7 +5,7 @@
 //! checks assert that verification **fails with the recorded reason**, which is
 //! the half that a `git diff` of regenerated output can never cover.
 
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -431,6 +431,25 @@ pub fn run_wit(vector: &WitVector, report: &mut Report) {
     }
 }
 
+/// Builds the WPT validation for a case, including the context tokens the
+/// request presents alongside the proof.
+fn wpt_validation<'a>(
+    now: u64,
+    audience: &'a str,
+    wit: &'a str,
+    txn_token: Option<&'a str>,
+    other_tokens: &'a BTreeMap<String, String>,
+) -> Validation<'a> {
+    let mut validation = Validation::new(now, audience, wit);
+    if let Some(txn_token) = txn_token {
+        validation = validation.with_txn_token(txn_token);
+    }
+    for (header_name, header_value) in other_tokens {
+        validation = validation.with_other_token(header_name, header_value);
+    }
+    validation
+}
+
 /// Runs the WPT vector: reproducibility, the full WIT-to-WPT flow, and every
 /// rejection.
 pub fn run_wpt(vector: &WptVector, report: &mut Report) {
@@ -478,7 +497,13 @@ pub fn run_wpt(vector: &WptVector, report: &mut Report) {
     let flow = verifying_key(&vector.issuer_verifying_key).and_then(|issuer| {
         let verified_wit = verify_wit(&vector.wit, &issuer, &WitValidation::at(vector.verify_now))
             .map_err(|e| format!("the bound WIT did not verify: {e}"))?;
-        let validation = Validation::new(vector.verify_now, &vector.audience, &vector.wit);
+        let validation = wpt_validation(
+            vector.verify_now,
+            &vector.audience,
+            &vector.wit,
+            vector.txn_token.as_deref(),
+            &vector.other_tokens,
+        );
         let verified = verify_wpt(&vector.proof, &verified_wit.pop_key, &validation)
             .map_err(|e| format!("the proof did not verify: {e}"))?;
         if verified.claims == vector.claims {
@@ -494,8 +519,16 @@ pub fn run_wpt(vector: &WptVector, report: &mut Report) {
         let now = case.verify_now.unwrap_or(vector.verify_now);
         let audience = case.audience.as_deref().unwrap_or(&vector.audience);
         let wit = case.wit.as_deref().unwrap_or(&vector.wit);
+        // An override replaces the positive case's value; `no_txn_token` is what
+        // says "present none", which omitting the field cannot.
+        let txn_token = if case.no_txn_token {
+            None
+        } else {
+            case.txn_token.as_deref().or(vector.txn_token.as_deref())
+        };
+        let other_tokens = case.other_tokens.as_ref().unwrap_or(&vector.other_tokens);
 
-        let validation = Validation::new(now, audience, wit);
+        let validation = wpt_validation(now, audience, wit, txn_token, other_tokens);
         let actual = verify_wpt(proof, &pop.verifying_key(), &validation)
             .map(|_| ())
             .map_err(|e| ErrorCode::from(&e));

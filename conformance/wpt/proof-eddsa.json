@@ -1,8 +1,8 @@
 {
-  "format": "wimse-conformance/v4",
+  "format": "wimse-conformance/v5",
   "suite": "wpt",
   "id": "proof-eddsa",
-  "spec": "draft-ietf-wimse-wpt-01",
+  "spec": "draft-ietf-wimse-wpt-02",
   "description": "WPT bound to a WIT via `wth`, plus the inputs a verifier must reject",
   "alg": "EdDSA",
   "pop_signing_key": {
@@ -21,13 +21,21 @@
   "verify_now": 1700000000,
   "audience": "https://workload.example.com/path",
   "wit": "eyJ0eXAiOiJ3aXQrand0IiwiYWxnIjoiRWREU0EiLCJraWQiOiJpc3N1ZXIta2V5LTEifQ.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvYXBpIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDM2MDAsImp0aSI6ImExYjJjMyIsImNuZiI6eyJqd2siOnsiYWxnIjoiRWREU0EiLCJrdHkiOiJPS1AiLCJjcnYiOiJFZDI1NTE5IiwieCI6Il9SY2tPRnFneDF0ay0zak5ZQy1oMlpIOTZfZHJFOFdPMXdMcXlEWHA5aGcifX19.gEOIwRVXNwJTSXRGBDPV4CQLRUFeKYx-oK_nwSxaxegepaEEcKbn1TIPacMI0rWR2M8kRikyzB4jkcudkUtXCA",
+  "txn_token": "txn-token-0123456789abcdef",
+  "other_tokens": {
+    "ctx-token": "ctx-token-0123456789abcdef"
+  },
   "claims": {
     "aud": "https://workload.example.com/path",
     "exp": 1700000300,
     "jti": "0123456789abcdef",
-    "wth": "ojfPvM1RFUWAdlg8QNkxc5h2DmJ8Ottdz0dl9Z3HVy4"
+    "wth": "ojfPvM1RFUWAdlg8QNkxc5h2DmJ8Ottdz0dl9Z3HVy4",
+    "tth": "wNqPGTS3vp4Z59s2IowQGx2IxpTDGcVOshjj3w5YyMw",
+    "oth": {
+      "ctx-token": "2LzY0NH3UJ9xloFoivfCcFeID3TvEzb1Yjh7nkjEogg"
+    }
   },
-  "proof": "eyJ0eXAiOiJ3cHQrand0IiwiYWxnIjoiRWREU0EifQ.eyJhdWQiOiJodHRwczovL3dvcmtsb2FkLmV4YW1wbGUuY29tL3BhdGgiLCJleHAiOjE3MDAwMDAzMDAsImp0aSI6IjAxMjM0NTY3ODlhYmNkZWYiLCJ3dGgiOiJvamZQdk0xUkZVV0FkbGc4UU5reGM1aDJEbUo4T3R0ZHowZGw5WjNIVnk0In0.PYshB5e4E-1-H4PNUm2wH2WUEpAHw-qa-1FTeTKcE7-41xkf4jGQCeJRYr6_AwS5txnjot2A3U0h8097Q4DcAg",
+  "proof": "eyJ0eXAiOiJ3cHQrand0IiwiYWxnIjoiRWREU0EifQ.eyJhdWQiOiJodHRwczovL3dvcmtsb2FkLmV4YW1wbGUuY29tL3BhdGgiLCJleHAiOjE3MDAwMDAzMDAsImp0aSI6IjAxMjM0NTY3ODlhYmNkZWYiLCJ3dGgiOiJvamZQdk0xUkZVV0FkbGc4UU5reGM1aDJEbUo4T3R0ZHowZGw5WjNIVnk0IiwidHRoIjoid05xUEdUUzN2cDRaNTlzMklvd1FHeDJJeHBUREdjVk9zaGpqM3c1WXlNdyIsIm90aCI6eyJjdHgtdG9rZW4iOiIyTHpZME5IM1VKOXhsb0ZvaXZmQ2NGZUlEM1R2RXpiMVlqaDdua2pFb2dnIn19.NS_rWn6aB09yRqboGc06oVgXm5uQdULu_bwafvOC8RS5EJufoEuxmtRErTE1ZniZRg5WHx8kd40pCrsLkJEDDQ",
   "negative": [
     {
       "id": "expired",
@@ -51,13 +59,39 @@
       "id": "wrong-typ",
       "description": "validly signed, but the JOSE `typ` is `jwt` and not `wpt+jwt`",
       "expect": "wrong_type",
-      "proof": "eyJ0eXAiOiJqd3QiLCJhbGciOiJFZERTQSJ9.eyJhdWQiOiJodHRwczovL3dvcmtsb2FkLmV4YW1wbGUuY29tL3BhdGgiLCJleHAiOjE3MDAwMDAzMDAsImp0aSI6IjAxMjM0NTY3ODlhYmNkZWYiLCJ3dGgiOiJvamZQdk0xUkZVV0FkbGc4UU5reGM1aDJEbUo4T3R0ZHowZGw5WjNIVnk0In0.U0V4NFDvBbpWSosZXCmNPxwS8NDU44Mh03cCg7qgmaf4zIbrGQrfkds7EPsjAxS2HrtkJTghY8BB7ENOSeyCCw"
+      "proof": "eyJ0eXAiOiJqd3QiLCJhbGciOiJFZERTQSJ9.eyJhdWQiOiJodHRwczovL3dvcmtsb2FkLmV4YW1wbGUuY29tL3BhdGgiLCJleHAiOjE3MDAwMDAzMDAsImp0aSI6IjAxMjM0NTY3ODlhYmNkZWYiLCJ3dGgiOiJvamZQdk0xUkZVV0FkbGc4UU5reGM1aDJEbUo4T3R0ZHowZGw5WjNIVnk0IiwidHRoIjoid05xUEdUUzN2cDRaNTlzMklvd1FHeDJJeHBUREdjVk9zaGpqM3c1WXlNdyIsIm90aCI6eyJjdHgtdG9rZW4iOiIyTHpZME5IM1VKOXhsb0ZvaXZmQ2NGZUlEM1R2RXpiMVlqaDdua2pFb2dnIn19.4rR5IbAcXGzmTDLj8VrVRXeF-VQZvQERSBkUtr_U79r_BA9w5tU6jKURdi7gtiK_Wi9cseZV253wvvLCAfzODA"
     },
     {
       "id": "tampered-payload",
       "description": "`jti` was altered after signing; the payload is still valid JSON",
       "expect": "invalid_signature",
-      "proof": "eyJ0eXAiOiJ3cHQrand0IiwiYWxnIjoiRWREU0EifQ.eyJhdWQiOiJodHRwczovL3dvcmtsb2FkLmV4YW1wbGUuY29tL3BhdGgiLCJleHAiOjE3MDAwMDAzMDAsImp0aSI6IjAxMjM0NTY3ODlhYmNkZWUiLCJ3dGgiOiJvamZQdk0xUkZVV0FkbGc4UU5reGM1aDJEbUo4T3R0ZHowZGw5WjNIVnk0In0.PYshB5e4E-1-H4PNUm2wH2WUEpAHw-qa-1FTeTKcE7-41xkf4jGQCeJRYr6_AwS5txnjot2A3U0h8097Q4DcAg"
+      "proof": "eyJ0eXAiOiJ3cHQrand0IiwiYWxnIjoiRWREU0EifQ.eyJhdWQiOiJodHRwczovL3dvcmtsb2FkLmV4YW1wbGUuY29tL3BhdGgiLCJleHAiOjE3MDAwMDAzMDAsImp0aSI6IjAxMjM0NTY3ODlhYmNkZWUiLCJ3dGgiOiJvamZQdk0xUkZVV0FkbGc4UU5reGM1aDJEbUo4T3R0ZHowZGw5WjNIVnk0IiwidHRoIjoid05xUEdUUzN2cDRaNTlzMklvd1FHeDJJeHBUREdjVk9zaGpqM3c1WXlNdyIsIm90aCI6eyJjdHgtdG9rZW4iOiIyTHpZME5IM1VKOXhsb0ZvaXZmQ2NGZUlEM1R2RXpiMVlqaDdua2pFb2dnIn19.NS_rWn6aB09yRqboGc06oVgXm5uQdULu_bwafvOC8RS5EJufoEuxmtRErTE1ZniZRg5WHx8kd40pCrsLkJEDDQ"
+    },
+    {
+      "id": "txn-token-mismatch",
+      "description": "replayed against a request carrying a different Txn-Token",
+      "expect": "txn_token_binding_mismatch",
+      "txn_token": "txn-token-fedcba9876543210"
+    },
+    {
+      "id": "txn-token-absent",
+      "description": "`tth` is present but the request carries no Txn-Token",
+      "expect": "txn_token_binding_mismatch",
+      "no_txn_token": true
+    },
+    {
+      "id": "context-token-mismatch",
+      "description": "replayed against a request carrying a different context token",
+      "expect": "other_token_binding_mismatch",
+      "other_tokens": {
+        "ctx-token": "ctx-token-fedcba9876543210"
+      }
+    },
+    {
+      "id": "context-token-absent",
+      "description": "`oth` names a header the request does not carry, so the entry cannot be understood and the proof must be rejected",
+      "expect": "other_token_binding_mismatch",
+      "other_tokens": {}
     }
   ]
 }

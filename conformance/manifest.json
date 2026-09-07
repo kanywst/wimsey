@@ -1,5 +1,5 @@
 {
-  "format": "wimse-conformance/v4",
+  "format": "wimse-conformance/v5",
   "vectors": [
     {
       "suite": "identifier",
@@ -19,12 +19,12 @@
     {
       "suite": "wpt",
       "path": "wpt/proof-eddsa.json",
-      "spec": "draft-ietf-wimse-wpt-01"
+      "spec": "draft-ietf-wimse-wpt-02"
     },
     {
       "suite": "wpt",
       "path": "wpt/proof-es256.json",
-      "spec": "draft-ietf-wimse-wpt-01"
+      "spec": "draft-ietf-wimse-wpt-02"
     },
     {
       "suite": "httpsig",

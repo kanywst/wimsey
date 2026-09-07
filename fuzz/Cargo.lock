@@ -903,7 +903,7 @@ dependencies = [
 
 [[package]]
 name = "wimsey-httpsig"
-version = "0.3.0"
+version = "0.6.3"
 dependencies = [
  "base64",
  "ed25519-dalek",
@@ -914,7 +914,7 @@ dependencies = [
 
 [[package]]
 name = "wimsey-identifier"
-version = "0.3.0"
+version = "0.6.3"
 dependencies = [
  "serde",
  "thiserror",
@@ -922,7 +922,7 @@ dependencies = [
 
 [[package]]
 name = "wimsey-jose"
-version = "0.3.0"
+version = "0.6.3"
 dependencies = [
  "base64",
  "ed25519-dalek",
@@ -933,7 +933,7 @@ dependencies = [
 
 [[package]]
 name = "wimsey-mtls"
-version = "0.3.0"
+version = "0.6.3"
 dependencies = [
  "ed25519-dalek",
  "rcgen",
@@ -946,7 +946,7 @@ dependencies = [
 
 [[package]]
 name = "wimsey-wit"
-version = "0.3.0"
+version = "0.6.3"
 dependencies = [
  "base64",
  "ed25519-dalek",
@@ -959,7 +959,7 @@ dependencies = [
 
 [[package]]
 name = "wimsey-wpt"
-version = "0.3.0"
+version = "0.6.3"
 dependencies = [
  "base64",
  "ed25519-dalek",

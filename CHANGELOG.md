@@ -10,6 +10,70 @@ silently.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-07
+
+A breaking release, and the reason it is breaking is the point of the project:
+`draft-ietf-wimse-wpt` published **-02** on 2026-08-27 and `wimsey-wpt` was
+still on -01. Following a draft is what this implementation is for, so the pin
+moves and the API moves with it.
+
+Per the pre-1.0 reading of SemVer this repository uses, a breaking change bumps
+the minor. Only `wimsey-wpt` and the conformance vectors change; the other
+crates move version in lockstep and are otherwise untouched.
+
+### Changed
+
+- **`WptClaims::ath` is gone, replaced by `tth` and `oth`.** Draft -02 conveys
+  the WPT with a new `WPT` HTTP authentication scheme, which gives it sole
+  occupancy of the `Authorization` header field — so there is no OAuth access
+  token beside it left for `ath` to bind. What remains to bind are tokens
+  carrying the *end user's* identity or authorization context, which travel in
+  their own header fields:
+
+  - `tth` — the hash of a Txn-Token, mandatory exactly when the request carries
+    one.
+  - `oth` — a map from **lowercased** header field name to the hash of that
+    field's value, with leading and trailing spaces removed. It names exactly
+    the tokens the proof binds.
+
+  On the verifying side, `Validation::with_access_token` becomes
+  `Validation::with_txn_token` and `Validation::with_other_token`, and the
+  `access_token` field becomes `txn_token` plus an `other_tokens` map.
+  `WptError::AccessTokenBindingMismatch` becomes `TxnTokenBindingMismatch` and
+  `OtherTokenBindingMismatch { name }`.
+
+  Two rules in draft §2 are worth stating because they pull in opposite
+  directions. An `oth` entry naming a header the recipient did not receive is
+  an entry it *cannot understand*, and the proof MUST be rejected — so
+  verification fails closed on it. But a context token the request carries that
+  `oth` does **not** name is not an error: the draft forbids *relying* on it
+  rather than receiving it. Verification therefore accepts, and
+  `VerifiedWpt::claims.oth` is how a caller tells which tokens are actually
+  bound. Anything outside that set must not reach an authorization decision.
+
+- **The conformance format is `wimse-conformance/v5`.** The wpt vectors now
+  record `txn_token` and `other_tokens` — what the request presents alongside
+  the proof — so a runner can exercise the new bindings. This is a version bump
+  rather than an addition because a v4 reader has nowhere to put those fields:
+  it would verify the positive case having checked neither binding and report a
+  pass. Four negative cases come with them, per algorithm: a mismatched
+  Txn-Token, an absent one, a mismatched context token, and an `oth` entry the
+  request does not carry. The suite is 162 checks, up from 154.
+
+### Added
+
+- `txn_token_thumbprint` and `other_token_entry`, so a caller computes `tth` and
+  an `oth` entry with the draft's normalization rather than reimplementing the
+  hashing and the lowercasing.
+
+### Notes
+
+The `WPT` HTTP authentication scheme itself — `Authorization: WPT <proof>`, and
+answering a rejection with `401` and a `WWW-Authenticate: WPT` challenge — is
+**not** implemented. `wimsey-wpt` is the token, not its transport, the same
+division `wimsey-httpsig` and `wimsey-mtls` already draw. It is recorded in
+`SPEC-MAP.md` under known divergences rather than left for a reader to discover.
+
 ## [0.6.3] - 2026-09-07
 
 A patch release. Nothing in the library changed: the crates behave exactly as
@@ -389,7 +453,8 @@ public API.
 - Project governance, security policy, contributing guide (DCO), and OpenSSF
   Scorecard automation.
 
-[Unreleased]: https://github.com/kanywst/wimsey/compare/v0.6.3...HEAD
+[Unreleased]: https://github.com/kanywst/wimsey/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/kanywst/wimsey/compare/v0.6.3...v0.7.0
 [0.6.3]: https://github.com/kanywst/wimsey/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/kanywst/wimsey/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/kanywst/wimsey/compare/v0.6.0...v0.6.1

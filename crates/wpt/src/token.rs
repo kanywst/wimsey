@@ -1,5 +1,7 @@
 //! Compact-JWS issuance and verification of Workload Proof Tokens.
 
+use std::collections::BTreeMap;
+
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -29,7 +31,7 @@ struct Header {
 }
 
 /// The Base64url-encoded SHA-256 hash of a token's ASCII value, as used by the
-/// `wth` and `ath` claims.
+/// `wth`, `tth` and `oth` claims.
 fn sha256_b64u(value: &str) -> String {
     URL_SAFE_NO_PAD.encode(Sha256::digest(value.as_bytes()))
 }
@@ -39,6 +41,27 @@ fn sha256_b64u(value: &str) -> String {
 #[must_use]
 pub fn wit_thumbprint(wit: &str) -> String {
     sha256_b64u(wit)
+}
+
+/// Computes the `tth` value for a Txn-Token: the Base64url-encoded SHA-256 hash
+/// of the token's ASCII value.
+#[must_use]
+pub fn txn_token_thumbprint(txn_token: &str) -> String {
+    sha256_b64u(txn_token)
+}
+
+/// Computes an `oth` entry for a context token carried in an HTTP header field.
+///
+/// Returns the lowercased field name and the Base64url-encoded SHA-256 hash of
+/// the field value with leading and trailing spaces removed, which is the
+/// normalization the draft specifies (§2) in the absence of an application
+/// profile saying otherwise.
+#[must_use]
+pub fn other_token_entry(header_name: &str, header_value: &str) -> (String, String) {
+    (
+        header_name.to_ascii_lowercase(),
+        sha256_b64u(header_value.trim_matches(' ')),
+    )
 }
 
 /// Parameters controlling WPT verification.
@@ -58,10 +81,19 @@ pub struct Validation<'a> {
     /// The WIT value the proof must be bound to, used to recompute `wth`. It and
     /// the verifying key MUST come from the same verified WIT.
     pub wit: &'a str,
-    /// The OAuth access token accompanying the request, if any. When set, the
-    /// proof's `ath` claim must hash to it; when unset, the proof must carry no
-    /// `ath`.
-    pub access_token: Option<&'a str>,
+    /// The Txn-Token accompanying the request, if any. When set, the proof's
+    /// `tth` claim must hash to it; when unset, the proof must carry no `tth`.
+    pub txn_token: Option<&'a str>,
+    /// Other tokens conveying end-user identity or authorization context that
+    /// accompany the request, as raw HTTP header field values keyed by the
+    /// **lowercased** field name.
+    ///
+    /// Every entry the proof's `oth` claim names must appear here and hash to
+    /// the same value. An entry here that `oth` does not name is not an error —
+    /// the draft leaves such a token unbound rather than forbidden — but the
+    /// recipient MUST NOT use it to make authorization decisions. Read
+    /// `VerifiedWpt::claims.oth` for the set that is actually bound.
+    pub other_tokens: BTreeMap<String, &'a str>,
     /// If set, the proof's remaining lifetime (`exp - now`) must not exceed this
     /// many seconds — a guard against an over-permissive issuer widening the
     /// replay window.
@@ -70,7 +102,7 @@ pub struct Validation<'a> {
 
 impl<'a> Validation<'a> {
     /// Creates a validation for `audience` and `wit` at time `now`, with no
-    /// clock-skew tolerance, no access-token binding, and no lifetime cap.
+    /// clock-skew tolerance, no context-token bindings, and no lifetime cap.
     #[must_use]
     pub fn new(now: u64, audience: &'a str, wit: &'a str) -> Self {
         Self {
@@ -78,7 +110,8 @@ impl<'a> Validation<'a> {
             leeway: 0,
             audience,
             wit,
-            access_token: None,
+            txn_token: None,
+            other_tokens: BTreeMap::new(),
             max_lifetime: None,
         }
     }
@@ -90,10 +123,20 @@ impl<'a> Validation<'a> {
         self
     }
 
-    /// Requires the proof to be bound (via `ath`) to `access_token`.
+    /// Requires the proof to be bound (via `tth`) to `txn_token`.
     #[must_use]
-    pub fn with_access_token(mut self, access_token: &'a str) -> Self {
-        self.access_token = Some(access_token);
+    pub fn with_txn_token(mut self, txn_token: &'a str) -> Self {
+        self.txn_token = Some(txn_token);
+        self
+    }
+
+    /// Records a context token the request carried, so an `oth` entry naming
+    /// `header_name` can be checked against it. The name is lowercased, matching
+    /// how the claim is keyed.
+    #[must_use]
+    pub fn with_other_token(mut self, header_name: &str, header_value: &'a str) -> Self {
+        self.other_tokens
+            .insert(header_name.to_ascii_lowercase(), header_value);
         self
     }
 
@@ -141,9 +184,9 @@ pub fn issue(claims: &WptClaims, pop_signing_key: &SigningKey) -> Result<String,
 /// the same verified WIT, otherwise a proof bound to one WIT could be accepted
 /// with another WIT's key. Checks, in order: size, structure, the
 /// `typ`/`alg`/`crit` header fields, the signature, expiry, the optional
-/// lifetime cap, the audience, the `wth` binding to the presented WIT, and the
-/// `ath` binding to any accompanying access token. Fails closed on any
-/// deviation.
+/// lifetime cap, the audience, the `wth` binding to the presented WIT, the
+/// `tth` binding to any accompanying Txn-Token, and every `oth` binding to the
+/// context tokens the request carried. Fails closed on any deviation.
 ///
 /// This is a stateless primitive: it does not track `jti`, so the recipient is
 /// responsible for single-use replay detection within the proof's lifetime.
@@ -153,7 +196,7 @@ pub fn issue(claims: &WptClaims, pop_signing_key: &SigningKey) -> Result<String,
 /// Returns the corresponding [`WptError`] for a malformed or oversized token, a
 /// wrong `typ`/`alg`, an unsupported critical header, a bad signature, an
 /// expired proof, a too-long lifetime, an audience mismatch, a WIT-binding
-/// mismatch, or an access-token-binding mismatch.
+/// mismatch, a Txn-Token-binding mismatch, or a context-token-binding mismatch.
 pub fn verify(
     wpt: &str,
     pop_key: &VerifyingKey,
@@ -228,12 +271,30 @@ pub fn verify(
     if claims.wth != wit_thumbprint(validation.wit) {
         return Err(WptError::WitBindingMismatch);
     }
-    // `ath` binds the proof to an accompanying access token. It must be present
-    // exactly when an access token is, and must hash to it.
-    match (validation.access_token, claims.ath.as_deref()) {
+    // `tth` binds the proof to an accompanying Txn-Token. It must be present
+    // exactly when such a token is, and must hash to it.
+    match (validation.txn_token, claims.tth.as_deref()) {
         (None, None) => {}
-        (Some(access_token), Some(ath)) if ath == sha256_b64u(access_token) => {}
-        _ => return Err(WptError::AccessTokenBindingMismatch),
+        (Some(txn_token), Some(tth)) if tth == txn_token_thumbprint(txn_token) => {}
+        _ => return Err(WptError::TxnTokenBindingMismatch),
+    }
+    // `oth` binds other context tokens, keyed by header field name. Every entry
+    // must name a token the request actually carried and hash to it: the draft
+    // requires a proof carrying an entry the recipient cannot understand to be
+    // rejected. A token the request carried that `oth` does *not* name is left
+    // unbound rather than rejected — the draft forbids using it for an
+    // authorization decision, which is the caller's obligation, not something
+    // verification can enforce here.
+    if let Some(oth) = &claims.oth {
+        for (name, hash) in oth {
+            let presented = validation
+                .other_tokens
+                .get(name.as_str())
+                .ok_or_else(|| WptError::OtherTokenBindingMismatch { name: name.clone() })?;
+            if *hash != other_token_entry(name, presented).1 {
+                return Err(WptError::OtherTokenBindingMismatch { name: name.clone() });
+            }
+        }
     }
 
     Ok(VerifiedWpt { claims })
@@ -243,7 +304,11 @@ pub fn verify(
 mod tests {
     use wimsey_jose::SigningKey;
 
-    use super::{issue, verify, wit_thumbprint, Validation};
+    use std::collections::BTreeMap;
+
+    use super::{
+        issue, other_token_entry, txn_token_thumbprint, verify, wit_thumbprint, Validation,
+    };
     use crate::claims::WptClaims;
     use crate::error::WptError;
 
@@ -256,7 +321,8 @@ mod tests {
             exp: 1_700_000_300,
             jti: "0123456789abcdef".to_owned(),
             wth: wit_thumbprint(WIT),
-            ath: None,
+            tth: None,
+            oth: None,
         }
     }
 
@@ -385,51 +451,131 @@ mod tests {
         assert_eq!(issue(&claims, &key).unwrap(), issue(&claims, &key).unwrap());
     }
 
-    const ACCESS_TOKEN: &str = "access-token-abcdef";
+    const TXN_TOKEN: &str = "txn-token-abcdef";
+    const CTX_HEADER: &str = "Ctx-Token";
+    const CTX_VALUE: &str = "ctx-token-abcdef";
 
-    fn claims_with_ath() -> WptClaims {
+    fn claims_with_tth() -> WptClaims {
         WptClaims {
-            ath: Some(wit_thumbprint(ACCESS_TOKEN)),
+            tth: Some(txn_token_thumbprint(TXN_TOKEN)),
+            ..sample_claims()
+        }
+    }
+
+    fn claims_with_oth(name: &str, value: &str) -> WptClaims {
+        let (key, hash) = other_token_entry(name, value);
+        WptClaims {
+            oth: Some(BTreeMap::from([(key, hash)])),
             ..sample_claims()
         }
     }
 
     #[test]
-    fn binds_to_the_matching_access_token() {
+    fn binds_to_the_matching_txn_token() {
         let key = SigningKey::from_ed25519_seed(&[9u8; 32]);
-        let wpt = issue(&claims_with_ath(), &key).unwrap();
+        let wpt = issue(&claims_with_tth(), &key).unwrap();
 
-        let validation = valid_at(1_700_000_000).with_access_token(ACCESS_TOKEN);
+        let validation = valid_at(1_700_000_000).with_txn_token(TXN_TOKEN);
         assert!(verify(&wpt, &key.verifying_key(), &validation).is_ok());
     }
 
     #[test]
-    fn rejects_a_different_access_token() {
+    fn rejects_a_different_txn_token() {
         let key = SigningKey::from_ed25519_seed(&[9u8; 32]);
-        let wpt = issue(&claims_with_ath(), &key).unwrap();
+        let wpt = issue(&claims_with_tth(), &key).unwrap();
 
-        let validation = valid_at(1_700_000_000).with_access_token("a-different-token");
+        let validation = valid_at(1_700_000_000).with_txn_token("a-different-token");
         let err = verify(&wpt, &key.verifying_key(), &validation);
-        assert!(matches!(err, Err(WptError::AccessTokenBindingMismatch)));
+        assert!(matches!(err, Err(WptError::TxnTokenBindingMismatch)));
     }
 
     #[test]
-    fn rejects_ath_present_but_no_access_token_in_request() {
+    fn rejects_tth_present_but_no_txn_token_in_request() {
         let key = SigningKey::from_ed25519_seed(&[9u8; 32]);
-        let wpt = issue(&claims_with_ath(), &key).unwrap();
+        let wpt = issue(&claims_with_tth(), &key).unwrap();
 
         let err = verify(&wpt, &key.verifying_key(), &valid_at(1_700_000_000));
-        assert!(matches!(err, Err(WptError::AccessTokenBindingMismatch)));
+        assert!(matches!(err, Err(WptError::TxnTokenBindingMismatch)));
     }
 
     #[test]
-    fn rejects_access_token_in_request_but_no_ath() {
+    fn rejects_txn_token_in_request_but_no_tth() {
         let key = SigningKey::from_ed25519_seed(&[9u8; 32]);
         let wpt = issue(&sample_claims(), &key).unwrap();
 
-        let validation = valid_at(1_700_000_000).with_access_token(ACCESS_TOKEN);
+        let validation = valid_at(1_700_000_000).with_txn_token(TXN_TOKEN);
         let err = verify(&wpt, &key.verifying_key(), &validation);
-        assert!(matches!(err, Err(WptError::AccessTokenBindingMismatch)));
+        assert!(matches!(err, Err(WptError::TxnTokenBindingMismatch)));
+    }
+
+    #[test]
+    fn binds_to_a_context_token_by_header_name() {
+        let key = SigningKey::from_ed25519_seed(&[9u8; 32]);
+        let wpt = issue(&claims_with_oth(CTX_HEADER, CTX_VALUE), &key).unwrap();
+
+        let validation = valid_at(1_700_000_000).with_other_token(CTX_HEADER, CTX_VALUE);
+        assert!(verify(&wpt, &key.verifying_key(), &validation).is_ok());
+    }
+
+    #[test]
+    fn matches_a_context_token_header_name_case_insensitively() {
+        let key = SigningKey::from_ed25519_seed(&[9u8; 32]);
+        // The claim is keyed lowercase whatever case the issuer used, and the
+        // verifier lowercases what it was handed, so the two meet.
+        let wpt = issue(&claims_with_oth("CTX-TOKEN", CTX_VALUE), &key).unwrap();
+
+        let validation = valid_at(1_700_000_000).with_other_token("ctx-token", CTX_VALUE);
+        assert!(verify(&wpt, &key.verifying_key(), &validation).is_ok());
+    }
+
+    #[test]
+    fn ignores_surrounding_spaces_in_a_context_token_value() {
+        let key = SigningKey::from_ed25519_seed(&[9u8; 32]);
+        let wpt = issue(&claims_with_oth(CTX_HEADER, CTX_VALUE), &key).unwrap();
+
+        let padded = format!("  {CTX_VALUE}  ");
+        let validation = valid_at(1_700_000_000).with_other_token(CTX_HEADER, &padded);
+        assert!(verify(&wpt, &key.verifying_key(), &validation).is_ok());
+    }
+
+    #[test]
+    fn rejects_a_different_context_token() {
+        let key = SigningKey::from_ed25519_seed(&[9u8; 32]);
+        let wpt = issue(&claims_with_oth(CTX_HEADER, CTX_VALUE), &key).unwrap();
+
+        let validation = valid_at(1_700_000_000).with_other_token(CTX_HEADER, "a-different-token");
+        let err = verify(&wpt, &key.verifying_key(), &validation);
+        assert!(matches!(
+            err,
+            Err(WptError::OtherTokenBindingMismatch { ref name }) if name == "ctx-token"
+        ));
+    }
+
+    #[test]
+    fn rejects_an_oth_entry_the_request_did_not_carry() {
+        let key = SigningKey::from_ed25519_seed(&[9u8; 32]);
+        let wpt = issue(&claims_with_oth(CTX_HEADER, CTX_VALUE), &key).unwrap();
+
+        // The draft requires rejecting an `oth` entry the recipient cannot
+        // understand, and a header it never received is exactly that.
+        let err = verify(&wpt, &key.verifying_key(), &valid_at(1_700_000_000));
+        assert!(matches!(
+            err,
+            Err(WptError::OtherTokenBindingMismatch { ref name }) if name == "ctx-token"
+        ));
+    }
+
+    #[test]
+    fn leaves_a_context_token_oth_does_not_name_unbound() {
+        let key = SigningKey::from_ed25519_seed(&[9u8; 32]);
+        let wpt = issue(&sample_claims(), &key).unwrap();
+
+        // The draft does not forbid the token; it forbids *relying* on it. The
+        // proof still verifies, and `claims.oth` names nothing, which is how the
+        // caller can tell the token is unbound.
+        let validation = valid_at(1_700_000_000).with_other_token(CTX_HEADER, CTX_VALUE);
+        let verified = verify(&wpt, &key.verifying_key(), &validation).unwrap();
+        assert!(verified.claims.oth.is_none());
     }
 
     #[test]
