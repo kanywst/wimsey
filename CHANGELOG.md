@@ -10,6 +10,44 @@ silently.
 
 ## [Unreleased]
 
+## [0.6.3] - 2026-09-07
+
+A patch release. Nothing in the library changed: the crates behave exactly as
+0.6.2 did, and a caller has nothing to adapt to. What drove the bump is that
+the release pipeline grew a stage that only a tag can exercise, and leaving it
+unexercised until some later release would mean discovering its failures with a
+real release in flight.
+
+### Added
+
+- **Homebrew.** The release now publishes a `wimsey` formula to
+  [kanywst/homebrew-tap](https://github.com/kanywst/homebrew-tap), so the
+  binaries the release already built and signed for four targets are reachable
+  without a Rust toolchain:
+
+  ```bash
+  brew install kanywst/tap/wimsey
+  ```
+
+  The formula is derived from the `SHA256SUMS` the release publishes rather
+  than from the build job's artifacts, so a dispatched back-fill that re-signs
+  and re-uploads writes a formula describing the assets that are actually
+  downloadable.
+
+### Fixed
+
+- **`cargo-deny` no longer fails on a yanked transitive dependency.** `wnaf`
+  0.14.0 was yanked on 2026-09-03, the day 0.14.1 was published, and the
+  advisories check failed on every pull request opened after that. Nothing here
+  selects the crate — it arrives through `p256` by way of `wimsey-jose` — so
+  the lockfile is the only place to answer it. This affects contributors, not
+  callers.
+
+### Changed
+
+- Dependencies: `serde` 1.0.228 → 1.0.229, `rcgen` 0.14.9 → 0.14.10. Both
+  patch-level, neither observable through this project's public API.
+
 ## [0.6.2] - 2026-08-29
 
 A patch release. It ships one defect that no test in this repository could have
@@ -351,7 +389,8 @@ public API.
 - Project governance, security policy, contributing guide (DCO), and OpenSSF
   Scorecard automation.
 
-[Unreleased]: https://github.com/kanywst/wimsey/compare/v0.6.2...HEAD
+[Unreleased]: https://github.com/kanywst/wimsey/compare/v0.6.3...HEAD
+[0.6.3]: https://github.com/kanywst/wimsey/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/kanywst/wimsey/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/kanywst/wimsey/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/kanywst/wimsey/compare/v0.5.0...v0.6.0
