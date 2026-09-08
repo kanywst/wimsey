@@ -67,7 +67,16 @@ These are the things that break silently or fail CI in non-obvious ways.
   ```
 
 - **Draft pins are deliberate.** Each crate targets one pinned Internet-Draft revision (see
-  `SPEC-MAP.md`). Bumping a pin is a reviewed change, not a drive-by.
+  `SPEC-MAP.md`). Bumping a pin is a reviewed change, not a drive-by. Nothing upstream announces
+  a revision, so `scripts/check-draft-revisions.sh` compares the pins against the editors'
+  submission tags and reports both a pin that has fallen behind and text the WG is editing but
+  has not published; `.github/workflows/draft-watch.yml` runs it monthly and files an issue.
+  `wimsey` is listed in the Implementation Status section of two of these drafts, which makes
+  keeping `docs/implementation-status.md` truthful an obligation rather than a courtesy.
+
+  ```bash
+  ./scripts/check-draft-revisions.sh   # needs an authenticated `gh`
+  ```
 
 ## Architecture
 

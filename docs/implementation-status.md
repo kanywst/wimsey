@@ -1,33 +1,35 @@
 # Implementation status entries
 
-[RFC 7942](https://www.rfc-editor.org/rfc/rfc7942) asks Internet-Drafts to carry an "Implementation Status" section listing known implementations, so a working group can weigh a document against running code. This file holds `wimsey`'s entries, ready to paste, so that responding to an editor's invitation is a copy rather than a writing exercise.
+[RFC 7942](https://www.rfc-editor.org/rfc/rfc7942) asks Internet-Drafts to carry an "Implementation Status" section listing known implementations, so a working group can weigh a document against running code. This file holds `wimsey`'s entries: the two that are published, kept as they were actually merged, and the three that are drafted but not yet proposed.
 
-Keep it current with the code. An entry that overstates coverage is worse than no entry, because it is published in a document the WG uses to make decisions.
+Keep it current with the code. An entry that overstates coverage is worse than no entry, because it is published in a document the WG uses to make decisions. Being listed is an obligation, not an achievement — nobody upstream sends a reminder when an entry goes stale, so re-read the entries whenever a draft revises. `scripts/check-draft-revisions.sh` reports when that has happened.
 
 ## Where the entries go
 
 The drafts are kramdown-rfc markdown. Four of the five live in one repository:
 
-| Draft | Repository |
-| --- | --- |
-| `draft-ietf-wimse-http-signature` | `ietf-wg-wimse/draft-ietf-wimse-s2s-protocol` |
-| `draft-ietf-wimse-workload-creds` | `ietf-wg-wimse/draft-ietf-wimse-s2s-protocol` |
-| `draft-ietf-wimse-wpt` | `ietf-wg-wimse/draft-ietf-wimse-s2s-protocol` |
-| `draft-ietf-wimse-mutual-tls` | `ietf-wg-wimse/draft-ietf-wimse-s2s-protocol` |
-| `draft-ietf-wimse-identifier` | `ietf-wg-wimse/draft-ietf-wimse-identifier` |
-
-Only `http-signature` and `workload-creds` have an Implementation Status section today; the other three need the [section boilerplate](#section-boilerplate) as well as the entry.
+| Draft | Repository | Entry |
+| --- | --- | --- |
+| `draft-ietf-wimse-http-signature` | `ietf-wg-wimse/draft-ietf-wimse-s2s-protocol` | Published |
+| `draft-ietf-wimse-workload-creds` | `ietf-wg-wimse/draft-ietf-wimse-s2s-protocol` | Published |
+| `draft-ietf-wimse-wpt` | `ietf-wg-wimse/draft-ietf-wimse-s2s-protocol` | Not proposed; document has no section yet |
+| `draft-ietf-wimse-mutual-tls` | `ietf-wg-wimse/draft-ietf-wimse-s2s-protocol` | Not proposed; document has no section yet |
+| `draft-ietf-wimse-identifier` | `ietf-wg-wimse/draft-ietf-wimse-identifier` | Not proposed; document has no section yet |
 
 Two things to know before opening a pull request:
 
-- Contributing to these repositories makes the text an IETF Contribution under BCP 78 and 79 — their `CONTRIBUTING.md` says so explicitly. It is not the same as a normal open-source pull request.
-- The `Contact:` line is left blank in every entry below. It is published on a permanently archived page, so which address goes there is a decision, not a detail.
+- Contributing to these repositories makes the text an IETF Contribution under BCP 78 and 79 — their `CONTRIBUTING.md` says so explicitly. It is not the same as a normal open-source pull request. Neither repository asks for a DCO sign-off.
+- The `Contact:` line is published on a permanently archived page. The two published entries use a link to the GitHub profile rather than an email address; keep the rest consistent with that.
 
-## Entries
+## Published entries
+
+Merged upstream in [#296](https://github.com/ietf-wg-wimse/draft-ietf-wimse-s2s-protocol/pull/296) on 2026-09-01. The editors condensed the `Coverage` line to a short list, dropped the `Notes`, and filled in `Contact`, so the merged text below is shorter than what was proposed. It is reproduced as merged, because this is the text to edit against — not the text that was sent.
+
+The detailed coverage prose that was proposed is kept under [What the short coverage lines stand for](#what-the-short-coverage-lines-stand-for), since it is still the accurate description and is what a reviewer asking "does it really do that?" needs.
 
 ### `draft-ietf-wimse-http-signature`
 
-Append after the existing `## Cofide` block.
+The date below is the one proposed in [#309](https://github.com/ietf-wg-wimse/draft-ietf-wimse-s2s-protocol/pull/309); until that merges, the document still reads `27-Aug-2026`. The coverage was re-verified before re-dating it, which is the only thing that makes a `Last updated` field worth anything.
 
 ```markdown
 ## wimsey
@@ -35,50 +37,34 @@ Append after the existing `## Cofide` block.
 * Organization: independent
 * Implementation: <https://github.com/kanywst/wimsey>
 * Maturity:
-    * WIT + HTTP Message Signatures: alpha, not for production
-* Coverage: The Section 3 profile for both requests and responses. Requests:
-  the mandatory covered components, `created`/`expires`/`nonce`/`tag`,
-  `wimse-aud`, and rejection of the forbidden `keyid` and `alg` parameters.
-  Responses: `@status`, the `;req` covered components, `wimse-req-nonce`, and
-  a response profile in which `wimse-aud` is forbidden. Replay detection is
-  left to the caller; the implementation checks that a `nonce` is present but
-  does not remember the ones it has seen.
+    * WIT + HTTP Message Signatures: alpha
+* Coverage: WIT, HTTP Message Signatures, signed responses
 * License: Apache 2.0
-* Contact:
-* Last updated: 27-Aug-2026
-* Notes: Publishes cross-implementation test vectors whose negative cases each
-  name the reason the input must be rejected, with one vector per signature
-  algorithm: <https://github.com/kanywst/wimsey/tree/main/conformance>. Yaron
-  Sheffer ran them against his own RFC 9421 implementation and reported that
-  they pass.
+* Contact: [kanywst on GitHub](https://github.com/kanywst)
+* Last updated: 08-Sep-2026
 ```
 
 ### `draft-ietf-wimse-workload-creds`
 
-Append after the existing SPIFFE entry.
+Note that this document's entries carry neither `License` nor `Last updated` — none of the four do, so wimsey's follows the file rather than the other document.
 
 ```markdown
-## wimsey
+wimsey
 
 * Organization: independent
 * Implementation: <https://github.com/kanywst/wimsey>
 * Maturity:
-    * Workload Identity Token: alpha, not for production
-    * Workload Identity Certificate: alpha, not for production
-* Coverage: WIT issuance and verification with the mandatory `sub`, `exp` and
-  `cnf` claims, the optional `iss`, `iat` and `jti`, and the required `alg`
-  member inside the `cnf` JWK, which is enforced as the algorithm the proof
-  must use. Both `EdDSA` and `ES256`, in any combination — an EdDSA issuer with
-  an ES256 confirmation key is exercised by a conformance vector. WIC issuance
-  and verification with the identifier in a URI SAN, under either algorithm.
-* License: Apache 2.0
-* Contact:
-* Last updated: 27-Aug-2026
+    * Workload Identity Token: alpha
+    * Workload Identity Certificate: alpha
+* Coverage: WIT, Workload Identity Certificate
+* Contact: [kanywst on GitHub](https://github.com/kanywst)
 ```
 
-### `draft-ietf-wimse-wpt`
+## Entries not yet proposed
 
-Needs the section boilerplate.
+These three documents have no Implementation Status section at all, so proposing an entry means adding the [section boilerplate](#section-boilerplate) too.
+
+### `draft-ietf-wimse-wpt`
 
 ```markdown
 ## wimsey
@@ -95,13 +81,11 @@ Needs the section boilerplate.
   to the caller, as is the `WPT` HTTP authentication scheme that conveys the
   proof — this is the token, not its transport.
 * License: Apache 2.0
-* Contact:
-* Last updated: 27-Aug-2026
+* Contact: [kanywst on GitHub](https://github.com/kanywst)
+* Last updated: 08-Sep-2026
 ```
 
 ### `draft-ietf-wimse-mutual-tls`
-
-Needs the section boilerplate.
 
 ```markdown
 ## wimsey
@@ -119,13 +103,11 @@ Needs the section boilerplate.
   does not build a chain, and does not enforce `basicConstraints`, `keyUsage`
   or name constraints. Wiring into a TLS stack is left to the caller.
 * License: Apache 2.0
-* Contact:
-* Last updated: 27-Aug-2026
+* Contact: [kanywst on GitHub](https://github.com/kanywst)
+* Last updated: 08-Sep-2026
 ```
 
 ### `draft-ietf-wimse-identifier`
-
-Needs the section boilerplate.
 
 ```markdown
 ## wimsey
@@ -143,9 +125,17 @@ Needs the section boilerplate.
   unreserved character. Whether the draft intends normalizing or rejecting is
   an open question raised on the mailing list.
 * License: Apache 2.0
-* Contact:
-* Last updated: 27-Aug-2026
+* Contact: [kanywst on GitHub](https://github.com/kanywst)
+* Last updated: 08-Sep-2026
 ```
+
+## What the short coverage lines stand for
+
+The published entries compress this into a few words. Verified against the code on 2026-09-08.
+
+**`http-signature` — "WIT, HTTP Message Signatures, signed responses".** The Section 3 profile for both requests and responses. Requests: the mandatory covered components, `created`/`expires`/`nonce`/`tag`, `wimse-aud`, and rejection of the forbidden `keyid` and `alg` parameters. Responses: `@status`, the `;req` covered components, `wimse-req-nonce`, and a response profile in which `wimse-aud` is forbidden. The `wimse-sign-response` parameter added in -06 is implemented, and serializes as a bare Boolean. Replay detection is left to the caller; the implementation checks that a `nonce` is present but does not remember the ones it has seen. Cross-implementation test vectors, whose negative cases each name the reason the input must be rejected, are published at <https://github.com/kanywst/wimsey/tree/main/conformance>; Yaron Sheffer ran them against his own RFC 9421 implementation and reported that they pass.
+
+**`workload-creds` — "WIT, Workload Identity Certificate".** WIT issuance and verification with the mandatory `sub`, `exp` and `cnf` claims, the optional `iss`, `iat` and `jti`, and the required `alg` member inside the `cnf` JWK, which is enforced as the algorithm the proof must use. Both `EdDSA` and `ES256`, in any combination — an EdDSA issuer with an ES256 confirmation key is exercised by a conformance vector. WIC issuance and verification with the identifier in a URI SAN, under either algorithm. Selecting the trust anchor from the trust domain of `sub` (Section 3) is left to the caller, which is recorded in `SPEC-MAP.md`; verification takes the issuer key as an argument, so anchor material can never be resolved from the token's own `iss`.
 
 ## Section boilerplate
 

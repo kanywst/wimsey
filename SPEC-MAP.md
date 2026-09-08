@@ -16,7 +16,24 @@ revision**. Bumping a pin is a deliberate, reviewed change.
 | `draft-ietf-wimse-mutual-tls` | -02 | `wimsey-mtls` | mTLS binding, client cert = WIC |
 | `draft-ietf-wimse-workload-identity-practices` | -06 | — | Informational; with the IESG |
 
-Every pin above is the current revision as of 2026-09-07.
+Every pin above is the current *published* revision as of 2026-09-08.
+
+## Drafts in progress upstream
+
+A pin tracks what the datatracker has published. The editors' repositories run
+ahead of that, so a pin can be current and still be one revision behind the text
+the working group is discussing. The revision a working copy is heading for is
+named by the first entry of its Document History section.
+
+| Draft | Published | Editors' copy | Bearing on this workspace |
+| --- | --- | --- | --- |
+| `identifier` | -03 | -03 | — |
+| `workload-creds` | -02 | -03 | Adds a "Validating the WIT" procedure for recipients; `wimsey-wit` already satisfies every item except trust-anchor selection, which is a divergence below. |
+| `wpt` | -02 | -03 | Moves the key-management section to `workload-creds`; no normative change for `wimsey-wpt`. |
+| `http-signature` | -06 | -07 | Editorial, plus a reference to the `workload-creds` WIT validation procedure. |
+| `mutual-tls` | -02 | -03 | Editorial (capitalization of defined terms). |
+
+Checked 2026-09-08, and re-checked by `scripts/check-draft-revisions.sh`.
 
 ## Known divergences
 
@@ -27,6 +44,7 @@ the pinned drafts.
 | --- | --- | --- |
 | Trust-domain match on the TLS peer certificate | `mutual-tls` §4 | Left to the caller: `wimsey-mtls::verify` returns the identifier and the caller compares it, since chain building and rustls wiring are out of scope. |
 | Chain building, `basicConstraints`, `keyUsage`, name constraints | `mutual-tls` §4 | Not enforced. `verify` is a single-issuer model that checks the directly provided CA only; deployments needing full PKIX path validation should use a dedicated X.509 verifier. |
+| Selecting the trust anchor from the `sub` trust domain | `workload-creds` §3 | Left to the caller: `wimsey_wit::verify` takes the issuer's verifying key as an argument, so mapping the trust domain of `sub` to its configured anchors — and picking the key within them, by `kid` where one is present — is the deployment's. The draft forbids resolving anchor material from the token's own `iss`, which this shape makes structurally impossible rather than merely discouraged. |
 | The `WPT` HTTP authentication scheme and its `WWW-Authenticate` challenge | `wpt` §2, §2.1 | Not implemented. `wimsey-wpt` is the token, not its transport: it issues and verifies the proof, and placing it in `Authorization: WPT <proof>` — and answering a rejection with `401` and `WWW-Authenticate: WPT` — is the caller's. The `wpt` CLI subcommand prints the bare proof for the same reason. |
 
 ## Related specs
