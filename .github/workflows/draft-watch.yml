@@ -1,0 +1,62 @@
+name: draft-watch
+
+# The drafts this workspace implements revise on their own schedule, and nothing
+# upstream tells an implementer when that happens. This runs the pin check on a
+# monthly cadence and files an issue when a pin has fallen behind a published
+# revision, so a stale pin surfaces as work rather than as a surprise.
+
+on:
+  schedule:
+    # 07:00 UTC on the first of the month.
+    - cron: "0 7 1 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: pinned draft revisions
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: check pinned revisions against the published drafts
+        id: check
+        run: |
+          set +e
+          ./scripts/check-draft-revisions.sh > report.md
+          echo "status=$?" >> "$GITHUB_OUTPUT"
+          cat report.md
+          cat report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: file an issue when a pin is behind
+        if: steps.check.outputs.status != '0'
+        run: |
+          title="A pinned WIMSE draft revision is out of date"
+          {
+            echo "\`scripts/check-draft-revisions.sh\` found a pin in \`SPEC-MAP.md\` that"
+            echo "no longer names the current published revision."
+            echo
+            echo "Bumping a pin is a reviewed change, not a drive-by: read the diff between"
+            echo "revisions, update the affected crates and their conformance vectors, then"
+            echo "update \`SPEC-MAP.md\` and the crate module docs. See \"Bumping a pin\" in"
+            echo "\`SPEC-MAP.md\`."
+            echo
+            cat report.md
+          } > body.md
+
+          # Reuse the open issue if one is already waiting, so a pin that stays
+          # behind for a few months does not accumulate duplicates.
+          existing=$(gh issue list --state open --search "$title in:title" \
+            --json number --jq '.[0].number')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body-file body.md
+          else
+            gh issue create --title "$title" --body-file body.md --label documentation
+          fi
