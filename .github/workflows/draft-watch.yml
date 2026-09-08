@@ -52,9 +52,11 @@ jobs:
           } > body.md
 
           # Reuse the open issue if one is already waiting, so a pin that stays
-          # behind for a few months does not accumulate duplicates.
+          # behind for a few months does not accumulate duplicates. `// empty`
+          # matters: indexing an empty result yields jq's null, which prints as
+          # the string "null" and would look like an issue number.
           existing=$(gh issue list --state open --search "$title in:title" \
-            --json number --jq '.[0].number')
+            --json number --jq '.[0].number // empty')
           if [ -n "$existing" ]; then
             gh issue comment "$existing" --body-file body.md
           else

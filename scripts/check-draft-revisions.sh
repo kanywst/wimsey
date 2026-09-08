@@ -63,8 +63,10 @@ pinned_revision() {
 # match the prefix and are skipped.
 published_revision() {
 	local draft=$1 repo=$2
+	# A draft with no submission tag yet is a state to report, not an error, so
+	# grep's empty-match exit status must not reach `set -e` through `pipefail`.
 	gh api "repos/ietf-wg-wimse/${repo}/tags" --paginate --jq '.[].name' |
-		grep -E "^${draft}-[0-9]{2}$" |
+		{ grep -E "^${draft}-[0-9]{2}$" || true; } |
 		sed "s/^${draft}-//" |
 		sort -n |
 		tail -1
@@ -114,8 +116,9 @@ done <<<"$drafts"
 
 echo
 if [ "$status" -ne 0 ]; then
-	echo "Pins in SPEC-MAP.md are behind a published revision. Read the diff"
-	echo "between revisions and bump the pin deliberately; see SPEC-MAP.md."
+	echo "A pin in SPEC-MAP.md is behind a published revision, or a draft's"
+	echo "submission tag could not be read. For a pin, read the diff between"
+	echo "revisions and bump it deliberately; see SPEC-MAP.md."
 else
 	echo "Every pin in SPEC-MAP.md names the current published revision."
 	echo "A 'yes' above is not a failure: it means the working group is editing"
