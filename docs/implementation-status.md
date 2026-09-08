@@ -29,7 +29,7 @@ The detailed coverage prose that was proposed is kept under [What the short cove
 
 ### `draft-ietf-wimse-http-signature`
 
-The date below is the one proposed in [#309](https://github.com/ietf-wg-wimse/draft-ietf-wimse-s2s-protocol/pull/309); until that merges, the document still reads `27-Aug-2026`. The coverage was re-verified before re-dating it, which is the only thing that makes a `Last updated` field worth anything.
+The date was refreshed in [#309](https://github.com/ietf-wg-wimse/draft-ietf-wimse-s2s-protocol/pull/309) after the coverage was re-verified against the code, which is the only thing that makes a `Last updated` field worth anything.
 
 ```markdown
 ## wimsey
