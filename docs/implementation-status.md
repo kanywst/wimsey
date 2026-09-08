@@ -1,6 +1,6 @@
 # Implementation status entries
 
-[RFC 7942](https://www.rfc-editor.org/rfc/rfc7942) asks Internet-Drafts to carry an "Implementation Status" section listing known implementations, so a working group can weigh a document against running code. This file holds `wimsey`'s entries: the two that are published, kept as they were actually merged, and the three that are proposed.
+[RFC 7942](https://www.rfc-editor.org/rfc/rfc7942) asks Internet-Drafts to carry an "Implementation Status" section listing known implementations, so a working group can weigh a document against running code. This file holds `wimsey`'s entries: the two that are published, kept as they were actually merged, and the three that are not.
 
 Keep it current with the code. An entry that overstates coverage is worse than no entry, because it is published in a document the WG uses to make decisions. Nobody upstream sends a reminder when an entry goes stale, so re-read the entries whenever a draft revises; `scripts/check-draft-revisions.sh` reports when that has happened.
 
@@ -12,8 +12,8 @@ The drafts are kramdown-rfc markdown. Four of the five live in one repository:
 | --- | --- | --- |
 | `draft-ietf-wimse-http-signature` | `ietf-wg-wimse/draft-ietf-wimse-s2s-protocol` | Published |
 | `draft-ietf-wimse-workload-creds` | `ietf-wg-wimse/draft-ietf-wimse-s2s-protocol` | Published |
-| `draft-ietf-wimse-wpt` | `ietf-wg-wimse/draft-ietf-wimse-s2s-protocol` | Proposed with the section in [s2s#310](https://github.com/ietf-wg-wimse/draft-ietf-wimse-s2s-protocol/pull/310) |
-| `draft-ietf-wimse-mutual-tls` | `ietf-wg-wimse/draft-ietf-wimse-s2s-protocol` | Proposed with the section in [s2s#311](https://github.com/ietf-wg-wimse/draft-ietf-wimse-s2s-protocol/pull/311) |
+| `draft-ietf-wimse-wpt` | `ietf-wg-wimse/draft-ietf-wimse-s2s-protocol` | No section; proposal withdrawn ([s2s#310](https://github.com/ietf-wg-wimse/draft-ietf-wimse-s2s-protocol/pull/310)) |
+| `draft-ietf-wimse-mutual-tls` | `ietf-wg-wimse/draft-ietf-wimse-s2s-protocol` | No section; proposal withdrawn ([s2s#311](https://github.com/ietf-wg-wimse/draft-ietf-wimse-s2s-protocol/pull/311)) |
 | `draft-ietf-wimse-identifier` | `ietf-wg-wimse/draft-ietf-wimse-identifier` | Proposed with the section in [identifier#98](https://github.com/ietf-wg-wimse/draft-ietf-wimse-identifier/pull/98) |
 
 Two things to know before opening a pull request:
@@ -60,9 +60,11 @@ wimsey
 * Contact: [kanywst on GitHub](https://github.com/kanywst)
 ```
 
-## Proposed entries
+## Entries not published
 
-These three documents have no Implementation Status section, so each pull request adds the [section boilerplate](#section-boilerplate) along with the entry.
+None of these three documents has an Implementation Status section, so an entry means adding the [section boilerplate](#section-boilerplate) too.
+
+That is not always wanted. Adding the section to the WPT draft drew a preference against having one at all ([s2s#310](https://github.com/ietf-wg-wimse/draft-ietf-wimse-s2s-protocol/pull/310)), so that proposal and the matching one for mutual TLS were withdrawn. Ask before proposing a section again; the entries below stay ready for the day a document grows one. [identifier#98](https://github.com/ietf-wg-wimse/draft-ietf-wimse-identifier/pull/98) is open in the other repository.
 
 ### `draft-ietf-wimse-wpt`
 
