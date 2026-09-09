@@ -1,9 +1,7 @@
 name: draft-watch
 
-# The drafts this workspace implements revise on their own schedule, and nothing
-# upstream tells an implementer when that happens. This runs the pin check on a
-# monthly cadence and files an issue when a pin has fallen behind a published
-# revision, so a stale pin surfaces as work rather than as a surprise.
+# Nothing upstream tells an implementer when a draft revises, so run the pin
+# check monthly and file an issue when a pin has fallen behind.
 
 on:
   schedule:

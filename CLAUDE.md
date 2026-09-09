@@ -71,8 +71,8 @@ These are the things that break silently or fail CI in non-obvious ways.
   a revision, so `scripts/check-draft-revisions.sh` compares the pins against the editors'
   submission tags and reports both a pin that has fallen behind and text the WG is editing but
   has not published; `.github/workflows/draft-watch.yml` runs it monthly and files an issue.
-  `wimsey` is listed in the Implementation Status section of two of these drafts, which makes
-  keeping `docs/implementation-status.md` truthful an obligation rather than a courtesy.
+  `wimsey` is listed in the Implementation Status section of two of these drafts, so
+  `docs/implementation-status.md` has to be kept truthful as the code changes.
 
   ```bash
   ./scripts/check-draft-revisions.sh   # needs an authenticated `gh`

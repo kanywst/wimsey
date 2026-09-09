@@ -1,8 +1,8 @@
 # Implementation status entries
 
-[RFC 7942](https://www.rfc-editor.org/rfc/rfc7942) asks Internet-Drafts to carry an "Implementation Status" section listing known implementations, so a working group can weigh a document against running code. This file holds `wimsey`'s entries: the two that are published, kept as they were actually merged, and the three that are drafted but not yet proposed.
+[RFC 7942](https://www.rfc-editor.org/rfc/rfc7942) asks Internet-Drafts to carry an "Implementation Status" section listing known implementations, so a working group can weigh a document against running code. This file holds `wimsey`'s entries: the two that are published, kept as they were actually merged, and the three that are not.
 
-Keep it current with the code. An entry that overstates coverage is worse than no entry, because it is published in a document the WG uses to make decisions. Being listed is an obligation, not an achievement — nobody upstream sends a reminder when an entry goes stale, so re-read the entries whenever a draft revises. `scripts/check-draft-revisions.sh` reports when that has happened.
+Keep it current with the code. An entry that overstates coverage is worse than no entry, because it is published in a document the WG uses to make decisions. Nobody upstream sends a reminder when an entry goes stale, so re-read the entries whenever a draft revises; `scripts/check-draft-revisions.sh` reports when that has happened.
 
 ## Where the entries go
 
@@ -12,9 +12,9 @@ The drafts are kramdown-rfc markdown. Four of the five live in one repository:
 | --- | --- | --- |
 | `draft-ietf-wimse-http-signature` | `ietf-wg-wimse/draft-ietf-wimse-s2s-protocol` | Published |
 | `draft-ietf-wimse-workload-creds` | `ietf-wg-wimse/draft-ietf-wimse-s2s-protocol` | Published |
-| `draft-ietf-wimse-wpt` | `ietf-wg-wimse/draft-ietf-wimse-s2s-protocol` | Not proposed; document has no section yet |
-| `draft-ietf-wimse-mutual-tls` | `ietf-wg-wimse/draft-ietf-wimse-s2s-protocol` | Not proposed; document has no section yet |
-| `draft-ietf-wimse-identifier` | `ietf-wg-wimse/draft-ietf-wimse-identifier` | Not proposed; document has no section yet |
+| `draft-ietf-wimse-wpt` | `ietf-wg-wimse/draft-ietf-wimse-s2s-protocol` | No section; proposal withdrawn ([s2s#310](https://github.com/ietf-wg-wimse/draft-ietf-wimse-s2s-protocol/pull/310)) |
+| `draft-ietf-wimse-mutual-tls` | `ietf-wg-wimse/draft-ietf-wimse-s2s-protocol` | No section; proposal withdrawn ([s2s#311](https://github.com/ietf-wg-wimse/draft-ietf-wimse-s2s-protocol/pull/311)) |
+| `draft-ietf-wimse-identifier` | `ietf-wg-wimse/draft-ietf-wimse-identifier` | Proposed with the section in [identifier#98](https://github.com/ietf-wg-wimse/draft-ietf-wimse-identifier/pull/98) |
 
 Two things to know before opening a pull request:
 
@@ -23,13 +23,13 @@ Two things to know before opening a pull request:
 
 ## Published entries
 
-Merged upstream in [#296](https://github.com/ietf-wg-wimse/draft-ietf-wimse-s2s-protocol/pull/296) on 2026-09-01. The editors condensed the `Coverage` line to a short list, dropped the `Notes`, and filled in `Contact`, so the merged text below is shorter than what was proposed. It is reproduced as merged, because this is the text to edit against — not the text that was sent.
+Merged upstream in [#296](https://github.com/ietf-wg-wimse/draft-ietf-wimse-s2s-protocol/pull/296) on 2026-09-01. The editors condensed the `Coverage` line to a short list, dropped the `Notes`, and filled in `Contact`, so the merged text below is shorter than what was proposed. It is reproduced as merged, since that is what future edits are made against.
 
-The detailed coverage prose that was proposed is kept under [What the short coverage lines stand for](#what-the-short-coverage-lines-stand-for), since it is still the accurate description and is what a reviewer asking "does it really do that?" needs.
+The detailed coverage prose is kept under [What the short coverage lines stand for](#what-the-short-coverage-lines-stand-for).
 
 ### `draft-ietf-wimse-http-signature`
 
-The date below is the one proposed in [#309](https://github.com/ietf-wg-wimse/draft-ietf-wimse-s2s-protocol/pull/309); until that merges, the document still reads `27-Aug-2026`. The coverage was re-verified before re-dating it, which is the only thing that makes a `Last updated` field worth anything.
+The date was refreshed in [#309](https://github.com/ietf-wg-wimse/draft-ietf-wimse-s2s-protocol/pull/309), after re-verifying the coverage against the code.
 
 ```markdown
 ## wimsey
@@ -60,9 +60,11 @@ wimsey
 * Contact: [kanywst on GitHub](https://github.com/kanywst)
 ```
 
-## Entries not yet proposed
+## Entries not published
 
-These three documents have no Implementation Status section at all, so proposing an entry means adding the [section boilerplate](#section-boilerplate) too.
+None of these three documents has an Implementation Status section, so an entry means adding the [section boilerplate](#section-boilerplate) too.
+
+That is not always wanted. Adding the section to the WPT draft drew a preference against having one at all ([s2s#310](https://github.com/ietf-wg-wimse/draft-ietf-wimse-s2s-protocol/pull/310)), so that proposal and the matching one for mutual TLS were withdrawn. Ask before proposing a section again; the entries below stay ready for the day a document grows one. [identifier#98](https://github.com/ietf-wg-wimse/draft-ietf-wimse-identifier/pull/98) is open in the other repository.
 
 ### `draft-ietf-wimse-wpt`
 

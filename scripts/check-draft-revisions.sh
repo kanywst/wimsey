@@ -1,25 +1,15 @@
 #!/usr/bin/env bash
 #
-# Compares the draft revisions pinned in SPEC-MAP.md against what the WIMSE
-# working group has actually published, and reports whether the editors'
-# working copy has moved on since.
+# Checks the draft revisions pinned in SPEC-MAP.md against what the WIMSE
+# working group has published.
 #
-# Two different kinds of drift matter, and they are not the same thing:
+# Exits non-zero only when a pin is behind a published revision. Commits on a
+# draft since its submission tag are reported too, but they are a heads-up:
+# that is text the WG is still editing.
 #
-#   * "pin drift" — a new revision has been published and SPEC-MAP.md still
-#     names the old one. This is what the exit status reports, because a pin
-#     that is silently out of date is a claim the implementation no longer
-#     backs. Bumping it is a reviewed change; see the end of SPEC-MAP.md.
-#
-#   * "unreleased changes" — the editors' repository has commits on the draft
-#     since the published revision was tagged. Nothing is wrong yet, but this
-#     is the text the working group is discussing, and the cheapest moment to
-#     react to a breaking change is before it ships.
-#
-# The published revision is read from the submission tags in the editors'
-# repository rather than from the datatracker: the tags are what the editors
-# push at submission time, they match the datatracker exactly, and reading
-# them needs no second network dependency.
+# The published revision comes from the submission tags, which the editors push
+# at submission time and which match the datatracker, so there is no second
+# network dependency.
 #
 # Requires the `gh` CLI, authenticated. Read-only.
 
@@ -63,8 +53,8 @@ pinned_revision() {
 # match the prefix and are skipped.
 published_revision() {
 	local draft=$1 repo=$2
-	# A draft with no submission tag yet is a state to report, not an error, so
-	# grep's empty-match exit status must not reach `set -e` through `pipefail`.
+	# A draft with no submission tag yet is reportable, so grep's empty-match
+	# exit status must not reach `set -e` through `pipefail`.
 	gh api "repos/ietf-wg-wimse/${repo}/tags" --paginate --jq '.[].name' |
 		{ grep -E "^${draft}-[0-9]{2}$" || true; } |
 		sed "s/^${draft}-//" |
@@ -73,10 +63,9 @@ published_revision() {
 }
 
 # Whether the draft's own file has been touched on `main` since that tag. The
-# commit count is the whole branch, not just this file, which is why the two are
-# reported separately: in the shared repository a draft can be untouched while
-# `main` is far ahead. GitHub caps the compare file list at 300 entries, which
-# no Internet-Draft repository comes close to.
+# commit count covers the whole branch: in the shared repository a draft can be
+# untouched while `main` is far ahead, so the two are reported separately.
+# GitHub caps the compare file list at 300 entries, well above any draft repo.
 unreleased_changes() {
 	local draft=$1 repo=$2 rev=$3
 	gh api "repos/ietf-wg-wimse/${repo}/compare/${draft}-${rev}...main" \
@@ -114,15 +103,10 @@ while IFS=$'\t' read -r draft repo; do
 	fi
 done <<<"$drafts"
 
-echo
 if [ "$status" -ne 0 ]; then
-	echo "A pin in SPEC-MAP.md is behind a published revision, or a draft's"
-	echo "submission tag could not be read. For a pin, read the diff between"
-	echo "revisions and bump it deliberately; see SPEC-MAP.md."
-else
-	echo "Every pin in SPEC-MAP.md names the current published revision."
-	echo "A 'yes' above is not a failure: it means the working group is editing"
-	echo "text this workspace has not seen yet."
+	echo
+	echo "A pin is behind a published revision, or a submission tag could not be"
+	echo "read. See \"Bumping a pin\" in SPEC-MAP.md."
 fi
 
 exit "$status"
