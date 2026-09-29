@@ -15,6 +15,7 @@ struct Input<'a> {
     header_name: &'a str,
     header_value: &'a str,
     wimse_profile: bool,
+    wimse_response_profile: bool,
 }
 
 fuzz_target!(|input: Input<'_>| {
@@ -31,8 +32,9 @@ fuzz_target!(|input: Input<'_>| {
     };
     let config = VerifyConfig {
         now: Some(1_700_000_000),
-        required_components: vec![Component::Method, Component::RequestTarget],
+        required_components: vec![Component::Method, Component::Path, Component::Query],
         wimse_profile: input.wimse_profile,
+        wimse_response_profile: input.wimse_response_profile,
         ..VerifyConfig::default()
     };
     let _ = verify(

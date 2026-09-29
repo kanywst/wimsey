@@ -4,13 +4,13 @@
 use std::fmt::Write as _;
 
 use base64::{engine::general_purpose::STANDARD, Engine};
-use wimsey_jose::{SigningKey, VerifyingKey, SIGNATURE_LEN};
+use wimsey_jose::{Algorithm, SigningKey, VerifyingKey, SIGNATURE_LEN};
 
 use crate::error::HttpSigError;
 use crate::message::{Component, ComponentSource};
 
-/// The signature algorithm name this crate emits and accepts (RFC 9421
-/// Section 3.3.6).
+/// The RFC 9421 `alg` name for Ed25519 (Section 3.3.6); an ES256 key is
+/// `ecdsa-p256-sha256`.
 ///
 /// The WIMSE profile forbids the `alg` parameter outright — the algorithm is
 /// pinned by the `cnf` JWK in the WIT — so this is only used when the crate is
@@ -20,8 +20,11 @@ pub const ALG: &str = "ed25519";
 /// The `tag` value identifying a WIMSE workload-to-workload signature.
 pub const WIMSE_TAG: &str = "wimse-workload-to-workload";
 
-/// The signature label the draft recommends when a message carries a single
-/// signature.
+/// A conventional label for the WIMSE signature.
+///
+/// Since `draft-ietf-wimse-http-signature-07` the label carries no meaning: a
+/// recipient finds the WIMSE signature by its `tag` ([`WIMSE_TAG`]) and MUST NOT
+/// choose it by label. Senders may still use this one.
 pub const WIMSE_LABEL: &str = "wimse";
 
 /// RFC 9421 signature parameters, serialized after the covered-component list.
@@ -79,10 +82,10 @@ pub struct VerifiedSignature {
 ///
 /// A bare successful [`verify`] proves only that *some* set of components was
 /// signed with the key. To bind the request, set `required_components` to the
-/// components that must be covered — under the WIMSE profile that is `@method`
-/// and `@request-target`, plus `content-type`, `content-digest`,
-/// `authorization`, `txn-token` and `workload-identity-token` whenever the
-/// message carries them.
+/// components that must be covered — under the WIMSE profile that is what
+/// [`request_components`] returns: `@method`, `@path` and `@query`, plus
+/// `content-type`, `content-digest`, `authorization`, `txn-token` and
+/// `workload-identity-token` whenever the message carries them.
 #[derive(Debug, Clone, Default)]
 pub struct VerifyConfig {
     /// The current time, in seconds since the Unix epoch. When set, `created`
@@ -90,7 +93,12 @@ pub struct VerifyConfig {
     pub now: Option<u64>,
     /// Clock-skew tolerance, in seconds.
     pub leeway: u64,
-    /// If set, only this signature label is accepted.
+    /// Selects the signature by label when the crate is driven as a plain
+    /// RFC 9421 implementation.
+    ///
+    /// Not consulted under either WIMSE profile: the draft requires the WIMSE
+    /// signature to be found by its `tag` and forbids choosing it by label, so
+    /// a label is not something a WIMSE recipient can be configured to trust.
     pub label: Option<String>,
     /// Components that MUST be covered by the signature; verification fails if
     /// any is absent.
@@ -102,6 +110,14 @@ pub struct VerifyConfig {
     /// `created`, `expires`, `nonce`, `tag` and `wimse-aud` must all be present,
     /// `tag` must be [`WIMSE_TAG`], and `keyid` and `alg` must be absent.
     ///
+    /// It also changes how the signature is found. A message may carry several
+    /// signatures — an intermediary is allowed to add its own — so the one
+    /// verified is the one whose `tag` is [`WIMSE_TAG`], whatever its label.
+    /// None carrying that tag is [`HttpSigError::NoWimseSignature`] and more
+    /// than one is [`HttpSigError::AmbiguousWimseSignature`]. A message carrying
+    /// a single signature is checked as the WIMSE one, so a wrong or missing
+    /// `tag` on it is reported as exactly that.
+    ///
     /// Off by default so the crate can also be driven as a plain RFC 9421
     /// implementation.
     pub wimse_profile: bool,
@@ -109,18 +125,23 @@ pub struct VerifyConfig {
     /// is only bound to *this* service if the audience it names is checked.
     pub expected_audience: Option<String>,
     /// Enforce the WIMSE **response**-signature profile instead of the request
-    /// one: same mandatory parameters, but `wimse-aud` is a request-only
-    /// parameter and `wimse-req-nonce` is required whenever the client demanded
-    /// a signed response.
-    ///
-    /// Whether it was demanded is taken from `expected_req_nonce` being set,
-    /// since the client that sent the request is the only party that knows, and
-    /// it is also the only party that can check the returned value.
+    /// one: same mandatory parameters and the same tag-based selection, but
+    /// `wimse-aud` is a request-only parameter and `wimse-req-nonce` is required
+    /// on every signed response.
     pub wimse_response_profile: bool,
     /// If set, the response's `wimse-req-nonce` must equal this value — the
     /// `nonce` the client put on its own request. Checking it is what stops a
-    /// response signed for one request being replayed against another.
+    /// response signed for one request being replayed against another, and a
+    /// client validating a signed response MUST do so, so set it whenever
+    /// `wimse_response_profile` is.
     pub expected_req_nonce: Option<String>,
+    /// The algorithms this recipient accepts for the peer's key. Empty accepts
+    /// any algorithm the key supports.
+    ///
+    /// The draft takes the algorithm from the WIT's `cnf.jwk.alg` and requires
+    /// the recipient to reject one its local policy does not accept for the
+    /// peer's trust domain; this is that policy.
+    pub accepted_algorithms: Vec<Algorithm>,
 }
 
 /// Errors unless `params` satisfies the WIMSE profile for a **request**
@@ -173,17 +194,13 @@ pub fn check_request_profile(params: &SignatureParams) -> Result<(), HttpSigErro
 /// `keyid` and `alg` are forbidden on every message, exactly as for a request.
 /// The difference is at the ends: `wimse-aud` names the service a *request* is
 /// for and has no meaning coming back, while `wimse-req-nonce` carries the
-/// requesting client's nonce and is required when that client asked for a
-/// signed response.
+/// requesting client's nonce and is required on every signed response.
 ///
 /// # Errors
 ///
 /// Returns [`HttpSigError::MissingParameter`], [`HttpSigError::ForbiddenParameter`]
 /// or [`HttpSigError::WrongTag`] for the first rule the parameters break.
-pub fn check_response_profile(
-    params: &SignatureParams,
-    response_signing_required: bool,
-) -> Result<(), HttpSigError> {
+pub fn check_response_profile(params: &SignatureParams) -> Result<(), HttpSigError> {
     if params.keyid.is_some() {
         return Err(HttpSigError::ForbiddenParameter("keyid"));
     }
@@ -211,17 +228,42 @@ pub fn check_response_profile(
     if params.wimse_aud.is_some() {
         return Err(HttpSigError::ForbiddenParameter("wimse-aud"));
     }
-    if response_signing_required && params.wimse_req_nonce.is_none() {
+    if params.wimse_req_nonce.is_none() {
         return Err(HttpSigError::MissingParameter("wimse-req-nonce"));
     }
     Ok(())
 }
 
+/// The components the WIMSE profile requires a **request** signature to cover,
+/// given the headers the request actually carries.
+///
+/// Section 3 names `@method`, `@path` and `@query`, plus `Content-Type`,
+/// `Content-Digest`, `Authorization`, `Txn-Token` and `Workload-Identity-Token`
+/// when present. `@query` is covered even when there is no query, deriving as a
+/// bare `?`. `@authority` is deliberately absent: proxies rewrite it, and the
+/// recipient is bound by `wimse-aud` instead.
+#[must_use]
+pub fn request_components(headers: &[(String, String)]) -> Vec<Component> {
+    let mut components = vec![Component::Method, Component::Path, Component::Query];
+    for name in [
+        "content-type",
+        "content-digest",
+        "authorization",
+        "txn-token",
+        "workload-identity-token",
+    ] {
+        if headers.iter().any(|(n, _)| n.eq_ignore_ascii_case(name)) {
+            components.push(Component::header(name));
+        }
+    }
+    components
+}
+
 /// The components the WIMSE profile requires a **response** signature to cover,
 /// given the headers the response actually carries.
 ///
-/// Section 3 names `@status`, `@method;req` and `@request-target;req`, plus
-/// `Content-Type` and `Content-Digest` when present and the WIT. The two `;req`
+/// Section 3 names `@status`, `@method;req`, `@path;req` and `@query;req`, plus
+/// `Content-Type` and `Content-Digest` when present and the WIT. The `;req`
 /// components are the interesting ones: without them a signed response could be
 /// lifted onto a different request.
 #[must_use]
@@ -229,7 +271,8 @@ pub fn response_components(headers: &[(String, String)]) -> Vec<Component> {
     let mut components = vec![
         Component::Status,
         Component::Req(Box::new(Component::Method)),
-        Component::Req(Box::new(Component::RequestTarget)),
+        Component::Req(Box::new(Component::Path)),
+        Component::Req(Box::new(Component::Query)),
     ];
     for name in ["content-type", "content-digest", "workload-identity-token"] {
         if headers.iter().any(|(n, _)| n.eq_ignore_ascii_case(name)) {
@@ -363,7 +406,7 @@ pub fn sign(
     })
 }
 
-/// Splits a single-member dictionary field value `label=rest` at the first `=`.
+/// Splits a dictionary member `label=rest` at the first `=`.
 fn split_member(value: &str) -> Result<(&str, &str), HttpSigError> {
     let value = value.trim();
     let eq = value
@@ -374,6 +417,45 @@ fn split_member(value: &str) -> Result<(&str, &str), HttpSigError> {
         return Err(HttpSigError::Parse("empty signature label".to_owned()));
     }
     Ok((label, &value[eq + 1..]))
+}
+
+/// Splits a dictionary field value into its members at each top-level `,`.
+///
+/// Quote-aware, and a `,` inside an inner list is not a separator either. A
+/// duplicate label is rejected rather than resolved last-one-wins as RFC 8941
+/// would: two parties reading the same field must not disagree on which
+/// signature it carries.
+fn split_dictionary(value: &str) -> Result<Vec<(&str, &str)>, HttpSigError> {
+    let mut members = Vec::new();
+    let mut start = 0;
+    let mut in_quotes = false;
+    let mut escaped = false;
+    let mut depth = 0usize;
+    for (idx, c) in value.char_indices() {
+        if escaped {
+            escaped = false;
+        } else if in_quotes && c == '\\' {
+            escaped = true;
+        } else if c == '"' {
+            in_quotes = !in_quotes;
+        } else if !in_quotes && c == '(' {
+            depth += 1;
+        } else if !in_quotes && c == ')' {
+            depth = depth.saturating_sub(1);
+        } else if !in_quotes && depth == 0 && c == ',' {
+            members.push(split_member(&value[start..idx])?);
+            start = idx + 1;
+        }
+    }
+    members.push(split_member(&value[start..])?);
+    for (i, (label, _)) in members.iter().enumerate() {
+        if members[..i].iter().any(|(seen, _)| seen == label) {
+            return Err(HttpSigError::Parse(format!(
+                "duplicate signature label `{label}`"
+            )));
+        }
+    }
+    Ok(members)
 }
 
 fn parse_sf_string(token: &str) -> Result<String, HttpSigError> {
@@ -489,12 +571,17 @@ fn parse_int(raw: &str) -> Result<u64, HttpSigError> {
         .map_err(|_| HttpSigError::Parse(format!("not an integer: {raw}")))
 }
 
-/// Parses a `Signature-Input` field value into its label, covered components,
-/// parameters, and the verbatim parameters substring used in the base.
-fn parse_signature_input(
-    value: &str,
-) -> Result<(String, Vec<Component>, SignatureParams, String), HttpSigError> {
-    let (label, rest) = split_member(value)?;
+/// One parsed `Signature-Input` member.
+struct InputMember {
+    label: String,
+    components: Vec<Component>,
+    params: SignatureParams,
+    /// The verbatim parameters substring, reused in the signature base.
+    params_value: String,
+}
+
+/// Parses one `Signature-Input` member value: an inner list and its parameters.
+fn parse_input_member(label: &str, rest: &str) -> Result<InputMember, HttpSigError> {
     let rest = rest.trim();
     if !rest.starts_with('(') {
         return Err(HttpSigError::Parse(
@@ -514,12 +601,28 @@ fn parse_signature_input(
     let mut params = SignatureParams::default();
     parse_params(&rest[close + 1..], &mut params)?;
 
-    Ok((label.to_owned(), components, params, rest.to_owned()))
+    Ok(InputMember {
+        label: label.to_owned(),
+        components,
+        params,
+        params_value: rest.to_owned(),
+    })
 }
 
-/// Parses a `Signature` field value into its label and 64-byte signature.
-fn parse_signature(value: &str) -> Result<(String, [u8; SIGNATURE_LEN]), HttpSigError> {
-    let (label, rest) = split_member(value)?;
+/// Parses every member of a `Signature-Input` field value.
+fn parse_signature_input(value: &str) -> Result<Vec<InputMember>, HttpSigError> {
+    split_dictionary(value)?
+        .into_iter()
+        .map(|(label, rest)| parse_input_member(label, rest))
+        .collect()
+}
+
+/// Parses the `Signature` member labeled `label` into its 64-byte signature.
+fn parse_signature(value: &str, label: &str) -> Result<[u8; SIGNATURE_LEN], HttpSigError> {
+    let (_, rest) = split_dictionary(value)?
+        .into_iter()
+        .find(|(l, _)| *l == label)
+        .ok_or(HttpSigError::LabelMismatch)?;
     let b64 = rest
         .trim()
         .strip_prefix(':')
@@ -528,10 +631,52 @@ fn parse_signature(value: &str) -> Result<(String, [u8; SIGNATURE_LEN]), HttpSig
     let bytes = STANDARD
         .decode(b64)
         .map_err(|_| HttpSigError::MalformedSignature)?;
-    let array: [u8; SIGNATURE_LEN] = bytes
+    bytes
         .try_into()
-        .map_err(|_| HttpSigError::MalformedSignature)?;
-    Ok((label.to_owned(), array))
+        .map_err(|_| HttpSigError::MalformedSignature)
+}
+
+/// Picks the member to verify out of a parsed `Signature-Input`.
+///
+/// Under a WIMSE profile it is the one tagged [`WIMSE_TAG`]; the label is not
+/// consulted. Otherwise it is the one named by `config.label`, or the only one.
+fn select_member(
+    mut members: Vec<InputMember>,
+    config: &VerifyConfig,
+) -> Result<InputMember, HttpSigError> {
+    if config.wimse_profile || config.wimse_response_profile {
+        // A lone signature is judged as the WIMSE one, so the profile check can
+        // say what is wrong with its tag rather than that it is not WIMSE.
+        if members.len() == 1 {
+            return Ok(members.remove(0));
+        }
+        let mut tagged = members
+            .into_iter()
+            .filter(|m| m.params.tag.as_deref() == Some(WIMSE_TAG));
+        return match (tagged.next(), tagged.next()) {
+            (Some(member), None) => Ok(member),
+            (Some(_), Some(_)) => Err(HttpSigError::AmbiguousWimseSignature),
+            (None, _) => Err(HttpSigError::NoWimseSignature),
+        };
+    }
+    match &config.label {
+        Some(label) => members
+            .into_iter()
+            .find(|m| &m.label == label)
+            .ok_or(HttpSigError::LabelMismatch),
+        None if members.len() == 1 => Ok(members.remove(0)),
+        // Several signatures and nothing to choose between them by.
+        None => Err(HttpSigError::LabelMismatch),
+    }
+}
+
+/// The RFC 9421 `alg` name (Section 6.2) for a key's algorithm.
+const fn rfc9421_alg(algorithm: Algorithm) -> Option<&'static str> {
+    match algorithm {
+        Algorithm::EdDsa => Some("ed25519"),
+        Algorithm::Es256 => Some("ecdsa-p256-sha256"),
+        _ => None,
+    }
 }
 
 /// Verifies an HTTP message signature on `request`.
@@ -540,6 +685,9 @@ fn parse_signature(value: &str) -> Result<(String, [u8; SIGNATURE_LEN]), HttpSig
 /// `signature_input` (using the received parameter string verbatim, so the base
 /// is byte-exact), verifies it against `verifying_key`, and applies the checks
 /// in `config`. Fails closed on any deviation.
+///
+/// When the fields carry several signatures, the one verified is chosen as
+/// described on [`VerifyConfig::wimse_profile`] and [`VerifyConfig::label`].
 ///
 /// A successful return proves only that the covered components were signed with
 /// `verifying_key`. It does **not** by itself guarantee any particular
@@ -553,7 +701,8 @@ fn parse_signature(value: &str) -> Result<(String, [u8; SIGNATURE_LEN]), HttpSig
 /// # Errors
 ///
 /// Returns the corresponding [`HttpSigError`] for an unparsable field, a label
-/// mismatch, a missing covered header, an unexpected `alg`, a malformed or
+/// mismatch, no or several WIMSE signatures, a missing covered header, an
+/// unexpected `alg` or an algorithm outside `accepted_algorithms`, a malformed or
 /// invalid signature, a missing required component, or a stale, expired,
 /// future-dated, or inverted-window signature.
 pub fn verify(
@@ -563,25 +712,30 @@ pub fn verify(
     verifying_key: &VerifyingKey,
     config: &VerifyConfig,
 ) -> Result<VerifiedSignature, HttpSigError> {
-    let (input_label, components, params, params_value) = parse_signature_input(signature_input)?;
-    let (sig_label, sig_bytes) = parse_signature(signature)?;
+    let InputMember {
+        label: input_label,
+        components,
+        params,
+        params_value,
+    } = select_member(parse_signature_input(signature_input)?, config)?;
+    let sig_bytes = parse_signature(signature, &input_label)?;
 
-    if input_label != sig_label {
-        return Err(HttpSigError::LabelMismatch);
-    }
-    if let Some(expected) = &config.label {
-        if expected != &input_label {
-            return Err(HttpSigError::LabelMismatch);
-        }
-    }
     if config.wimse_profile {
         check_request_profile(&params)?;
     }
     if config.wimse_response_profile {
-        check_response_profile(&params, config.expected_req_nonce.is_some())?;
+        check_response_profile(&params)?;
     }
+    let algorithm = verifying_key.algorithm();
+    if !config.accepted_algorithms.is_empty() && !config.accepted_algorithms.contains(&algorithm) {
+        return Err(HttpSigError::UnsupportedAlg {
+            found: algorithm.as_str().to_owned(),
+        });
+    }
+    // Outside the profile `alg` may be present, and then it must name the
+    // algorithm of the key the signature is checked with.
     if let Some(alg) = &params.alg {
-        if alg != ALG {
+        if Some(alg.as_str()) != rfc9421_alg(algorithm) {
             return Err(HttpSigError::UnsupportedAlg { found: alg.clone() });
         }
     }
@@ -605,9 +759,8 @@ pub fn verify(
             return Err(HttpSigError::AudienceMismatch);
         }
     }
-    // Section 3.4: a client that demanded a signed response MUST check the nonce
-    // comes back, which is what stops a response being replayed onto another
-    // request.
+    // A client validating a signed response MUST check its nonce comes back,
+    // which is what stops a response being replayed onto another request.
     if let Some(expected) = &config.expected_req_nonce {
         if params.wimse_req_nonce.as_ref() != Some(expected) {
             return Err(HttpSigError::RequestNonceMismatch);
@@ -1387,7 +1540,7 @@ mod tests {
 
         assert!(signed
             .signature_input
-            .contains(r#""@status" "@method";req "@request-target";req"#));
+            .contains(r#""@status" "@method";req "@path";req "@query";req"#));
 
         let verified = verify(
             &exchange,
@@ -1472,12 +1625,12 @@ mod tests {
             wimse_req_nonce: None,
             ..response_params()
         };
+        // Required on every signed response, whether or not the client asked
+        // for one.
         assert!(matches!(
-            super::check_response_profile(&params, true),
+            super::check_response_profile(&params),
             Err(HttpSigError::MissingParameter("wimse-req-nonce"))
         ));
-        // ...but only when the client demanded a signed response.
-        assert!(super::check_response_profile(&params, false).is_ok());
     }
 
     // Forbidden rather than ignored: silently accepting it would hide a sender
@@ -1489,7 +1642,7 @@ mod tests {
             ..response_params()
         };
         assert!(matches!(
-            super::check_response_profile(&params, true),
+            super::check_response_profile(&params),
             Err(HttpSigError::ForbiddenParameter("wimse-aud"))
         ));
     }
@@ -1498,6 +1651,210 @@ mod tests {
     fn a_request_has_no_status_component() {
         let err = rfc_request().component_value(&Component::Status);
         assert!(matches!(err, Err(HttpSigError::UnsupportedComponent(_))));
+    }
+
+    /// Joins two signed messages' fields into one two-member dictionary, as an
+    /// intermediary adding its own signature would.
+    fn join(a: &super::SignedSignature, b: &super::SignedSignature) -> (String, String) {
+        (
+            format!("{}, {}", a.signature_input, b.signature_input),
+            format!("{}, {}", a.signature, b.signature),
+        )
+    }
+
+    // An intermediary's signature under the `wimse` label must not be mistaken
+    // for the workload's: the WIMSE signature is found by its tag.
+    #[test]
+    fn selects_the_wimse_signature_by_tag_not_label() {
+        let key = SigningKey::from_ed25519_seed(&[5u8; 32]);
+        let proxy = SigningKey::from_ed25519_seed(&[9u8; 32]);
+        let request = rfc_request();
+        let origin = sign(&request, &rfc_components(), &wimse_params(), "origin", &key).unwrap();
+        let hop = SignatureParams {
+            tag: Some("example-proxy".to_owned()),
+            ..wimse_params()
+        };
+        let hop = sign(&request, &rfc_components(), &hop, "wimse", &proxy).unwrap();
+
+        for (input, signature) in [join(&hop, &origin), join(&origin, &hop)] {
+            let verified = verify(
+                &request,
+                &input,
+                &signature,
+                &key.verifying_key(),
+                &wimse_config(),
+            )
+            .unwrap();
+            assert_eq!(verified.label, "origin");
+        }
+    }
+
+    // Under the profile a configured label is not how the signature is chosen.
+    #[test]
+    fn profile_ignores_a_configured_label() {
+        let (key, request, signed) = sign_with(&wimse_params());
+        let config = VerifyConfig {
+            label: Some("other".to_owned()),
+            ..wimse_config()
+        };
+        assert!(verify(
+            &request,
+            &signed.signature_input,
+            &signed.signature,
+            &key.verifying_key(),
+            &config,
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn rejects_two_wimse_signatures() {
+        let key = SigningKey::from_ed25519_seed(&[5u8; 32]);
+        let request = rfc_request();
+        let a = sign(&request, &rfc_components(), &wimse_params(), "a", &key).unwrap();
+        let b = sign(&request, &rfc_components(), &wimse_params(), "b", &key).unwrap();
+        let (input, signature) = join(&a, &b);
+        let err = verify(
+            &request,
+            &input,
+            &signature,
+            &key.verifying_key(),
+            &wimse_config(),
+        );
+        assert!(matches!(err, Err(HttpSigError::AmbiguousWimseSignature)));
+    }
+
+    #[test]
+    fn rejects_several_signatures_none_of_them_wimse() {
+        let key = SigningKey::from_ed25519_seed(&[5u8; 32]);
+        let request = rfc_request();
+        let other = SignatureParams {
+            tag: Some("example-proxy".to_owned()),
+            ..wimse_params()
+        };
+        let a = sign(&request, &rfc_components(), &other, "a", &key).unwrap();
+        let b = sign(&request, &rfc_components(), &other, "b", &key).unwrap();
+        let (input, signature) = join(&a, &b);
+        let err = verify(
+            &request,
+            &input,
+            &signature,
+            &key.verifying_key(),
+            &wimse_config(),
+        );
+        assert!(matches!(err, Err(HttpSigError::NoWimseSignature)));
+    }
+
+    // Last-one-wins would let two readers of the same field disagree about
+    // which signature it carries.
+    #[test]
+    fn rejects_a_duplicate_label() {
+        let (key, request, signed) = sign_with(&wimse_params());
+        let (input, signature) = join(&signed, &signed);
+        let err = verify(
+            &request,
+            &input,
+            &signature,
+            &key.verifying_key(),
+            &wimse_config(),
+        );
+        assert!(matches!(err, Err(HttpSigError::Parse(_))));
+    }
+
+    // Outside the profile, several signatures need a label to pick one.
+    #[test]
+    fn plain_mode_selects_by_label() {
+        let key = SigningKey::from_ed25519_seed(&[5u8; 32]);
+        let request = rfc_request();
+        let a = sign(&request, &rfc_components(), &ed25519_params(), "a", &key).unwrap();
+        let b = sign(&request, &rfc_components(), &ed25519_params(), "b", &key).unwrap();
+        let (input, signature) = join(&a, &b);
+
+        let err = verify(
+            &request,
+            &input,
+            &signature,
+            &key.verifying_key(),
+            &VerifyConfig::default(),
+        );
+        assert!(matches!(err, Err(HttpSigError::LabelMismatch)));
+
+        let config = VerifyConfig {
+            label: Some("b".to_owned()),
+            ..VerifyConfig::default()
+        };
+        let verified = verify(&request, &input, &signature, &key.verifying_key(), &config).unwrap();
+        assert_eq!(verified.label, "b");
+    }
+
+    #[test]
+    fn rejects_an_algorithm_outside_local_policy() {
+        use wimsey_jose::Algorithm;
+
+        let (key, request, signed) = sign_with(&wimse_params());
+        let config = VerifyConfig {
+            accepted_algorithms: vec![Algorithm::Es256],
+            ..wimse_config()
+        };
+        let err = verify(
+            &request,
+            &signed.signature_input,
+            &signed.signature,
+            &key.verifying_key(),
+            &config,
+        );
+        assert!(matches!(err, Err(HttpSigError::UnsupportedAlg { .. })));
+
+        let config = VerifyConfig {
+            accepted_algorithms: vec![Algorithm::EdDsa],
+            ..wimse_config()
+        };
+        assert!(verify(
+            &request,
+            &signed.signature_input,
+            &signed.signature,
+            &key.verifying_key(),
+            &config,
+        )
+        .is_ok());
+    }
+
+    // Outside the profile `alg` must name the key's own algorithm.
+    #[test]
+    fn accepts_the_rfc_9421_name_of_an_es256_key() {
+        let key = SigningKey::from_p256_scalar(&[7u8; 32]).unwrap();
+        let request = rfc_request();
+        for (alg, ok) in [("ecdsa-p256-sha256", true), (ALG, false)] {
+            let params = SignatureParams {
+                alg: Some(alg.to_owned()),
+                ..ed25519_params()
+            };
+            let signed = sign(&request, &rfc_components(), &params, "sig1", &key).unwrap();
+            let result = verify(
+                &request,
+                &signed.signature_input,
+                &signed.signature,
+                &key.verifying_key(),
+                &VerifyConfig::default(),
+            );
+            assert_eq!(result.is_ok(), ok, "alg {alg}: {result:?}");
+        }
+    }
+
+    #[test]
+    fn request_components_follow_the_profile() {
+        let components = super::request_components(&rfc_request().headers);
+        assert_eq!(
+            components,
+            vec![
+                Component::Method,
+                Component::Path,
+                Component::Query,
+                Component::header("content-type"),
+                Component::header("content-digest"),
+            ]
+        );
+        assert!(!components.contains(&Component::Authority));
     }
 
     #[test]

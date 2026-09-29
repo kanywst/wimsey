@@ -14,18 +14,23 @@ verbatim rather than re-serializing it.
 The WIMSE profile (Section 3 of the http-signature draft) narrows RFC 9421
 considerably, and is enforced by opting in with `VerifyConfig::wimse_profile`:
 
-- `@method` and `@request-target` must be covered, plus `Content-Type`,
+- `@method`, `@path` and `@query` must be covered, plus `Content-Type`,
   `Content-Digest`, `Authorization`, `Txn-Token` and `Workload-Identity-Token`
-  whenever the message carries them;
+  whenever the message carries them. `@authority` is not, because proxies
+  rewrite it;
 - `created`, `expires`, `nonce` and `tag` are mandatory, with `tag` fixed to
   `wimse-workload-to-workload`;
 - `wimse-aud` is mandatory on a request and names the service it is for;
 - `keyid` and `alg` are forbidden — the key travels in the WIT, and its `cnf`
-  JWK pins the algorithm.
+  JWK pins the algorithm;
+- the WIMSE signature is the one tagged `wimse-workload-to-workload`, found by
+  that tag and never by label, so an intermediary may add its own signature
+  alongside it. Two signatures carrying the tag are rejected.
 
 Responses are signed the same way, with the profile's own rules: `@status` plus
-`@method;req` and `@request-target;req`, and `wimse-req-nonce` carrying back the
-nonce from the request being answered. Both bindings exist so that a signed
+`@method;req`, `@path;req` and `@query;req`, and `wimse-req-nonce` — required on
+every signed response — carrying back the nonce from the request being
+answered. Both bindings exist so that a signed
 response cannot be lifted onto a different request.
 
 With the profile off, the crate is a plain RFC 9421 implementation.
@@ -38,8 +43,8 @@ workload-identity drafts, in Rust.
 > revision; see [`SPEC-MAP.md`](https://github.com/kanywst/wimsey/blob/main/SPEC-MAP.md)
 > for the pin and for the requirements it does not yet meet.
 
-All signing is EdDSA over Ed25519, which is deterministic, so output is
-byte-for-byte reproducible. Time is injected rather than read from a clock, so
+Signing is EdDSA over Ed25519 or ES256, both deterministic (ES256 through its
+RFC 6979 nonce), so output is byte-for-byte reproducible. Time is injected rather than read from a clock, so
 verification is reproducible too. Cross-implementation test vectors live in
 [`conformance/`](https://github.com/kanywst/wimsey/tree/main/conformance).
 

@@ -10,6 +10,44 @@ silently.
 
 ## [Unreleased]
 
+### Changed
+
+- **`wimsey-httpsig` targets `draft-ietf-wimse-http-signature-07`** (published
+  2026-09-20, the WG Last Call revision). Signatures made under -06 do not
+  satisfy -07's covered-component set, so this is breaking.
+  - The request profile covers `@method`, `@path` and `@query` in place of
+    `@request-target`, which RFC 9421 does not recommend outside HTTP/1.1.
+    `@query` is covered even without a query, as a bare `?`. The new
+    `request_components` builds the set from the headers a request carries.
+  - A signed response covers `@path;req` and `@query;req` in place of
+    `@request-target;req`; `response_components` returns the new set.
+  - Every signed response must carry `wimse-req-nonce`, not only one the client
+    asked for. `check_response_profile` drops its `response_signing_required`
+    argument accordingly.
+  - Under either WIMSE profile the signature is found by its `tag`, never by
+    label: `Signature-Input` and `Signature` may now carry several members, as
+    when an intermediary adds its own, and `VerifyConfig::label` is not
+    consulted. Several signatures with none tagged is the new
+    `HttpSigError::NoWimseSignature`; two tagged is
+    `HttpSigError::AmbiguousWimseSignature`. A duplicate label in either field is
+    a parse error rather than last-one-wins.
+- `wimsey httpsig verify` drops `--label`, for the same reason, and requires the
+  -07 component set.
+- The conformance format is **`wimse-conformance/v6`**: the httpsig vectors pin
+  -07, `accept_label` is gone, and an `accepted` case may carry its own
+  `signature_input` and `signature`. New cases: `wimse-signature-found-by-tag`
+  (accepted), `two-wimse-signatures` and `no-wimse-signature`.
+- `SPEC-MAP.md` pins `draft-ietf-wimse-workload-identity-practices-07`, which
+  no crate implements.
+
+### Added
+
+- `VerifyConfig::accepted_algorithms`, the recipient's policy on which
+  algorithms it accepts for the peer's key. -07 requires rejecting one that
+  local policy does not accept.
+- Outside the profile, an `alg` parameter is checked against the verifying
+  key's own algorithm, so `ecdsa-p256-sha256` verifies with an ES256 key.
+
 ## [0.7.0] - 2026-09-07
 
 A breaking release, and the reason it is breaking is the point of the project:

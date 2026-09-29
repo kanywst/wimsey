@@ -709,7 +709,6 @@ fn run_httpsig_response(
     let config = |expected_req_nonce: &str| VerifyConfig {
         now: Some(vector.verify_now),
         required_components: covered.clone(),
-        label: Some(vector.label.clone()),
         wimse_response_profile: true,
         expected_req_nonce: Some(expected_req_nonce.to_owned()),
         ..VerifyConfig::default()
@@ -840,8 +839,10 @@ fn run_httpsig_accepted(
             &format!("accept/{}", case.id),
             verify_httpsig(
                 &http_request(request),
-                &vector.signature_input,
-                &vector.signature,
+                case.signature_input
+                    .as_deref()
+                    .unwrap_or(&vector.signature_input),
+                case.signature.as_deref().unwrap_or(&vector.signature),
                 &pop_key,
                 &config,
             )
@@ -897,7 +898,6 @@ fn run_httpsig_negatives(
         let outcome = required.and_then(|required| {
             let config = VerifyConfig {
                 now: Some(case.verify_now.unwrap_or(vector.verify_now)),
-                label: case.accept_label.clone(),
                 required_components: required,
                 max_age: case.max_age,
                 wimse_profile: true,
