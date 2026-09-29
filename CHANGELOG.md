@@ -35,8 +35,11 @@ silently.
   -07 component set.
 - The conformance format is **`wimse-conformance/v6`**: the httpsig vectors pin
   -07, `accept_label` is gone, and an `accepted` case may carry its own
-  `signature_input` and `signature`. New cases: `wimse-signature-found-by-tag`
-  (accepted), `two-wimse-signatures` and `no-wimse-signature`.
+  `signature_input` and `signature`. New cases: `wimse-signature-found-by-tag` and
+  `intermediary-signature-outside-this-profile` (accepted),
+  `two-wimse-signatures` and `no-wimse-signature`. Only the selected member is
+  parsed in full, so another hop's signature over components this crate does
+  not model does not block verification.
 - `SPEC-MAP.md` pins `draft-ietf-wimse-workload-identity-practices-07`, which
   no crate implements.
 

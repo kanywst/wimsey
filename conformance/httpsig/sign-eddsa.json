@@ -246,6 +246,12 @@
       "description": "an intermediary added its own signature under the label `wimse`, with another key and another tag; the WIMSE signature is the one tagged `wimse-workload-to-workload`, labeled `origin`, and a recipient that picks by label verifies the wrong one",
       "signature_input": "wimse=(\"@method\" \"@path\" \"@query\" \"content-type\" \"content-digest\" \"workload-identity-token\");created=1700000000;expires=1700000300;nonce=\"abcd1111\";tag=\"example-proxy-hop\";wimse-aud=\"https://service.example/transfer\";wimse-sign-response, origin=(\"@method\" \"@path\" \"@query\" \"content-type\" \"content-digest\" \"workload-identity-token\");created=1700000000;expires=1700000300;nonce=\"abcd1111\";tag=\"wimse-workload-to-workload\";wimse-aud=\"https://service.example/transfer\";wimse-sign-response",
       "signature": "wimse=:FP8ldKC/N9Ce6a5rXlBSt1SsKHD+O+zJLVjfJAfmLi9rCoqeVLhreLRb4voL1DZZvBZ3Wq1Vce2005El7wuHDA==:, origin=:nHRUGilugagBEL8QqU3jfaRdB5EHO0D6Qz2KhEZbjZ5Owr+kwt26lDZ+HXhxGWb9PgPpiElPKSRo/OjlkJEQAg==:"
+    },
+    {
+      "id": "intermediary-signature-outside-this-profile",
+      "description": "an intermediary's signature covers `@target-uri` and a `;sf` header, which a WIMSE profile never needs; it is not the WIMSE signature, so a recipient must find the tagged one without parsing or verifying it (its bytes are zeros)",
+      "signature_input": "proxy=(\"@target-uri\" \"content-type\";sf);created=1700000000;tag=\"example-proxy-hop\", wimse=(\"@method\" \"@path\" \"@query\" \"content-type\" \"content-digest\" \"workload-identity-token\");created=1700000000;expires=1700000300;nonce=\"abcd1111\";tag=\"wimse-workload-to-workload\";wimse-aud=\"https://service.example/transfer\";wimse-sign-response",
+      "signature": "proxy=:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==:, wimse=:nHRUGilugagBEL8QqU3jfaRdB5EHO0D6Qz2KhEZbjZ5Owr+kwt26lDZ+HXhxGWb9PgPpiElPKSRo/OjlkJEQAg==:"
     }
   ],
   "response": {

@@ -8,7 +8,10 @@
 
 use std::collections::BTreeMap;
 
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+use base64::{
+    engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD},
+    Engine,
+};
 use wimsey_httpsig::{
     content_digest_sha256, request_components, response_components, sign, Component, HttpExchange,
     HttpRequest, HttpResponse, SignatureParams, WIMSE_TAG,
@@ -563,7 +566,15 @@ pub fn httpsig_vector(algorithm: Algorithm) -> HttpSigVector {
         headers: request.headers.clone(),
     };
     let negative = httpsig_negatives(&vector_request, &request, &components, &params, &pop_key);
-    let accepted = httpsig_accepted(&vector_request, &request, &components, &params, &pop_key);
+    let accepted = httpsig_accepted(
+        &vector_request,
+        &request,
+        &components,
+        &params,
+        &pop_key,
+        &signed.signature_input,
+        &signed.signature,
+    );
     let response = httpsig_response(&request, &vector_request, &wit, &issuer_key, algorithm);
 
     HttpSigVector {
@@ -642,6 +653,8 @@ fn httpsig_accepted(
     components: &[Component],
     params: &SignatureParams,
     pop_key: &SigningKey,
+    signed_input: &str,
+    signed_signature: &str,
 ) -> Vec<HttpSigAccepted> {
     let (signature_input, signature) = with_proxy_signature(
         request,
@@ -676,6 +689,23 @@ fn httpsig_accepted(
             request: None,
             signature_input: Some(signature_input),
             signature: Some(signature),
+        },
+        HttpSigAccepted {
+            id: "intermediary-signature-outside-this-profile".to_owned(),
+            description: "an intermediary's signature covers `@target-uri` and a `;sf` \
+                          header, which a WIMSE profile never needs; it is not the WIMSE \
+                          signature, so a recipient must find the tagged one without \
+                          parsing or verifying it (its bytes are zeros)"
+                .to_owned(),
+            request: None,
+            signature_input: Some(format!(
+                r#"proxy=("@target-uri" "content-type";sf);created={IAT};tag="example-proxy-hop", {signed_input}"#
+            )),
+            signature: Some(format!(
+                "proxy=:{}:, {}",
+                STANDARD.encode([0u8; 64]),
+                signed_signature
+            )),
         },
     ]
 }

@@ -609,14 +609,6 @@ fn parse_input_member(label: &str, rest: &str) -> Result<InputMember, HttpSigErr
     })
 }
 
-/// Parses every member of a `Signature-Input` field value.
-fn parse_signature_input(value: &str) -> Result<Vec<InputMember>, HttpSigError> {
-    split_dictionary(value)?
-        .into_iter()
-        .map(|(label, rest)| parse_input_member(label, rest))
-        .collect()
-}
-
 /// Parses the `Signature` member labeled `label` into its 64-byte signature.
 fn parse_signature(value: &str, label: &str) -> Result<[u8; SIGNATURE_LEN], HttpSigError> {
     let (_, rest) = split_dictionary(value)?
@@ -636,38 +628,62 @@ fn parse_signature(value: &str, label: &str) -> Result<[u8; SIGNATURE_LEN], Http
         .map_err(|_| HttpSigError::MalformedSignature)
 }
 
-/// Picks the member to verify out of a parsed `Signature-Input`.
+/// Whether a raw `Signature-Input` member value carries the WIMSE `tag`.
+///
+/// Deliberately lenient: this reads only the `tag` parameter and treats a member
+/// it cannot make sense of as not WIMSE. Another hop's signature may cover
+/// components or use parameters this crate does not model, and that must not
+/// stop the WIMSE signature beside it from being found.
+fn has_wimse_tag(rest: &str) -> bool {
+    let rest = rest.trim();
+    let Some(close) = find_unquoted(rest, ')') else {
+        return false;
+    };
+    split_unquoted_semicolons(&rest[close + 1..])
+        .into_iter()
+        .filter_map(|part| part.split_once('='))
+        .any(|(name, raw)| {
+            name.trim() == "tag" && parse_sf_string(raw.trim()).is_ok_and(|tag| tag == WIMSE_TAG)
+        })
+}
+
+/// Picks the member to verify out of a `Signature-Input` field value and parses
+/// it. Only the chosen member is parsed in full.
 ///
 /// Under a WIMSE profile it is the one tagged [`WIMSE_TAG`]; the label is not
 /// consulted. Otherwise it is the one named by `config.label`, or the only one.
 fn select_member(
-    mut members: Vec<InputMember>,
+    signature_input: &str,
     config: &VerifyConfig,
 ) -> Result<InputMember, HttpSigError> {
-    if config.wimse_profile || config.wimse_response_profile {
+    let members = split_dictionary(signature_input)?;
+    let (label, rest) = if members.len() == 1 {
         // A lone signature is judged as the WIMSE one, so the profile check can
         // say what is wrong with its tag rather than that it is not WIMSE.
-        if members.len() == 1 {
-            return Ok(members.remove(0));
+        members[0]
+    } else if config.wimse_profile || config.wimse_response_profile {
+        let mut tagged = members.iter().filter(|(_, rest)| has_wimse_tag(rest));
+        match (tagged.next(), tagged.next()) {
+            (Some(member), None) => *member,
+            (Some(_), Some(_)) => return Err(HttpSigError::AmbiguousWimseSignature),
+            (None, _) => return Err(HttpSigError::NoWimseSignature),
         }
-        let mut tagged = members
-            .into_iter()
-            .filter(|m| m.params.tag.as_deref() == Some(WIMSE_TAG));
-        return match (tagged.next(), tagged.next()) {
-            (Some(member), None) => Ok(member),
-            (Some(_), Some(_)) => Err(HttpSigError::AmbiguousWimseSignature),
-            (None, _) => Err(HttpSigError::NoWimseSignature),
-        };
+    } else {
+        // Several signatures: only a label can choose between them.
+        let label = config.label.as_deref().ok_or(HttpSigError::LabelMismatch)?;
+        *members
+            .iter()
+            .find(|(l, _)| *l == label)
+            .ok_or(HttpSigError::LabelMismatch)?
+    };
+    if !(config.wimse_profile || config.wimse_response_profile) {
+        if let Some(expected) = &config.label {
+            if expected != label {
+                return Err(HttpSigError::LabelMismatch);
+            }
+        }
     }
-    match &config.label {
-        Some(label) => members
-            .into_iter()
-            .find(|m| &m.label == label)
-            .ok_or(HttpSigError::LabelMismatch),
-        None if members.len() == 1 => Ok(members.remove(0)),
-        // Several signatures and nothing to choose between them by.
-        None => Err(HttpSigError::LabelMismatch),
-    }
+    parse_input_member(label, rest)
 }
 
 /// The RFC 9421 `alg` name (Section 6.2) for a key's algorithm.
@@ -717,7 +733,7 @@ pub fn verify(
         components,
         params,
         params_value,
-    } = select_member(parse_signature_input(signature_input)?, config)?;
+    } = select_member(signature_input, config)?;
     let sig_bytes = parse_signature(signature, &input_label)?;
 
     if config.wimse_profile {
@@ -1686,6 +1702,33 @@ mod tests {
             )
             .unwrap();
             assert_eq!(verified.label, "origin");
+        }
+    }
+
+    // Another hop may sign components this crate does not model; that must not
+    // stop the WIMSE signature beside it from being found.
+    #[test]
+    fn tolerates_an_intermediary_signature_it_cannot_parse() {
+        let (key, request, signed) = sign_with(&wimse_params());
+        for hop in [
+            r#"proxy=("@target-uri");tag="p""#,
+            r#"proxy=("content-type";sf);tag="p""#,
+            r#"proxy=("@method");tag=p"#,
+        ] {
+            let input = format!("{hop}, {}", signed.signature_input);
+            let signature = format!(
+                "proxy=:{}:, {}",
+                STANDARD.encode([0u8; 64]),
+                signed.signature
+            );
+            let verified = verify(
+                &request,
+                &input,
+                &signature,
+                &key.verifying_key(),
+                &wimse_config(),
+            );
+            assert!(verified.is_ok(), "{hop}: {verified:?}");
         }
     }
 
