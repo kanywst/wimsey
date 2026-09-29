@@ -10,6 +10,14 @@ silently.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-09-29
+
+A breaking release for the same reason as 0.7.0: `draft-ietf-wimse-http-signature`
+published **-07** on 2026-09-20, the WG Last Call revision, and its changes are
+normative. Only `wimsey-httpsig`, the CLI's `httpsig` subcommand and the
+conformance vectors change; the other crates move version in lockstep. Also
+carried: `clap` 4.6.7 and `thiserror` 2.0.21.
+
 ### Changed
 
 - **`wimsey-httpsig` targets `draft-ietf-wimse-http-signature-07`** (published
@@ -494,7 +502,8 @@ public API.
 - Project governance, security policy, contributing guide (DCO), and OpenSSF
   Scorecard automation.
 
-[Unreleased]: https://github.com/kanywst/wimsey/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/kanywst/wimsey/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/kanywst/wimsey/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/kanywst/wimsey/compare/v0.6.3...v0.7.0
 [0.6.3]: https://github.com/kanywst/wimsey/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/kanywst/wimsey/compare/v0.6.1...v0.6.2
