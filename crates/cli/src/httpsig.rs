@@ -5,8 +5,8 @@ use std::path::PathBuf;
 use clap::{Args, Subcommand};
 use serde_json::json;
 use wimsey_httpsig::{
-    content_digest_sha256, sign, verify, verify_content_digest, Component, HttpRequest,
-    SignatureParams, VerifyConfig, WIMSE_TAG,
+    content_digest_sha256, request_components, sign, verify, verify_content_digest, Component,
+    HttpRequest, SignatureParams, VerifyConfig, WIMSE_TAG,
 };
 
 use crate::key;
@@ -66,7 +66,8 @@ pub(crate) struct SignArgs {
     /// Require the peer to sign its response (`wimse-sign-response`).
     #[arg(long)]
     sign_response: bool,
-    /// The signature label.
+    /// The signature label. A recipient finds the WIMSE signature by its tag,
+    /// not by this.
     #[arg(long, default_value = "wimse")]
     label: String,
 }
@@ -119,9 +120,6 @@ pub(crate) struct VerifyArgs {
     /// Clock-skew tolerance, in seconds, applied to time checks.
     #[arg(long, default_value_t = 5)]
     leeway: u64,
-    /// The signature label to accept.
-    #[arg(long, default_value = "wimse")]
-    label: String,
     /// Override the current time (Unix seconds). For testing only.
     #[arg(long)]
     now: Option<u64>,
@@ -276,33 +274,6 @@ fn has_header(headers: &[(String, String)], name: &str) -> bool {
     headers.iter().any(|(n, _)| n.eq_ignore_ascii_case(name))
 }
 
-/// Headers a WIMSE signature MUST cover whenever the message carries them
-/// (Section 3 of `draft-ietf-wimse-http-signature`).
-const CONDITIONAL_HEADERS: &[&str] = &[
-    "content-type",
-    "content-digest",
-    "authorization",
-    "txn-token",
-    "workload-identity-token",
-];
-
-/// The components a WIMSE request signature must cover.
-///
-/// The draft names exactly two derived components — `@method` and
-/// `@request-target` — plus every header in [`CONDITIONAL_HEADERS`] that the
-/// message actually carries. Note that `@authority` is deliberately *not* in the
-/// set: the target service is bound by the `wimse-aud` signature parameter
-/// instead, so requiring `@authority` here would reject conforming peers.
-fn mandatory_components(headers: &[(String, String)]) -> Vec<Component> {
-    let mut components = vec![Component::Method, Component::RequestTarget];
-    for name in CONDITIONAL_HEADERS {
-        if has_header(headers, name) {
-            components.push(Component::header(name));
-        }
-    }
-    components
-}
-
 /// Errors unless every component in `mandatory` is present in `set`.
 fn ensure_covers(set: &[Component], mandatory: &[Component]) -> Result<()> {
     for component in mandatory {
@@ -364,7 +335,7 @@ fn run_sign(args: SignArgs) -> Result<()> {
 
     // Base the mandatory set on the headers actually present, so a WIT or
     // Content-Digest supplied via --header is covered like --wit/--body-file.
-    let mandatory = mandatory_components(&request.headers);
+    let mandatory = request_components(&request.headers);
     let components = if let Some(list) = args.cover {
         let components = parse_components(&list)?;
         ensure_covers(&components, &mandatory)?;
@@ -447,7 +418,7 @@ fn run_verify(args: VerifyArgs) -> Result<()> {
         return Err("the supplied Workload-Identity-Token header does not match --wit".into());
     }
 
-    let mandatory = mandatory_components(&request.headers);
+    let mandatory = request_components(&request.headers);
     let required = if let Some(list) = args.require {
         let required = parse_components(&list)?;
         ensure_covers(&required, &mandatory)?;
@@ -461,7 +432,6 @@ fn run_verify(args: VerifyArgs) -> Result<()> {
         leeway: args.leeway,
         required_components: required,
         max_age: args.max_age,
-        label: Some(checked_label(&args.label)?),
         wimse_profile: true,
         expected_audience: Some(args.aud.trim().to_owned()),
         ..VerifyConfig::default()

@@ -1,6 +1,6 @@
 //! `wimsey-httpsig` — the WIMSE HTTP Message Signatures transport binding.
 //!
-//! Target spec: `draft-ietf-wimse-http-signature-06`, a profile of RFC 9421.
+//! Target spec: `draft-ietf-wimse-http-signature-07`, a profile of RFC 9421.
 //! The calling workload signs the outgoing HTTP request — including the header
 //! that carries its WIT — with its proof-of-possession key, so an intermediary
 //! can read but not tamper with the covered components. The receiver recovers
@@ -8,9 +8,10 @@
 //!
 //! This crate implements the RFC 9421 signature base (Section 2.5) for the
 //! derived components `@method`, `@authority`, `@path`, `@query` and
-//! `@request-target` plus header fields, signs with Ed25519, and serializes the
-//! `Signature-Input` and `Signature` fields. The signature base is verified
-//! byte-for-byte against the RFC's worked example.
+//! `@request-target`, `@status` and `;req`, plus header fields; signs with the
+//! key's algorithm (Ed25519 or ES256); and serializes the `Signature-Input` and
+//! `Signature` fields. The signature base is verified byte-for-byte against the
+//! RFC's worked example.
 //!
 //! # The WIMSE profile
 //!
@@ -18,9 +19,10 @@
 //! [`VerifyConfig::wimse_profile`] to enforce it, or call
 //! [`check_request_profile`] directly:
 //!
-//! - `@method` and `@request-target` MUST be covered, along with `Content-Type`,
+//! - `@method`, `@path` and `@query` MUST be covered, along with `Content-Type`,
 //!   `Content-Digest`, `Authorization`, `Txn-Token` and `Workload-Identity-Token`
-//!   whenever the message carries them.
+//!   whenever the message carries them — [`request_components`] builds that set.
+//!   `@authority` is not covered, because proxies rewrite it.
 //! - `created`, `expires`, `nonce` and `tag` MUST all be present, with `tag`
 //!   equal to [`WIMSE_TAG`] and a tight `expires` window (minutes, not hours).
 //! - `wimse-aud` MUST be present on a request, naming the service the signature
@@ -28,6 +30,11 @@
 //!   [`VerifyConfig::expected_audience`].
 //! - `keyid` and `alg` MUST NOT be used: the key travels in the WIT and its
 //!   `cnf` JWK pins the algorithm, so repeating either would only add confusion.
+//!   [`VerifyConfig::accepted_algorithms`] is the recipient's policy on which
+//!   of those algorithms it accepts.
+//! - The WIMSE signature is the one tagged [`WIMSE_TAG`], found by that tag and
+//!   never by label, so an intermediary may add a signature of its own. Two
+//!   signatures carrying the tag are rejected.
 //!
 //! The profile is off by default, so the crate can also be driven as a plain
 //! RFC 9421 implementation.
@@ -39,19 +46,21 @@
 //!   about.
 //! - Covering `content-digest` protects only the header string. To bind the
 //!   body, also call [`verify_content_digest`] over the received body.
-//! - Exactly one signature per `Signature`/`Signature-Input` field is supported.
 //! - `@authority` is lowercased but its default port is not stripped; pass a
 //!   normalized authority.
 //! - Response signing is supported: sign an [`HttpExchange`] rather than an
-//!   [`HttpRequest`], enforce [`VerifyConfig::wimse_response_profile`], and
-//!   check the returned nonce with [`VerifyConfig::expected_req_nonce`].
+//!   [`HttpRequest`] over [`response_components`], enforce
+//!   [`VerifyConfig::wimse_response_profile`], and check the returned nonce with
+//!   [`VerifyConfig::expected_req_nonce`]. Rejecting an *unsigned* response to a
+//!   request that set `wimse-sign-response` is the caller's, since there is no
+//!   signature to hand this crate.
 //! - Replay defense is the caller's: this crate checks that a `nonce` is present
 //!   but does not remember the ones it has seen.
 //!
 //! ```
 //! use wimsey_httpsig::{
-//!     content_digest_sha256, sign, verify, verify_content_digest, Component, HttpRequest,
-//!     SignatureParams, SigningKey, VerifyConfig, WIMSE_TAG,
+//!     content_digest_sha256, request_components, sign, verify, verify_content_digest,
+//!     HttpRequest, SignatureParams, SigningKey, VerifyConfig, WIMSE_TAG,
 //! };
 //!
 //! let pop_key = SigningKey::from_ed25519_seed(&[5u8; 32]);
@@ -67,12 +76,8 @@
 //!         ("Workload-Identity-Token".to_owned(), "eyJ0eXAi.wit.value".to_owned()),
 //!     ],
 //! };
-//! let components = vec![
-//!     Component::Method,
-//!     Component::RequestTarget,
-//!     Component::header("content-digest"),
-//!     Component::header("workload-identity-token"),
-//! ];
+//! // `@method`, `@path`, `@query`, and the two headers the request carries.
+//! let components = request_components(&request.headers);
 //! let params = SignatureParams {
 //!     created: Some(1_700_000_000),
 //!     expires: Some(1_700_000_300),
@@ -110,9 +115,9 @@ pub use message::{
     HttpRequest, HttpResponse,
 };
 pub use signature::{
-    check_request_profile, check_response_profile, response_components, sign, signature_base,
-    verify, SignatureParams, SignedSignature, VerifiedSignature, VerifyConfig, ALG, WIMSE_LABEL,
-    WIMSE_TAG,
+    check_request_profile, check_response_profile, request_components, response_components, sign,
+    signature_base, verify, SignatureParams, SignedSignature, VerifiedSignature, VerifyConfig, ALG,
+    WIMSE_LABEL, WIMSE_TAG,
 };
 
 // Re-exported so callers can name the key types without a direct dependency.

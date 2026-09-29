@@ -37,7 +37,7 @@ use wimsey_wpt::{WptClaims, WptError};
 /// which `draft-ietf-wimse-wpt-02` covers with the `tth` and `oth` claims. A v4
 /// reader has nowhere to put them, so it verifies the positive case having
 /// checked neither binding and reports a pass.
-pub const FORMAT: &str = "wimse-conformance/v5";
+pub const FORMAT: &str = "wimse-conformance/v6";
 
 /// The index of every vector in the suite, written to `manifest.json`.
 ///
@@ -152,6 +152,10 @@ pub enum ErrorCode {
     /// A signed response carried back a `wimse-req-nonce` that is not the nonce
     /// the client sent.
     RequestNonceMismatch,
+    /// Several signatures were present and none carried the WIMSE tag.
+    NoWimseSignature,
+    /// More than one signature carried the WIMSE tag.
+    AmbiguousWimseSignature,
     /// The `cnf` JWK omitted the required `alg` member.
     MissingConfirmationAlg,
     /// The `cnf` JWK named `none`, a symmetric, or an encryption algorithm.
@@ -308,6 +312,8 @@ impl From<&HttpSigError> for ErrorCode {
             HttpSigError::WrongTag { .. } => Self::WrongTag,
             HttpSigError::AudienceMismatch => Self::AudienceMismatch,
             HttpSigError::RequestNonceMismatch => Self::RequestNonceMismatch,
+            HttpSigError::NoWimseSignature => Self::NoWimseSignature,
+            HttpSigError::AmbiguousWimseSignature => Self::AmbiguousWimseSignature,
             _ => Self::Unmapped,
         }
     }
@@ -526,6 +532,12 @@ pub struct HttpSigAccepted {
     /// Replaces the positive case's `request`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub request: Option<VectorRequest>,
+    /// Replaces the positive case's `signature_input`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signature_input: Option<String>,
+    /// Replaces the positive case's `signature`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signature: Option<String>,
 }
 
 /// A signed response, and the request-bound checks a client must apply to it.
@@ -624,9 +636,6 @@ pub struct HttpSigNegative {
     /// Replaces the positive case's `verify_now`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub verify_now: Option<u64>,
-    /// The only label the verifier accepts.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub accept_label: Option<String>,
     /// The only audience the verifier answers to, instead of the vector's.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub accept_audience: Option<String>,

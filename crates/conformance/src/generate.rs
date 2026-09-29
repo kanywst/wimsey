@@ -8,10 +8,13 @@
 
 use std::collections::BTreeMap;
 
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+use base64::{
+    engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD},
+    Engine,
+};
 use wimsey_httpsig::{
-    content_digest_sha256, response_components, sign, Component, HttpExchange, HttpRequest,
-    HttpResponse, SignatureParams, WIMSE_TAG,
+    content_digest_sha256, request_components, response_components, sign, Component, HttpExchange,
+    HttpRequest, HttpResponse, SignatureParams, WIMSE_TAG,
 };
 use wimsey_identifier::WorkloadIdentifier;
 use wimsey_jose::{Algorithm, Jwk as JoseJwk, PrivateJwk, SigningKey};
@@ -56,6 +59,8 @@ const WIT_POP_SEED: [u8; 32] = [7u8; 32];
 const POP_SEED: [u8; 32] = [9u8; 32];
 /// The responding workload's own proof-of-possession seed.
 const RESPONDER_POP_SEED: [u8; 32] = [11u8; 32];
+/// An intermediary that adds its own signature to a message in transit.
+const PROXY_SEED: [u8; 32] = [13u8; 32];
 
 const ISSUER: &str = "https://issuer.example";
 const SUBJECT: &str = "spiffe://example.org/workload/api";
@@ -74,7 +79,7 @@ const RESPONSE_NONCE: &str = "abcd2222";
 
 const WIT_SPEC: &str = "draft-ietf-wimse-workload-creds-02";
 const WPT_SPEC: &str = "draft-ietf-wimse-wpt-02";
-const HTTPSIG_SPEC: &str = "draft-ietf-wimse-http-signature-06";
+const HTTPSIG_SPEC: &str = "draft-ietf-wimse-http-signature-07";
 
 /// Names a vector after what it covers and which algorithm it covers it with.
 fn vector_id(base: &str, algorithm: Algorithm) -> String {
@@ -158,7 +163,6 @@ fn httpsig_neg(id: &str, description: &str, expect: ErrorCode) -> HttpSigNegativ
         signature_input: None,
         signature: None,
         verify_now: None,
-        accept_label: None,
         accept_audience: None,
         max_age: None,
         required_components: None,
@@ -539,15 +543,9 @@ pub fn httpsig_vector(algorithm: Algorithm) -> HttpSigVector {
             ("Workload-Identity-Token".to_owned(), wit.clone()),
         ],
     };
-    // Exactly the set Section 3 of the http-signature draft mandates: the two
+    // Exactly the set Section 3 of the http-signature draft mandates: the three
     // derived components, plus each listed header the message actually carries.
-    let components = vec![
-        Component::Method,
-        Component::RequestTarget,
-        Component::header("content-type"),
-        Component::header("content-digest"),
-        Component::header("workload-identity-token"),
-    ];
+    let components = request_components(&request.headers);
     // No `keyid` and no `alg`: the profile forbids both.
     let params = SignatureParams {
         created: Some(IAT),
@@ -568,7 +566,15 @@ pub fn httpsig_vector(algorithm: Algorithm) -> HttpSigVector {
         headers: request.headers.clone(),
     };
     let negative = httpsig_negatives(&vector_request, &request, &components, &params, &pop_key);
-    let accepted = httpsig_accepted(&vector_request);
+    let accepted = httpsig_accepted(
+        &vector_request,
+        &request,
+        &components,
+        &params,
+        &pop_key,
+        &signed.signature_input,
+        &signed.signature,
+    );
     let response = httpsig_response(&request, &vector_request, &wit, &issuer_key, algorithm);
 
     HttpSigVector {
@@ -609,23 +615,99 @@ pub fn httpsig_vector(algorithm: Algorithm) -> HttpSigVector {
 /// The authority the boundary cases rewrite the request to.
 const REWRITTEN_AUTHORITY: &str = "attacker.example.net";
 
+/// Signs `request` twice — the workload's signature under `origin_label` and an
+/// intermediary's under `proxy_label` with `proxy_tag` — and joins the two into
+/// one two-member `Signature-Input` and `Signature`, intermediary first.
+fn with_proxy_signature(
+    request: &HttpRequest,
+    components: &[Component],
+    params: &SignatureParams,
+    pop_key: &SigningKey,
+    origin_label: &str,
+    proxy_label: &str,
+    proxy_tag: &str,
+) -> (String, String) {
+    let origin =
+        sign(request, components, params, origin_label, pop_key).expect("sign the origin hop");
+    let proxy_params = SignatureParams {
+        tag: Some(proxy_tag.to_owned()),
+        ..params.clone()
+    };
+    let proxy_key = key(pop_key.algorithm(), PROXY_SEED);
+    let proxy = sign(request, components, &proxy_params, proxy_label, &proxy_key)
+        .expect("sign the intermediary hop");
+    (
+        format!("{}, {}", proxy.signature_input, origin.signature_input),
+        format!("{}, {}", proxy.signature, origin.signature),
+    )
+}
+
 /// Altered requests that must still verify.
 ///
 /// `@authority` is not in the set Section 3 mandates, so rewriting the host
 /// leaves the signature valid. Paired with `authority-rewritten-inside-the-
 /// covered-set`, which covers it and therefore rejects the same rewrite.
-fn httpsig_accepted(signed_request: &VectorRequest) -> Vec<HttpSigAccepted> {
-    vec![HttpSigAccepted {
-        id: "authority-rewritten-outside-the-covered-set".to_owned(),
-        description:
-            "`@authority` is not covered, so a rewritten host leaves the signature valid: a \
-             signature protects the components it covers and no others"
+fn httpsig_accepted(
+    signed_request: &VectorRequest,
+    request: &HttpRequest,
+    components: &[Component],
+    params: &SignatureParams,
+    pop_key: &SigningKey,
+    signed_input: &str,
+    signed_signature: &str,
+) -> Vec<HttpSigAccepted> {
+    let (signature_input, signature) = with_proxy_signature(
+        request,
+        components,
+        params,
+        pop_key,
+        "origin",
+        "wimse",
+        "example-proxy-hop",
+    );
+    vec![
+        HttpSigAccepted {
+            id: "authority-rewritten-outside-the-covered-set".to_owned(),
+            description:
+                "`@authority` is not covered, so a rewritten host leaves the signature valid: a \
+                 signature protects the components it covers and no others"
+                    .to_owned(),
+            request: Some(VectorRequest {
+                authority: REWRITTEN_AUTHORITY.to_owned(),
+                ..signed_request.clone()
+            }),
+            signature_input: None,
+            signature: None,
+        },
+        HttpSigAccepted {
+            id: "wimse-signature-found-by-tag".to_owned(),
+            description: "an intermediary added its own signature under the label `wimse`, with \
+                          another key and another tag; the WIMSE signature is the one tagged \
+                          `wimse-workload-to-workload`, labeled `origin`, and a recipient that \
+                          picks by label verifies the wrong one"
                 .to_owned(),
-        request: Some(VectorRequest {
-            authority: REWRITTEN_AUTHORITY.to_owned(),
-            ..signed_request.clone()
-        }),
-    }]
+            request: None,
+            signature_input: Some(signature_input),
+            signature: Some(signature),
+        },
+        HttpSigAccepted {
+            id: "intermediary-signature-outside-this-profile".to_owned(),
+            description: "an intermediary's signature covers `@target-uri` and a `;sf` \
+                          header, which a WIMSE profile never needs; it is not the WIMSE \
+                          signature, so a recipient must find the tagged one without \
+                          parsing or verifying it (its bytes are zeros)"
+                .to_owned(),
+            request: None,
+            signature_input: Some(format!(
+                r#"proxy=("@target-uri" "content-type";sf);created={IAT};tag="example-proxy-hop", {signed_input}"#
+            )),
+            signature: Some(format!(
+                "proxy=:{}:, {}",
+                STANDARD.encode([0u8; 64]),
+                signed_signature
+            )),
+        },
+    ]
 }
 
 /// Builds the signed response to the golden request.
@@ -769,8 +851,7 @@ fn response_profile_negatives(
         ),
         profile_case(
             "response-missing-req-nonce",
-            "the client asked for a signed response, so the response must carry back its \
-             `wimse-req-nonce`",
+            "every signed response must carry back the request's nonce in `wimse-req-nonce`",
             ErrorCode::MissingParameter,
             SignatureParams {
                 wimse_req_nonce: None,
@@ -940,9 +1021,57 @@ fn httpsig_profile_negatives(
     ]
 }
 
+/// The cases where the fields carry two signatures and the WIMSE one cannot be
+/// found: two carrying the WIMSE tag, or none.
+fn httpsig_selection_negatives(
+    request: &HttpRequest,
+    components: &[Component],
+    params: &SignatureParams,
+    pop_key: &SigningKey,
+) -> Vec<HttpSigNegative> {
+    let two_wimse = with_proxy_signature(
+        request, components, params, pop_key, "origin", "wimse", WIMSE_TAG,
+    );
+    let other_tag = SignatureParams {
+        tag: Some("example-origin-hop".to_owned()),
+        ..params.clone()
+    };
+    let no_wimse = with_proxy_signature(
+        request,
+        components,
+        &other_tag,
+        pop_key,
+        "origin",
+        "wimse",
+        "example-proxy-hop",
+    );
+    vec![
+        HttpSigNegative {
+            signature_input: Some(two_wimse.0),
+            signature: Some(two_wimse.1),
+            ..httpsig_neg(
+                "two-wimse-signatures",
+                "a second signature, by another key, also carries the \
+                 `wimse-workload-to-workload` tag, and a recipient must reject rather than pick",
+                ErrorCode::AmbiguousWimseSignature,
+            )
+        },
+        HttpSigNegative {
+            signature_input: Some(no_wimse.0),
+            signature: Some(no_wimse.1),
+            ..httpsig_neg(
+                "no-wimse-signature",
+                "two signatures, neither tagged `wimse-workload-to-workload`: the message \
+                 carries no WIMSE signature, even though one of them is labeled `wimse`",
+                ErrorCode::NoWimseSignature,
+            )
+        },
+    ]
+}
+
 /// The inputs an httpsig verifier must reject, given the signed request.
 ///
-/// Note that `accept_label`, `max_age` and `required_components` describe how
+/// Note that `accept_audience`, `max_age` and `required_components` describe how
 /// strict the *receiver* is rather than anything about the message: the case
 /// asserts that a receiver configured that way turns the request away.
 fn httpsig_negatives(
@@ -971,6 +1100,9 @@ fn httpsig_negatives(
         .expect("the fixed request is signable over `@authority`");
 
     let mut cases = httpsig_profile_negatives(request, components, params, pop_key);
+    cases.extend(httpsig_selection_negatives(
+        request, components, params, pop_key,
+    ));
     cases.extend([
         HttpSigNegative {
             accept_audience: Some("https://other.example/inbox".to_owned()),
@@ -1024,14 +1156,6 @@ fn httpsig_negatives(
                 "too-old",
                 "the signature is still unexpired but older than the verifier's `max_age`",
                 ErrorCode::TooOld,
-            )
-        },
-        HttpSigNegative {
-            accept_label: Some("other".to_owned()),
-            ..httpsig_neg(
-                "label-mismatch",
-                "the verifier only accepts a label the request does not carry",
-                ErrorCode::LabelMismatch,
             )
         },
         HttpSigNegative {

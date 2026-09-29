@@ -23,8 +23,8 @@ conformance/
   wit/issue-es256.json             draft-ietf-wimse-workload-creds-02
   wpt/proof-eddsa.json             draft-ietf-wimse-wpt-02
   wpt/proof-es256.json             draft-ietf-wimse-wpt-02
-  httpsig/sign-eddsa.json          draft-ietf-wimse-http-signature-06
-  httpsig/sign-es256.json          draft-ietf-wimse-http-signature-06
+  httpsig/sign-eddsa.json          draft-ietf-wimse-http-signature-07
+  httpsig/sign-es256.json          draft-ietf-wimse-http-signature-07
   mtls/wic-eddsa.json              draft-ietf-wimse-mutual-tls-02
   mtls/wic-es256.json              draft-ietf-wimse-mutual-tls-02
 ```
@@ -41,7 +41,7 @@ Start at `manifest.json`. Do not glob the directories — the manifest is the li
 Every file, including the manifest, carries a `format` field:
 
 ```json
-{ "format": "wimse-conformance/v5" }
+{ "format": "wimse-conformance/v6" }
 ```
 
 **v2 replaced the raw key bytes of v1 with JWKs.** v1 recorded a public key as 32 base64url bytes, which only worked because every v1 vector was Ed25519 — the bytes do not say which algorithm they are for. A JWK carries its own `alg`, so one suite can hold vectors for both. A private key is a JWK with `d`, so a consumer can re-sign from scratch as before.
@@ -51,6 +51,8 @@ Every file, including the manifest, carries a `format` field:
 **v4 gave the responder its own identity.** The response now carries `wit` and `pop_signing_key` of its own, where through v3 it reused the requester's. A v3 reader recovers the key from the request's WIT and fails to verify the response, which is loud rather than silent — but it fails for the wrong reason, so update the reader rather than reading the failure as a bad signature.
 
 **v5 added the context tokens a WPT binds.** The wpt vectors now carry `txn_token` and `other_tokens` — the Txn-Token and the other end-user-context tokens the request presents alongside the proof — because `draft-ietf-wimse-wpt-02` binds them with the `tth` and `oth` claims. A v4 reader has nowhere to put them, so it verifies the positive case having checked neither binding and reports a pass, which is the silent kind of wrong. The same revision removed `ath`: draft-02 gives the WPT sole occupancy of the `Authorization` header field, so there is no access token beside it left to bind.
+
+**v6 follows `draft-ietf-wimse-http-signature-07`.** The request covers `@path` and `@query` in place of `@request-target`, and the response `@path;req` and `@query;req`. A recipient now finds the WIMSE signature by its `tag` and must not choose it by label, so the negative cases' `accept_label` is gone, and an `accepted` case may carry its own `signature_input` and `signature` — the case that proves a verifier looks past a `wimse`-labeled signature an intermediary added. A v5 reader would ignore those two fields and re-verify the positive case, reporting a pass for a check it never ran.
 
 Reject a file whose `format` you do not recognise rather than guessing at its shape. The version changes when the format changes, not when a vector is added.
 
@@ -107,7 +109,9 @@ Every vector has a `negative` array. Each entry records **only the fields it ove
 | `invalid_time_window` | `expires` precedes `created` |
 | `too_old` | `created` is older than the verifier's maximum age |
 | `parse_error` | A structured field could not be parsed |
-| `label_mismatch` | The signature labels disagreed, or the label was absent |
+| `label_mismatch` | `Signature` had no member for the chosen label, or several signatures and no label to choose by (plain RFC 9421 only) |
+| `no_wimse_signature` | Several signatures, none tagged `wimse-workload-to-workload` |
+| `ambiguous_wimse_signature` | More than one signature tagged `wimse-workload-to-workload` |
 | `malformed_signature` | Not valid Base64, or not 64 bytes |
 | `created_in_future` | `created` is ahead of the verifier's clock |
 | `content_digest_mismatch` | `Content-Digest` did not match the body |
@@ -170,13 +174,14 @@ Note `wit-binding-mismatch`: the substituted WIT is itself perfectly valid and s
 - Verify the full chain: verify `wit`, take the proof-of-possession key from its `cnf`, then verify the signature over `request`, requiring every component in `components` to be covered.
 - Enforce the profile in Section 3 of the http-signature draft: `created`, `expires`, `nonce` and `tag` must be present, `tag` must be `wimse-workload-to-workload`, `wimse-aud` must be present and must equal the audience the verifier answers to, and `keyid` and `alg` must be absent.
 - Check `verify_content_digest(Content-Digest header, body)`.
-- Run every negative case. `required_components`, `accept_label`, `accept_audience` and `max_age` are verifier configuration, not message content: they describe how strict the receiver is, and the case asserts that a receiver configured that way rejects the message.
+- Find the WIMSE signature by its `tag`, never by its label, and without needing to parse any other member: `intermediary-signature-outside-this-profile` carries a hop that covers `@target-uri` and a `;sf` header, with a zero signature, and must still verify. A lone signature is judged as the WIMSE one, so a wrong or missing `tag` on it reports `wrong_tag` or `missing_parameter`; among several, none tagged is `no_wimse_signature` and two tagged is `ambiguous_wimse_signature`.
+- Run every negative case. `required_components`, `accept_audience` and `max_age` are verifier configuration, not message content: they describe how strict the receiver is, and the case asserts that a receiver configured that way rejects the message.
 - Run every `accepted` case the same way, except that verification MUST succeed. Each entry overrides fields of the positive case exactly as a negative one does.
 - Run the `response` half. It carries its own `wit` and `pop_signing_key`, and the covered components include `@status` and the `;req` ones, which resolve from the request in the same file. Verify it against the key in **its own** WIT, check `wimse-req-nonce` equals the `nonce` the request sent, and run its negative cases.
 
 The responder is a different workload from the caller — a different identifier, a different WIT, a different key. `verified-with-the-requester-key` substitutes the request's WIT and must fail: a client that carries request-side identity state into the response check passes every other assertion here.
 
-The response profile is not the request profile, and the `response-` cases enforce the difference: `wimse-aud` names the service a request is for and is **forbidden** coming back, while `wimse-req-nonce` is required whenever the client asked for a signed response. The rest — `created`, `expires`, `nonce`, `tag`, and the ban on `keyid` and `alg` — match the request side. Each case is a genuinely valid signature, so an implementation that verifies responses without applying the profile accepts all eight.
+The response profile is not the request profile, and the `response-` cases enforce the difference: `wimse-aud` names the service a request is for and is **forbidden** coming back, while `wimse-req-nonce` is required on every signed response. The rest — `created`, `expires`, `nonce`, `tag`, and the ban on `keyid` and `alg` — match the request side. Each case is a genuinely valid signature, so an implementation that verifies responses without applying the profile accepts all eight.
 
 The `authority` pair answers a question that has come up twice on the WIMSE list. `@authority` is not in the set Section 3 mandates, so `authority-rewritten-outside-the-covered-set` rewrites the host and must **still verify** — `wimse-aud` names the service a request is for, not where it was routed. Its pair carries a signature that does cover `@authority`, and the same rewrite then fails. Cover it if you need the host bound.
 

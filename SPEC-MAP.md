@@ -12,11 +12,11 @@ revision**. Bumping a pin is a deliberate, reviewed change.
 | `draft-ietf-wimse-identifier` | -03 | `wimsey-identifier` | URI scheme; `spiffe` and `wimse` |
 | `draft-ietf-wimse-workload-creds` | -02 | `wimsey-wit` | Defines WIT and WIC |
 | `draft-ietf-wimse-wpt` | -02 | `wimsey-wpt` | Workload Proof Token (DPoP-style PoP) |
-| `draft-ietf-wimse-http-signature` | -06 | `wimsey-httpsig` | Profile of RFC 9421 |
+| `draft-ietf-wimse-http-signature` | -07 | `wimsey-httpsig` | Profile of RFC 9421 |
 | `draft-ietf-wimse-mutual-tls` | -02 | `wimsey-mtls` | mTLS binding, client cert = WIC |
-| `draft-ietf-wimse-workload-identity-practices` | -06 | — | Informational; with the IESG |
+| `draft-ietf-wimse-workload-identity-practices` | -07 | — | Informational; with the IESG |
 
-Every pin above is the current *published* revision as of 2026-09-08.
+Every pin above is the current *published* revision as of 2026-09-29.
 
 ## Drafts in progress upstream
 
@@ -29,10 +29,16 @@ first entry of its Document History section.
 | `identifier` | -03 | -03 | — |
 | `workload-creds` | -02 | -03 | Adds a "Validating the WIT" procedure for recipients; `wimsey-wit` already satisfies every item except trust-anchor selection, which is a divergence below. |
 | `wpt` | -02 | -03 | Moves the key-management section to `workload-creds`; no normative change for `wimsey-wpt`. |
-| `http-signature` | -06 | -07 | Editorial, plus a reference to the `workload-creds` WIT validation procedure. |
+| `http-signature` | -07 | -07 | — |
 | `mutual-tls` | -02 | -03 | Editorial (capitalization of defined terms). |
 
-Checked 2026-09-08, and re-checked by `scripts/check-draft-revisions.sh`.
+Checked 2026-09-29, and re-checked by `scripts/check-draft-revisions.sh`.
+
+The editors'-copy column is a forecast, not a diff. It described
+`http-signature` -07 as editorial on 2026-09-08; the WG Last Call then landed
+normative changes in the same revision — `@path`/`@query` in place of
+`@request-target`, selecting the WIMSE signature by `tag`, and `wimse-req-nonce`
+on every signed response. Diff the published text before bumping a pin.
 
 ## Known divergences
 
@@ -44,6 +50,9 @@ the pinned drafts.
 | Trust-domain match on the TLS peer certificate | `mutual-tls` §4 | Left to the caller: `wimsey-mtls::verify` returns the identifier and the caller compares it, since chain building and rustls wiring are out of scope. |
 | Chain building, `basicConstraints`, `keyUsage`, name constraints | `mutual-tls` §4 | Not enforced. `verify` is a single-issuer model that checks the directly provided CA only; deployments needing full PKIX path validation should use a dedicated X.509 verifier. |
 | Selecting the trust anchor from the `sub` trust domain | `workload-creds` §3 | Left to the caller: `wimsey_wit::verify` takes the issuer's verifying key as an argument, so mapping the trust domain of `sub` to its configured anchors — and picking the key within them, by `kid` where one is present — is the deployment's. This also means anchor material can never be resolved from the token's own `iss`, which the draft forbids. |
+| Local policy on the peer's algorithm per trust domain | `http-signature` §3.1 | Partly left to the caller: `VerifyConfig::accepted_algorithms` rejects an algorithm outside the configured set, but choosing that set by the peer's trust domain is the deployment's. |
+| Rejecting an unsigned response the client required (`wimse-sign-response`) | `http-signature` §3.5 | Left to the caller: with no signature there is nothing to hand `verify`, so the client that set the parameter has to treat a missing `Signature` as a failure. |
+| Replay cache for `nonce` | `http-signature` §3 | Left to the caller: `verify` checks that a `nonce` is present but does not remember the ones it has seen. |
 | The `WPT` HTTP authentication scheme and its `WWW-Authenticate` challenge | `wpt` §2, §2.1 | Not implemented. `wimsey-wpt` is the token, not its transport: it issues and verifies the proof, and placing it in `Authorization: WPT <proof>` — and answering a rejection with `401` and `WWW-Authenticate: WPT` — is the caller's. The `wpt` CLI subcommand prints the bare proof for the same reason. |
 
 ## Related specs

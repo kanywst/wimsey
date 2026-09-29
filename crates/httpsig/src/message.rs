@@ -24,14 +24,15 @@ pub enum Component {
     Query,
     /// The request target (`@request-target`): the absolute path followed by
     /// `?` and the query when one is present (RFC 9421 Section 2.2.5,
-    /// origin-form). The WIMSE profile requires this component to be signed.
+    /// origin-form). RFC 9421 does not recommend it outside HTTP/1.1, and the
+    /// WIMSE profile covers `@path` and `@query` instead.
     RequestTarget,
     /// The response status code (`@status`), RFC 9421 Section 2.2.9. Only
     /// meaningful on a response.
     Status,
     /// A component taken from the *request* a response answers, written with
     /// the `;req` parameter (RFC 9421 Section 2.4) — for example
-    /// `"@method";req`. The WIMSE profile requires two of these on a signed
+    /// `"@method";req`. The WIMSE profile requires three of these on a signed
     /// response, so that the response cannot be lifted onto a different
     /// request.
     Req(Box<Component>),

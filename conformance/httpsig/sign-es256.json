@@ -1,8 +1,8 @@
 {
-  "format": "wimse-conformance/v5",
+  "format": "wimse-conformance/v6",
   "suite": "httpsig",
   "id": "sign-es256",
-  "spec": "draft-ietf-wimse-http-signature-06",
+  "spec": "draft-ietf-wimse-http-signature-07",
   "description": "WIMSE HTTP Message Signature (RFC 9421, ES256) carrying a WIT, plus the inputs a verifier must reject",
   "pop_signing_key": {
     "alg": "ES256",
@@ -23,7 +23,8 @@
   "label": "wimse",
   "components": [
     "\"@method\"",
-    "\"@request-target\"",
+    "\"@path\"",
+    "\"@query\"",
     "\"content-type\"",
     "\"content-digest\"",
     "\"workload-identity-token\""
@@ -58,64 +59,78 @@
   },
   "body": "{\"amount\":100}",
   "wit": "eyJ0eXAiOiJ3aXQrand0IiwiYWxnIjoiRVMyNTYiLCJraWQiOiJpc3N1ZXIta2V5LTEifQ.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvYXBpIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDM2MDAsImp0aSI6ImExYjJjMyIsImNuZiI6eyJqd2siOnsiYWxnIjoiRVMyNTYiLCJrdHkiOiJFQyIsImNydiI6IlAtMjU2IiwieCI6ImNUWDZUOWs2Q2R6cGk3OW9HMHY4OVE1OERXTlU1aXI3Q184cU5DbGhlR1UiLCJ5IjoiN1V3ZkF0MjVBajdsYWxWLVVWMXFuY1pzRWZJZ2xnM2xsRE5OOVloM1p5USJ9fX0.5hgKPe0utuP-jgVBlaXzEfWSWyU_cCmKUVGEO6q159Hs-cH-XogDwFVyl7qgKXf6uFTEmPtO2nQrY3G1jxyAiw",
-  "signature_input": "wimse=(\"@method\" \"@request-target\" \"content-type\" \"content-digest\" \"workload-identity-token\");created=1700000000;expires=1700000300;nonce=\"abcd1111\";tag=\"wimse-workload-to-workload\";wimse-aud=\"https://service.example/transfer\";wimse-sign-response",
-  "signature": "wimse=:E5i839yqY59p+gF2FFmHmboTotNRzLbj0Ju5DYfoEdiB74fHrkUhMt2T8iBdfEBgWipvS2AN0LB4zbsIbjN5Sg==:",
+  "signature_input": "wimse=(\"@method\" \"@path\" \"@query\" \"content-type\" \"content-digest\" \"workload-identity-token\");created=1700000000;expires=1700000300;nonce=\"abcd1111\";tag=\"wimse-workload-to-workload\";wimse-aud=\"https://service.example/transfer\";wimse-sign-response",
+  "signature": "wimse=:MXR0J3qrWVwsSofw4SGr1sTL8npUxEYXMkzh5/ncN7ButxkTq5ScaaQmqkkaraI49o/0AcvTiCzzqfT9LbEh+A==:",
   "negative": [
     {
       "id": "forbidden-alg-parameter",
       "description": "the signature carries the `alg` parameter, which the profile forbids",
       "expect": "forbidden_parameter",
-      "signature_input": "wimse=(\"@method\" \"@request-target\" \"content-type\" \"content-digest\" \"workload-identity-token\");created=1700000000;expires=1700000300;alg=\"ed25519\";nonce=\"abcd1111\";tag=\"wimse-workload-to-workload\";wimse-aud=\"https://service.example/transfer\";wimse-sign-response",
-      "signature": "wimse=:3Wa0yT1qpFnSF+7sT7X0PnHDDRQ5IDcqzLVti1elrgNEbvXnfTwRXtu6wMePK8INaj4ravs4vwgnHdM8a/bniA==:"
+      "signature_input": "wimse=(\"@method\" \"@path\" \"@query\" \"content-type\" \"content-digest\" \"workload-identity-token\");created=1700000000;expires=1700000300;alg=\"ed25519\";nonce=\"abcd1111\";tag=\"wimse-workload-to-workload\";wimse-aud=\"https://service.example/transfer\";wimse-sign-response",
+      "signature": "wimse=:Xcp1Fuxzh6eGnXR3IbPEoC7Z0BPGz/OtHmTbgVNCfylAJP7WZZcHjHY/SIMu+F+0w7j3OSsog+HJ/wHM56e4rg==:"
     },
     {
       "id": "forbidden-keyid-parameter",
       "description": "the signature carries the `keyid` parameter, which the profile forbids",
       "expect": "forbidden_parameter",
-      "signature_input": "wimse=(\"@method\" \"@request-target\" \"content-type\" \"content-digest\" \"workload-identity-token\");created=1700000000;expires=1700000300;keyid=\"issuer-key-1\";nonce=\"abcd1111\";tag=\"wimse-workload-to-workload\";wimse-aud=\"https://service.example/transfer\";wimse-sign-response",
-      "signature": "wimse=:szLoYUsP9z1M5KYJHPEQQKO7WaJhxaxjysE2XSWXhYpihF+InA8EzcP4WkFoUhSiqHtzsDrfhtQHBmGK+B15sw==:"
+      "signature_input": "wimse=(\"@method\" \"@path\" \"@query\" \"content-type\" \"content-digest\" \"workload-identity-token\");created=1700000000;expires=1700000300;keyid=\"issuer-key-1\";nonce=\"abcd1111\";tag=\"wimse-workload-to-workload\";wimse-aud=\"https://service.example/transfer\";wimse-sign-response",
+      "signature": "wimse=:6QzAMYcTVrEjTQr1vKIlhqgDlg5igW9bl1fhgZyUiQvIfBJU8cS7kRH+6fN7A0RKpBHpchAc7ZhJlU6zp11GWw==:"
     },
     {
       "id": "missing-nonce",
       "description": "the signature omits the mandatory `nonce` parameter",
       "expect": "missing_parameter",
-      "signature_input": "wimse=(\"@method\" \"@request-target\" \"content-type\" \"content-digest\" \"workload-identity-token\");created=1700000000;expires=1700000300;tag=\"wimse-workload-to-workload\";wimse-aud=\"https://service.example/transfer\";wimse-sign-response",
-      "signature": "wimse=:UXZJIBsWNvryz1YoVEJjh39psf04EgXMbpFiqu3/afBj6iCFBbrO1qo5HNz+dNUi7KvoHUT1BBSNGCu79xjFjw==:"
+      "signature_input": "wimse=(\"@method\" \"@path\" \"@query\" \"content-type\" \"content-digest\" \"workload-identity-token\");created=1700000000;expires=1700000300;tag=\"wimse-workload-to-workload\";wimse-aud=\"https://service.example/transfer\";wimse-sign-response",
+      "signature": "wimse=:Obzspb/MFHf/mzZQBBzEekK2a86gTczzQF7ixCc6DSVMPwUO/mE4O4J8UScObH2C9RE1/LuUhJ+FQy/C6Vff7A==:"
     },
     {
       "id": "missing-created",
       "description": "the signature omits the mandatory `created` parameter",
       "expect": "missing_parameter",
-      "signature_input": "wimse=(\"@method\" \"@request-target\" \"content-type\" \"content-digest\" \"workload-identity-token\");expires=1700000300;nonce=\"abcd1111\";tag=\"wimse-workload-to-workload\";wimse-aud=\"https://service.example/transfer\";wimse-sign-response",
-      "signature": "wimse=:YAUMnXj1mh2YLcV/JsyFa+VixUWaJcXcrea6LE1DM1ALQ/ALPUuh/X45hKlPPiW7Mb9yRWcci85yaawe1bIEug==:"
+      "signature_input": "wimse=(\"@method\" \"@path\" \"@query\" \"content-type\" \"content-digest\" \"workload-identity-token\");expires=1700000300;nonce=\"abcd1111\";tag=\"wimse-workload-to-workload\";wimse-aud=\"https://service.example/transfer\";wimse-sign-response",
+      "signature": "wimse=:s4ZuVGiirPo0110Hr0xD4QHnmNKntFS4fq6IAjYm7/lC4E62PBGuxaPk3wgGlaoeik+afM0ItC0fPhF6uUwCiw==:"
     },
     {
       "id": "missing-expires",
       "description": "the signature omits the mandatory `expires` parameter",
       "expect": "missing_parameter",
-      "signature_input": "wimse=(\"@method\" \"@request-target\" \"content-type\" \"content-digest\" \"workload-identity-token\");created=1700000000;nonce=\"abcd1111\";tag=\"wimse-workload-to-workload\";wimse-aud=\"https://service.example/transfer\";wimse-sign-response",
-      "signature": "wimse=:4SWDVWaxUYp4iw4yl+h1hAhBV1pNHlynZKAXXrJteL7SpGZDaPJYl9egxgJ927oEioWR8B6GEczbD8ER2U3K5w==:"
+      "signature_input": "wimse=(\"@method\" \"@path\" \"@query\" \"content-type\" \"content-digest\" \"workload-identity-token\");created=1700000000;nonce=\"abcd1111\";tag=\"wimse-workload-to-workload\";wimse-aud=\"https://service.example/transfer\";wimse-sign-response",
+      "signature": "wimse=:mVoT3fzsEVEq95mrX3mPIsUWoaESSR6hsdrseR2XAKo7inXIOsbw1Od7I7yLOZeuYeOrmzp3QVJP/XSEdFvTPg==:"
     },
     {
       "id": "missing-wimse-aud",
       "description": "the request signature omits the mandatory `wimse-aud` parameter",
       "expect": "missing_parameter",
-      "signature_input": "wimse=(\"@method\" \"@request-target\" \"content-type\" \"content-digest\" \"workload-identity-token\");created=1700000000;expires=1700000300;nonce=\"abcd1111\";tag=\"wimse-workload-to-workload\";wimse-sign-response",
-      "signature": "wimse=:2Cg5CyP6n7nHrwYFYGWtJVSHkAykGEEqrMRu16Os1Al25jEpEXnZ9o/5aMzjAexKgpVisly8kl2hcskMk63MXw==:"
+      "signature_input": "wimse=(\"@method\" \"@path\" \"@query\" \"content-type\" \"content-digest\" \"workload-identity-token\");created=1700000000;expires=1700000300;nonce=\"abcd1111\";tag=\"wimse-workload-to-workload\";wimse-sign-response",
+      "signature": "wimse=:VOKODgKb+HP7/msJVHNJUEuFyEtKXM9ZYI3Fy/MuWD/rIsoKf539n8G6+jYvohAxqPXFp7yF7KOzsPfIpQFvEQ==:"
     },
     {
       "id": "wrong-tag",
       "description": "the signature's `tag` is not `wimse-workload-to-workload`",
       "expect": "wrong_tag",
-      "signature_input": "wimse=(\"@method\" \"@request-target\" \"content-type\" \"content-digest\" \"workload-identity-token\");created=1700000000;expires=1700000300;nonce=\"abcd1111\";tag=\"some-other-protocol\";wimse-aud=\"https://service.example/transfer\";wimse-sign-response",
-      "signature": "wimse=:6G7wvweqVAi44AxX3+Z2Y9fvptFh44pEjmEYzCLtXneNU5qljON5r/1nE8Dn1emZRQh5HPPILfpb9YAhqQiSEw==:"
+      "signature_input": "wimse=(\"@method\" \"@path\" \"@query\" \"content-type\" \"content-digest\" \"workload-identity-token\");created=1700000000;expires=1700000300;nonce=\"abcd1111\";tag=\"some-other-protocol\";wimse-aud=\"https://service.example/transfer\";wimse-sign-response",
+      "signature": "wimse=:j6bepEnCzmXymBmleDMpBFzlmetlMFOqcUVNtvCn0tFc6KUinleqkSu9JNCHXeJBjNVirZFZu09NxbfTZqlaUg==:"
     },
     {
       "id": "missing-tag",
       "description": "the signature omits `tag` altogether, which is a different rule from carrying the wrong one",
       "expect": "missing_parameter",
-      "signature_input": "wimse=(\"@method\" \"@request-target\" \"content-type\" \"content-digest\" \"workload-identity-token\");created=1700000000;expires=1700000300;nonce=\"abcd1111\";wimse-aud=\"https://service.example/transfer\";wimse-sign-response",
-      "signature": "wimse=:qgtov/PODO/PDwN4YtF8353YuUTQ1biwVWvznETCNyl7BBNsJGPbnuud9ZRw+JolzlXUG6pay1YJvXySspTtqA==:"
+      "signature_input": "wimse=(\"@method\" \"@path\" \"@query\" \"content-type\" \"content-digest\" \"workload-identity-token\");created=1700000000;expires=1700000300;nonce=\"abcd1111\";wimse-aud=\"https://service.example/transfer\";wimse-sign-response",
+      "signature": "wimse=:vDcwc8ANTcejsg+4tAVM52vn/sT8YKl0Rhb8WGgl7Ghn1crZGOa4n2AZMMKKv0KDTxH6bE2aanBYt0yeRErxXA==:"
+    },
+    {
+      "id": "two-wimse-signatures",
+      "description": "a second signature, by another key, also carries the `wimse-workload-to-workload` tag, and a recipient must reject rather than pick",
+      "expect": "ambiguous_wimse_signature",
+      "signature_input": "wimse=(\"@method\" \"@path\" \"@query\" \"content-type\" \"content-digest\" \"workload-identity-token\");created=1700000000;expires=1700000300;nonce=\"abcd1111\";tag=\"wimse-workload-to-workload\";wimse-aud=\"https://service.example/transfer\";wimse-sign-response, origin=(\"@method\" \"@path\" \"@query\" \"content-type\" \"content-digest\" \"workload-identity-token\");created=1700000000;expires=1700000300;nonce=\"abcd1111\";tag=\"wimse-workload-to-workload\";wimse-aud=\"https://service.example/transfer\";wimse-sign-response",
+      "signature": "wimse=:oz+5N4Mul47Ed0JlMBg4OPw8yr0K7jBeYr7O+xx42WukQUODcWIpsjoORbE0uqHTqkQB2TZx6zGZ8FdxsTzoFA==:, origin=:MXR0J3qrWVwsSofw4SGr1sTL8npUxEYXMkzh5/ncN7ButxkTq5ScaaQmqkkaraI49o/0AcvTiCzzqfT9LbEh+A==:"
+    },
+    {
+      "id": "no-wimse-signature",
+      "description": "two signatures, neither tagged `wimse-workload-to-workload`: the message carries no WIMSE signature, even though one of them is labeled `wimse`",
+      "expect": "no_wimse_signature",
+      "signature_input": "wimse=(\"@method\" \"@path\" \"@query\" \"content-type\" \"content-digest\" \"workload-identity-token\");created=1700000000;expires=1700000300;nonce=\"abcd1111\";tag=\"example-proxy-hop\";wimse-aud=\"https://service.example/transfer\";wimse-sign-response, origin=(\"@method\" \"@path\" \"@query\" \"content-type\" \"content-digest\" \"workload-identity-token\");created=1700000000;expires=1700000300;nonce=\"abcd1111\";tag=\"example-origin-hop\";wimse-aud=\"https://service.example/transfer\";wimse-sign-response",
+      "signature": "wimse=:gbfi07FkzUc3biP65PT+9rv+nFkCddRpt7T9HT3/PFksENCPxGo2Ljj1QnXumPi9LOck60OmJZ4jJbnGtGYQ5w==:, origin=:MBp5c8ucVkYJpGoGlpLGcChEbJaTObdFGic1m6E6oBbQOHrmUFnHOd9OC/QpCuivHgz9k4J/wPPnwbwWvAc1Dw==:"
     },
     {
       "id": "audience-mismatch",
@@ -178,8 +193,8 @@
           ]
         ]
       },
-      "signature_input": "wimse=(\"@method\" \"@request-target\" \"content-type\" \"content-digest\" \"workload-identity-token\" \"@authority\");created=1700000000;expires=1700000300;nonce=\"abcd1111\";tag=\"wimse-workload-to-workload\";wimse-aud=\"https://service.example/transfer\";wimse-sign-response",
-      "signature": "wimse=:ti6V+DuBZCyZQXqdvCSChh1l61qLVyu4liFfr7aGdgyypuL0nsShqC3SSe6xBiNc8FiNzwyNhErQU/MrcCdQEQ==:"
+      "signature_input": "wimse=(\"@method\" \"@path\" \"@query\" \"content-type\" \"content-digest\" \"workload-identity-token\" \"@authority\");created=1700000000;expires=1700000300;nonce=\"abcd1111\";tag=\"wimse-workload-to-workload\";wimse-aud=\"https://service.example/transfer\";wimse-sign-response",
+      "signature": "wimse=:xhOwXvMgKa/fcPDuwtudgVP6MkA2jmdMu0e2c1KNRV6GMHTVQoStkk0u78Llzf5/WLQyO++crcwhccSqriEhgA==:"
     },
     {
       "id": "created-in-future",
@@ -193,12 +208,6 @@
       "expect": "too_old",
       "verify_now": 1700000120,
       "max_age": 30
-    },
-    {
-      "id": "label-mismatch",
-      "description": "the verifier only accepts a label the request does not carry",
-      "expect": "label_mismatch",
-      "accept_label": "other"
     },
     {
       "id": "missing-required-component",
@@ -233,6 +242,18 @@
           ]
         ]
       }
+    },
+    {
+      "id": "wimse-signature-found-by-tag",
+      "description": "an intermediary added its own signature under the label `wimse`, with another key and another tag; the WIMSE signature is the one tagged `wimse-workload-to-workload`, labeled `origin`, and a recipient that picks by label verifies the wrong one",
+      "signature_input": "wimse=(\"@method\" \"@path\" \"@query\" \"content-type\" \"content-digest\" \"workload-identity-token\");created=1700000000;expires=1700000300;nonce=\"abcd1111\";tag=\"example-proxy-hop\";wimse-aud=\"https://service.example/transfer\";wimse-sign-response, origin=(\"@method\" \"@path\" \"@query\" \"content-type\" \"content-digest\" \"workload-identity-token\");created=1700000000;expires=1700000300;nonce=\"abcd1111\";tag=\"wimse-workload-to-workload\";wimse-aud=\"https://service.example/transfer\";wimse-sign-response",
+      "signature": "wimse=:gbfi07FkzUc3biP65PT+9rv+nFkCddRpt7T9HT3/PFksENCPxGo2Ljj1QnXumPi9LOck60OmJZ4jJbnGtGYQ5w==:, origin=:MXR0J3qrWVwsSofw4SGr1sTL8npUxEYXMkzh5/ncN7ButxkTq5ScaaQmqkkaraI49o/0AcvTiCzzqfT9LbEh+A==:"
+    },
+    {
+      "id": "intermediary-signature-outside-this-profile",
+      "description": "an intermediary's signature covers `@target-uri` and a `;sf` header, which a WIMSE profile never needs; it is not the WIMSE signature, so a recipient must find the tagged one without parsing or verifying it (its bytes are zeros)",
+      "signature_input": "proxy=(\"@target-uri\" \"content-type\";sf);created=1700000000;tag=\"example-proxy-hop\", wimse=(\"@method\" \"@path\" \"@query\" \"content-type\" \"content-digest\" \"workload-identity-token\");created=1700000000;expires=1700000300;nonce=\"abcd1111\";tag=\"wimse-workload-to-workload\";wimse-aud=\"https://service.example/transfer\";wimse-sign-response",
+      "signature": "proxy=:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==:, wimse=:MXR0J3qrWVwsSofw4SGr1sTL8npUxEYXMkzh5/ncN7ButxkTq5ScaaQmqkkaraI49o/0AcvTiCzzqfT9LbEh+A==:"
     }
   ],
   "response": {
@@ -264,7 +285,8 @@
     "components": [
       "\"@status\"",
       "\"@method\";req",
-      "\"@request-target\";req",
+      "\"@path\";req",
+      "\"@query\";req",
       "\"content-type\"",
       "\"content-digest\"",
       "\"workload-identity-token\""
@@ -277,72 +299,72 @@
       "wimse_aud": "",
       "wimse_req_nonce": "abcd1111"
     },
-    "signature_input": "wimse=(\"@status\" \"@method\";req \"@request-target\";req \"content-type\" \"content-digest\" \"workload-identity-token\");created=1700000000;expires=1700000300;nonce=\"abcd2222\";tag=\"wimse-workload-to-workload\";wimse-req-nonce=\"abcd1111\"",
-    "signature": "wimse=:6Az1mZeMvDlT+oc4OapL3Oq+bKZzLF8bbninxsM0d5kiI4xtJ0hj8OTFwtv0jqSbAnQVxz+rCUU+ZdrZXZZN0g==:",
+    "signature_input": "wimse=(\"@status\" \"@method\";req \"@path\";req \"@query\";req \"content-type\" \"content-digest\" \"workload-identity-token\");created=1700000000;expires=1700000300;nonce=\"abcd2222\";tag=\"wimse-workload-to-workload\";wimse-req-nonce=\"abcd1111\"",
+    "signature": "wimse=:qiYg15IvwUmywqP4tN6ImwJibxqfKFXpbp72bm4PaGaENOR5Z1GNKH4NwMKQVWLTFr66a1+DdkBDiBMAbnFRzw==:",
     "expected_req_nonce": "abcd1111",
     "negative": [
       {
         "id": "response-carries-wimse-aud",
         "description": "the response signature carries `wimse-aud`, which names the service a *request* is for and is forbidden coming back",
         "expect": "forbidden_parameter",
-        "signature_input": "wimse=(\"@status\" \"@method\";req \"@request-target\";req \"content-type\" \"content-digest\" \"workload-identity-token\");created=1700000000;expires=1700000300;nonce=\"abcd2222\";tag=\"wimse-workload-to-workload\";wimse-aud=\"https://service.example/transfer\";wimse-req-nonce=\"abcd1111\"",
-        "signature": "wimse=:sMYSKa7U1me5UGJffAo79KeHXG19xM1o/ANd9es3QxgEeEgxmlx/9vXJz3CDEilXI6IIX55OUCdyZYjLBAWqQA==:"
+        "signature_input": "wimse=(\"@status\" \"@method\";req \"@path\";req \"@query\";req \"content-type\" \"content-digest\" \"workload-identity-token\");created=1700000000;expires=1700000300;nonce=\"abcd2222\";tag=\"wimse-workload-to-workload\";wimse-aud=\"https://service.example/transfer\";wimse-req-nonce=\"abcd1111\"",
+        "signature": "wimse=:fqe7gOmOnCWXLNl52YjSmI3/mypK9mGBrE2DySQGWqaO5Ubt022xbq7mJVTm7KgjMahGaM36YFfh6ogmR73H/A==:"
       },
       {
         "id": "response-missing-req-nonce",
-        "description": "the client asked for a signed response, so the response must carry back its `wimse-req-nonce`",
+        "description": "every signed response must carry back the request's nonce in `wimse-req-nonce`",
         "expect": "missing_parameter",
-        "signature_input": "wimse=(\"@status\" \"@method\";req \"@request-target\";req \"content-type\" \"content-digest\" \"workload-identity-token\");created=1700000000;expires=1700000300;nonce=\"abcd2222\";tag=\"wimse-workload-to-workload\"",
-        "signature": "wimse=:63VlDY2NE8LNvxIJ+Alt17WLTOmVhBmu2mTDaWzNYX5jRbMn1aW4rqcz8Y1xQdrotr3eYiXUndi/kOLd7rmS0A==:"
+        "signature_input": "wimse=(\"@status\" \"@method\";req \"@path\";req \"@query\";req \"content-type\" \"content-digest\" \"workload-identity-token\");created=1700000000;expires=1700000300;nonce=\"abcd2222\";tag=\"wimse-workload-to-workload\"",
+        "signature": "wimse=:mhogih3J1MbB9xevcf4KGrv2NlJtk4eH6HDS4wiL/l8qSB6VTu+VYKP0LjE6pc0XAe9IBd+5qYfGP60Sb90zXQ==:"
       },
       {
         "id": "response-forbidden-alg-parameter",
         "description": "the response signature carries the `alg` parameter, which the profile forbids",
         "expect": "forbidden_parameter",
-        "signature_input": "wimse=(\"@status\" \"@method\";req \"@request-target\";req \"content-type\" \"content-digest\" \"workload-identity-token\");created=1700000000;expires=1700000300;alg=\"ed25519\";nonce=\"abcd2222\";tag=\"wimse-workload-to-workload\";wimse-req-nonce=\"abcd1111\"",
-        "signature": "wimse=:taQD/33UaH8XbNm4o+v6lAXmldDZB43L5FeoZxisDtzGaQvY+DZf5ngVQVxHoRjJsgg6HKXUiYoLr+/Y34Zshw==:"
+        "signature_input": "wimse=(\"@status\" \"@method\";req \"@path\";req \"@query\";req \"content-type\" \"content-digest\" \"workload-identity-token\");created=1700000000;expires=1700000300;alg=\"ed25519\";nonce=\"abcd2222\";tag=\"wimse-workload-to-workload\";wimse-req-nonce=\"abcd1111\"",
+        "signature": "wimse=:otpTknQ4T1p1kiIeSFPq0GgL9vqYmMNh6xspm0PnFrjt5IU9PQ5X5uUqOYL3LmTWe0fKkiHkZsCweUtv3fLOJQ==:"
       },
       {
         "id": "response-forbidden-keyid-parameter",
         "description": "the response signature carries the `keyid` parameter, which the profile forbids",
         "expect": "forbidden_parameter",
-        "signature_input": "wimse=(\"@status\" \"@method\";req \"@request-target\";req \"content-type\" \"content-digest\" \"workload-identity-token\");created=1700000000;expires=1700000300;keyid=\"issuer-key-1\";nonce=\"abcd2222\";tag=\"wimse-workload-to-workload\";wimse-req-nonce=\"abcd1111\"",
-        "signature": "wimse=:JUyCwIgMC6qng1AYhFSQK+KFpjGDpyd/G/0i/od0FbZZdZ3FrT0daTwHc8k45P5xkN+WvtYt6H0fKvW0zYgaSQ==:"
+        "signature_input": "wimse=(\"@status\" \"@method\";req \"@path\";req \"@query\";req \"content-type\" \"content-digest\" \"workload-identity-token\");created=1700000000;expires=1700000300;keyid=\"issuer-key-1\";nonce=\"abcd2222\";tag=\"wimse-workload-to-workload\";wimse-req-nonce=\"abcd1111\"",
+        "signature": "wimse=:HSQmkl6lpVmk5uhAdh64plcqR5bA1IEjlH7/zQo0b+q3yQ06Rx41v3qzTU+6l06D8+ojN7QJti0vJSjUROmL7A==:"
       },
       {
         "id": "response-missing-created",
         "description": "the response signature omits the mandatory `created` parameter",
         "expect": "missing_parameter",
-        "signature_input": "wimse=(\"@status\" \"@method\";req \"@request-target\";req \"content-type\" \"content-digest\" \"workload-identity-token\");expires=1700000300;nonce=\"abcd2222\";tag=\"wimse-workload-to-workload\";wimse-req-nonce=\"abcd1111\"",
-        "signature": "wimse=:sdALIkEPhdhlsZbA+B9GsOHjNcEgYrtHzzaclET/6LpGLVERTjjtKwO78Xlpa+JEIucvWCSNwi1D615qANRY+A==:"
+        "signature_input": "wimse=(\"@status\" \"@method\";req \"@path\";req \"@query\";req \"content-type\" \"content-digest\" \"workload-identity-token\");expires=1700000300;nonce=\"abcd2222\";tag=\"wimse-workload-to-workload\";wimse-req-nonce=\"abcd1111\"",
+        "signature": "wimse=:p81LGeFf7F02L8HXZ3AN5A3S69+CBFK86qHAr1t7ynvv7Lus69dVc2i78EAWEvHyN/n8BveU5NTxn1Dr+OQU/A==:"
       },
       {
         "id": "response-missing-expires",
         "description": "the response signature omits the mandatory `expires` parameter",
         "expect": "missing_parameter",
-        "signature_input": "wimse=(\"@status\" \"@method\";req \"@request-target\";req \"content-type\" \"content-digest\" \"workload-identity-token\");created=1700000000;nonce=\"abcd2222\";tag=\"wimse-workload-to-workload\";wimse-req-nonce=\"abcd1111\"",
-        "signature": "wimse=:HJ9EhgoajlEU7UPLBqmFDKbYUoAQgPEUjgBU4MOeix3+pxjNGKo32SzKOt+h89u33TLgUDoQD1eghn0kFdqJgQ==:"
+        "signature_input": "wimse=(\"@status\" \"@method\";req \"@path\";req \"@query\";req \"content-type\" \"content-digest\" \"workload-identity-token\");created=1700000000;nonce=\"abcd2222\";tag=\"wimse-workload-to-workload\";wimse-req-nonce=\"abcd1111\"",
+        "signature": "wimse=:jfEj+0WH+UvC1arl2M7XiE7YL3rfLuzoEO47u9GE36tEHpbOcS8Rd37nlJC6xwhroBqkK0ZpmQUq6l17iqj+Ig==:"
       },
       {
         "id": "response-missing-nonce",
         "description": "the response signature omits the mandatory `nonce` parameter",
         "expect": "missing_parameter",
-        "signature_input": "wimse=(\"@status\" \"@method\";req \"@request-target\";req \"content-type\" \"content-digest\" \"workload-identity-token\");created=1700000000;expires=1700000300;tag=\"wimse-workload-to-workload\";wimse-req-nonce=\"abcd1111\"",
-        "signature": "wimse=:wGM7CDIMYTbhCYLfU8j/K3GkUXoP5J92lKvEsI0SQUPqAIuLc/sYx/9xeGm8bd19ZsLfj86oFjtR9g6ea64NGg==:"
+        "signature_input": "wimse=(\"@status\" \"@method\";req \"@path\";req \"@query\";req \"content-type\" \"content-digest\" \"workload-identity-token\");created=1700000000;expires=1700000300;tag=\"wimse-workload-to-workload\";wimse-req-nonce=\"abcd1111\"",
+        "signature": "wimse=:5xuTGZpfelIMjv/fHiqMG+b1zCQ/CBwEhluAduRk6GWOjdyN+4l6rc3SJ94WJ71jlDjT5UfIo4mKHN6yYTRqPw==:"
       },
       {
         "id": "response-wrong-tag",
         "description": "the response signature's `tag` is not `wimse-workload-to-workload`",
         "expect": "wrong_tag",
-        "signature_input": "wimse=(\"@status\" \"@method\";req \"@request-target\";req \"content-type\" \"content-digest\" \"workload-identity-token\");created=1700000000;expires=1700000300;nonce=\"abcd2222\";tag=\"some-other-protocol\";wimse-req-nonce=\"abcd1111\"",
-        "signature": "wimse=:z6BspOJyjOZKCfl/cR4vQHPgN7mGMpUciXLtmZo9Gu3RR5clxhV/yCUBYVXk+262okd0Deh+XcdKfxz9wDODog==:"
+        "signature_input": "wimse=(\"@status\" \"@method\";req \"@path\";req \"@query\";req \"content-type\" \"content-digest\" \"workload-identity-token\");created=1700000000;expires=1700000300;nonce=\"abcd2222\";tag=\"some-other-protocol\";wimse-req-nonce=\"abcd1111\"",
+        "signature": "wimse=:fFJ/I9fjkhx0SEqQpAjRQilql790qED/lMNj3JINcRi5Q0CmmPUdDTVpJua+gUTAbSTV/BoBkK5WUy2IWTJzpw==:"
       },
       {
         "id": "response-missing-tag",
         "description": "the response signature omits `tag` altogether",
         "expect": "missing_parameter",
-        "signature_input": "wimse=(\"@status\" \"@method\";req \"@request-target\";req \"content-type\" \"content-digest\" \"workload-identity-token\");created=1700000000;expires=1700000300;nonce=\"abcd2222\";wimse-req-nonce=\"abcd1111\"",
-        "signature": "wimse=:3kjZxAhF++58KXUPJBeSgMTzxKrdbHObBrNAX/jQPcMJsCBTXNojLe+WvkX5Qlf98T1jBq0BSkhm7XcN5mxSTw==:"
+        "signature_input": "wimse=(\"@status\" \"@method\";req \"@path\";req \"@query\";req \"content-type\" \"content-digest\" \"workload-identity-token\");created=1700000000;expires=1700000300;nonce=\"abcd2222\";wimse-req-nonce=\"abcd1111\"",
+        "signature": "wimse=:waKRKU4E43zzp4e7EoSV/UDjEZpS+aNnVmVlpklvyl6nV44tCwsciIK4uEIRbMXP7XzkxLNeNcGmZKMssUCn5A==:"
       },
       {
         "id": "lifted-onto-another-request",

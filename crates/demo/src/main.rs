@@ -164,12 +164,12 @@ fn tampered_by_a_middlebox(
 ) -> Result<()> {
     rule("4. the middlebox reroutes the request — service B must refuse");
 
-    // `@request-target` is covered, so redirecting /transfer to /admin breaks the
+    // `@path` is covered, so redirecting /transfer to /admin breaks the
     // signature even though every byte of the credential is still valid.
     let rerouted = request_as_sent(wit, body, "/admin", &[]);
     let outcome = service_b_verifies(issuer_key, wit, signed, &rerouted, body);
     let error = outcome.expect_err("a rerouted request must not verify");
-    println!("   middlebox rewrote @request-target from /transfer to /admin");
+    println!("   middlebox rewrote @path from /transfer to /admin");
     println!("   service B rejected it: {error}");
 
     // And the same for the body, which the digest — not the signature — pins.
@@ -285,7 +285,8 @@ fn mutual_tls_instead() -> Result<()> {
 fn covered() -> Vec<Component> {
     vec![
         Component::Method,
-        Component::RequestTarget,
+        Component::Path,
+        Component::Query,
         Component::header("content-type"),
         Component::header("content-digest"),
         Component::header("workload-identity-token"),
@@ -332,7 +333,6 @@ fn service_b_verifies(
     let config = VerifyConfig {
         now: Some(LATER),
         required_components: covered(),
-        label: Some(WIMSE_LABEL.to_owned()),
         wimse_profile: true,
         expected_audience: Some(SERVICE_B_AUDIENCE.to_owned()),
         ..VerifyConfig::default()
