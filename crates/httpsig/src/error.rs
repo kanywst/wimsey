@@ -1,5 +1,23 @@
 //! Error type for HTTP Message Signature creation and verification.
 
+/// The RFC 9457 problem type for a signed request that failed authentication —
+/// the WIT or the HTTP message signature — sent with status `400`.
+///
+/// One type for every [`HttpSigError`]: the draft forbids telling the peer which
+/// check failed.
+pub const PROBLEM_SIGNATURE_INVALID: &str =
+    "https://iana.org/assignments/http-problem-types#wimse-signature-invalid";
+
+/// The RFC 9457 problem type for a server that does not support response
+/// signing but was asked for it by `wimse-sign-response`, sent with status `501`.
+pub const PROBLEM_SIGNED_RESPONSE_UNSUPPORTED: &str =
+    "https://iana.org/assignments/http-problem-types#wimse-signed-response-unsupported";
+
+/// The RFC 9457 problem type for a server that signs responses but cannot sign
+/// this one (a streamed or exceptionally large body), sent with status `400`.
+pub const PROBLEM_SIGNED_RESPONSE_UNAVAILABLE: &str =
+    "https://iana.org/assignments/http-problem-types#wimse-signed-response-unavailable";
+
 /// An error returned while signing or verifying an HTTP message signature.
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
@@ -56,6 +74,10 @@ pub enum HttpSigError {
     /// The WIMSE profile forbids a signature parameter that is present.
     #[error("the WIMSE profile forbids the `{0}` signature parameter")]
     ForbiddenParameter(&'static str),
+    /// The WIMSE profile forbids a covered component that is present — `@path`
+    /// or `@query` (or their `;req` forms) on a signature over a `CONNECT`.
+    #[error("the WIMSE profile forbids covering `{0}` here")]
+    ForbiddenComponent(String),
     /// The signature's `tag` is not the WIMSE workload-to-workload tag.
     #[error("unexpected signature tag `{found}`, expected `wimse-workload-to-workload`")]
     WrongTag {

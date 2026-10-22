@@ -334,7 +334,7 @@ fn service_b_verifies(
         now: Some(LATER),
         required_components: covered(),
         wimse_profile: true,
-        expected_audience: Some(SERVICE_B_AUDIENCE.to_owned()),
+        expected_audiences: vec![SERVICE_B_AUDIENCE.to_owned()],
         ..VerifyConfig::default()
     };
     wimsey_httpsig::verify(

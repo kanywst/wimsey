@@ -1,5 +1,5 @@
 {
-  "format": "wimse-conformance/v6",
+  "format": "wimse-conformance/v7",
   "vectors": [
     {
       "suite": "identifier",
@@ -29,12 +29,12 @@
     {
       "suite": "httpsig",
       "path": "httpsig/sign-eddsa.json",
-      "spec": "draft-ietf-wimse-http-signature-07"
+      "spec": "draft-ietf-wimse-http-signature-08"
     },
     {
       "suite": "httpsig",
       "path": "httpsig/sign-es256.json",
-      "spec": "draft-ietf-wimse-http-signature-07"
+      "spec": "draft-ietf-wimse-http-signature-08"
     },
     {
       "suite": "mtls",

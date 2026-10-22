@@ -7,7 +7,7 @@ use base64::{engine::general_purpose::STANDARD, Engine};
 use wimsey_jose::{Algorithm, SigningKey, VerifyingKey, SIGNATURE_LEN};
 
 use crate::error::HttpSigError;
-use crate::message::{Component, ComponentSource};
+use crate::message::{Component, ComponentSource, HttpExchange, HttpRequest};
 
 /// The RFC 9421 `alg` name for Ed25519 (Section 3.3.6); an ES256 key is
 /// `ecdsa-p256-sha256`.
@@ -27,6 +27,10 @@ pub const WIMSE_TAG: &str = "wimse-workload-to-workload";
 /// choose it by label. Senders may still use this one.
 pub const WIMSE_LABEL: &str = "wimse";
 
+/// The one method whose request target is in authority-form (RFC 9110 Section
+/// 9.3.6), so `@path` and `@query` mean nothing on it.
+const CONNECT: &str = "CONNECT";
+
 /// RFC 9421 signature parameters, serialized after the covered-component list.
 ///
 /// The last three are the signature metadata parameters registered by
@@ -43,6 +47,11 @@ pub struct SignatureParams {
     /// The signature algorithm (`alg`). Forbidden by the WIMSE profile.
     pub alg: Option<String>,
     /// A unique nonce (`nonce`).
+    ///
+    /// The draft requires a sender to draw it from a cryptographically secure
+    /// random number generator with at least 64 bits of entropy (96 or more
+    /// recommended). This crate signs whatever it is given, so that it stays
+    /// deterministic; generating the value is the caller's.
     pub nonce: Option<String>,
     /// An application-specific tag (`tag`); [`WIMSE_TAG`] under the profile.
     pub tag: Option<String>,
@@ -85,7 +94,8 @@ pub struct VerifiedSignature {
 /// components that must be covered — under the WIMSE profile that is what
 /// [`request_components`] returns: `@method`, `@path` and `@query`, plus
 /// `content-type`, `content-digest`, `authorization`, `txn-token` and
-/// `workload-identity-token` whenever the message carries them.
+/// `workload-identity-token` whenever the message carries them (`@method` and
+/// `@authority` in place of `@path` and `@query` on a `CONNECT`).
 #[derive(Debug, Clone, Default)]
 pub struct VerifyConfig {
     /// The current time, in seconds since the Unix epoch. When set, `created`
@@ -108,7 +118,8 @@ pub struct VerifyConfig {
     pub max_age: Option<u64>,
     /// Enforce the WIMSE request-signature profile on the received parameters:
     /// `created`, `expires`, `nonce`, `tag` and `wimse-aud` must all be present,
-    /// `tag` must be [`WIMSE_TAG`], and `keyid` and `alg` must be absent.
+    /// `tag` must be [`WIMSE_TAG`], and `keyid` and `alg` must be absent. On a
+    /// `CONNECT`, `@path` and `@query` must not be covered.
     ///
     /// It also changes how the signature is found. A message may carry several
     /// signatures — an intermediary is allowed to add its own — so the one
@@ -121,13 +132,25 @@ pub struct VerifyConfig {
     /// Off by default so the crate can also be driven as a plain RFC 9421
     /// implementation.
     pub wimse_profile: bool,
-    /// If set, the signature's `wimse-aud` must equal this value. A signature
-    /// is only bound to *this* service if the audience it names is checked.
-    pub expected_audience: Option<String>,
+    /// The audiences this recipient answers to. If non-empty, the signature's
+    /// `wimse-aud` must equal one of them. A signature is only bound to *this*
+    /// service if the audience it names is checked, which the draft makes a
+    /// recipient MUST: under [`wimse_profile`](Self::wimse_profile) an empty
+    /// list fails closed with [`HttpSigError::AudienceMismatch`] rather than
+    /// skipping the check.
+    ///
+    /// The comparison is the Simple String Comparison of RFC 3986 Section
+    /// 6.2.1, as the draft requires: byte for byte, with no normalization, so
+    /// `https://svc.example/x` and `https://svc.example/x/` are different
+    /// audiences. List every spelling the recipient accepts. The values must
+    /// come from the recipient's own configuration, never from a field of the
+    /// request such as `Host`.
+    pub expected_audiences: Vec<String>,
     /// Enforce the WIMSE **response**-signature profile instead of the request
     /// one: same mandatory parameters and the same tag-based selection, but
     /// `wimse-aud` is a request-only parameter and `wimse-req-nonce` is required
-    /// on every signed response.
+    /// on every signed response. A response to a `CONNECT` must not cover
+    /// `@path;req` or `@query;req`.
     pub wimse_response_profile: bool,
     /// If set, the response's `wimse-req-nonce` must equal this value — the
     /// `nonce` the client put on its own request. Checking it is what stops a
@@ -234,17 +257,24 @@ pub fn check_response_profile(params: &SignatureParams) -> Result<(), HttpSigErr
     Ok(())
 }
 
-/// The components the WIMSE profile requires a **request** signature to cover,
-/// given the headers the request actually carries.
+/// The components the WIMSE profile requires a **request** signature to cover.
 ///
 /// Section 3 names `@method`, `@path` and `@query`, plus `Content-Type`,
 /// `Content-Digest`, `Authorization`, `Txn-Token` and `Workload-Identity-Token`
-/// when present. `@query` is covered even when there is no query, deriving as a
-/// bare `?`. `@authority` is deliberately absent: proxies rewrite it, and the
-/// recipient is bound by `wimse-aud` instead.
+/// when the request carries them. `@query` is covered even when there is no
+/// query, deriving as a bare `?`. `@authority` is deliberately absent: proxies
+/// rewrite it, and the recipient is bound by `wimse-aud` instead.
+///
+/// `CONNECT` is the exception. Its target is `host:port` with no path or query,
+/// so the draft has it cover `@method` and `@authority` instead, and forbids
+/// `@path` and `@query`.
 #[must_use]
-pub fn request_components(headers: &[(String, String)]) -> Vec<Component> {
-    let mut components = vec![Component::Method, Component::Path, Component::Query];
+pub fn request_components(request: &HttpRequest) -> Vec<Component> {
+    let mut components = if request.method == CONNECT {
+        vec![Component::Method, Component::Authority]
+    } else {
+        vec![Component::Method, Component::Path, Component::Query]
+    };
     for name in [
         "content-type",
         "content-digest",
@@ -252,34 +282,77 @@ pub fn request_components(headers: &[(String, String)]) -> Vec<Component> {
         "txn-token",
         "workload-identity-token",
     ] {
-        if headers.iter().any(|(n, _)| n.eq_ignore_ascii_case(name)) {
+        if request
+            .headers
+            .iter()
+            .any(|(n, _)| n.eq_ignore_ascii_case(name))
+        {
             components.push(Component::header(name));
         }
     }
     components
 }
 
-/// The components the WIMSE profile requires a **response** signature to cover,
-/// given the headers the response actually carries.
+/// The components the WIMSE profile requires a **response** signature to cover.
 ///
 /// Section 3 names `@status`, `@method;req`, `@path;req` and `@query;req`, plus
-/// `Content-Type` and `Content-Digest` when present and the WIT. The `;req`
-/// components are the interesting ones: without them a signed response could be
-/// lifted onto a different request.
+/// `Content-Type` and `Content-Digest` when the response carries them and the
+/// WIT. The `;req` components are the interesting ones: without them a signed
+/// response could be lifted onto a different request. When the request was a
+/// `CONNECT`, `@authority;req` takes the place of `@path;req` and `@query;req`.
 #[must_use]
-pub fn response_components(headers: &[(String, String)]) -> Vec<Component> {
-    let mut components = vec![
-        Component::Status,
-        Component::Req(Box::new(Component::Method)),
-        Component::Req(Box::new(Component::Path)),
-        Component::Req(Box::new(Component::Query)),
-    ];
+pub fn response_components(exchange: &HttpExchange<'_>) -> Vec<Component> {
+    let req = |component| Component::Req(Box::new(component));
+    let mut components = vec![Component::Status, req(Component::Method)];
+    if exchange.request.method == CONNECT {
+        components.push(req(Component::Authority));
+    } else {
+        components.extend([req(Component::Path), req(Component::Query)]);
+    }
     for name in ["content-type", "content-digest", "workload-identity-token"] {
-        if headers.iter().any(|(n, _)| n.eq_ignore_ascii_case(name)) {
+        if exchange
+            .response
+            .headers
+            .iter()
+            .any(|(n, _)| n.eq_ignore_ascii_case(name))
+        {
             components.push(Component::header(name));
         }
     }
     components
+}
+
+/// Errors if a signature over a `CONNECT` covers `@path` or `@query` — or, on a
+/// response, `@path;req` or `@query;req` — which the draft forbids.
+///
+/// A message whose method cannot be derived is not a `CONNECT`, and is left to
+/// the rest of verification.
+fn check_connect_components(
+    message: &impl ComponentSource,
+    components: &[Component],
+    response: bool,
+) -> Result<(), HttpSigError> {
+    let target = |component| {
+        if response {
+            Component::Req(Box::new(component))
+        } else {
+            component
+        }
+    };
+    if message
+        .component_value(&target(Component::Method))
+        .ok()
+        .as_deref()
+        != Some(CONNECT)
+    {
+        return Ok(());
+    }
+    for forbidden in [target(Component::Path), target(Component::Query)] {
+        if components.contains(&forbidden) {
+            return Err(HttpSigError::ForbiddenComponent(forbidden.quoted_id()));
+        }
+    }
+    Ok(())
 }
 
 fn sf_string(value: &str) -> String {
@@ -742,6 +815,9 @@ pub fn verify(
     if config.wimse_response_profile {
         check_response_profile(&params)?;
     }
+    if config.wimse_profile || config.wimse_response_profile {
+        check_connect_components(message, &components, config.wimse_response_profile)?;
+    }
     let algorithm = verifying_key.algorithm();
     if !config.accepted_algorithms.is_empty() && !config.accepted_algorithms.contains(&algorithm) {
         return Err(HttpSigError::UnsupportedAlg {
@@ -770,10 +846,15 @@ pub fn verify(
     // acting on. Checking it earlier would decide authorization from data an
     // attacker still controls, and would let a forged message be told apart by
     // whether it guessed the audience.
-    if let Some(expected) = &config.expected_audience {
-        if params.wimse_aud.as_ref() != Some(expected) {
-            return Err(HttpSigError::AudienceMismatch);
-        }
+    // Simple String Comparison (RFC 3986 Section 6.2.1): `contains` is exact
+    // string equality, with no normalization of either side.
+    if (config.wimse_profile || !config.expected_audiences.is_empty())
+        && !params
+            .wimse_aud
+            .as_ref()
+            .is_some_and(|aud| config.expected_audiences.contains(aud))
+    {
+        return Err(HttpSigError::AudienceMismatch);
     }
     // A client validating a signed response MUST check its nonce comes back,
     // which is what stops a response being replayed onto another request.
@@ -1241,6 +1322,7 @@ mod tests {
     fn wimse_config() -> VerifyConfig {
         VerifyConfig {
             wimse_profile: true,
+            expected_audiences: vec!["https://svcb.example.com/gimme-ice-cream".to_owned()],
             ..VerifyConfig::default()
         }
     }
@@ -1372,7 +1454,7 @@ mod tests {
     fn rejects_a_signature_minted_for_another_audience() {
         let (key, request, signed) = sign_with(&wimse_params());
         let config = VerifyConfig {
-            expected_audience: Some("https://svcc.example.com/other".to_owned()),
+            expected_audiences: vec!["https://svcc.example.com/other".to_owned()],
             ..wimse_config()
         };
         let err = verify(
@@ -1401,7 +1483,7 @@ mod tests {
             "https://wrong.example/inbox",
         ] {
             let config = VerifyConfig {
-                expected_audience: Some(audience.to_owned()),
+                expected_audiences: vec![audience.to_owned()],
                 ..wimse_config()
             };
             let err = verify(
@@ -1422,7 +1504,7 @@ mod tests {
     fn accepts_the_matching_audience() {
         let (key, request, signed) = sign_with(&wimse_params());
         let config = VerifyConfig {
-            expected_audience: Some("https://svcb.example.com/gimme-ice-cream".to_owned()),
+            expected_audiences: vec!["https://svcb.example.com/gimme-ice-cream".to_owned()],
             ..wimse_config()
         };
         assert!(verify(
@@ -1551,7 +1633,7 @@ mod tests {
             response: &response,
             request: &request,
         };
-        let components = super::response_components(&response.headers);
+        let components = super::response_components(&exchange);
         let signed = sign(&exchange, &components, &response_params(), "wimse", &key).unwrap();
 
         assert!(signed
@@ -1579,7 +1661,10 @@ mod tests {
                 response: &response,
                 request: &request,
             },
-            &super::response_components(&response.headers),
+            &super::response_components(&HttpExchange {
+                response: &response,
+                request: &request,
+            }),
             &response_params(),
             "wimse",
             &key,
@@ -1614,7 +1699,10 @@ mod tests {
         };
         let signed = sign(
             &exchange,
-            &super::response_components(&response.headers),
+            &super::response_components(&HttpExchange {
+                response: &response,
+                request: &request,
+            }),
             &response_params(),
             "wimse",
             &key,
@@ -1886,7 +1974,7 @@ mod tests {
 
     #[test]
     fn request_components_follow_the_profile() {
-        let components = super::request_components(&rfc_request().headers);
+        let components = super::request_components(&rfc_request());
         assert_eq!(
             components,
             vec![
@@ -1919,5 +2007,204 @@ mod tests {
             &config,
         );
         assert!(matches!(err, Err(HttpSigError::TooOld)));
+    }
+
+    /// A `CONNECT` through a forward proxy: the target is `host:port`.
+    fn connect_request() -> HttpRequest {
+        HttpRequest {
+            method: "CONNECT".to_owned(),
+            authority: "ledger.example:443".to_owned(),
+            path: String::new(),
+            query: None,
+            headers: vec![(
+                "Workload-Identity-Token".to_owned(),
+                "eyJ0eXAi.wit.value".to_owned(),
+            )],
+        }
+    }
+
+    #[test]
+    fn connect_covers_the_authority_instead_of_path_and_query() {
+        let request = connect_request();
+        assert_eq!(
+            super::request_components(&request),
+            vec![
+                Component::Method,
+                Component::Authority,
+                Component::header("workload-identity-token"),
+            ]
+        );
+
+        let response = rfc_response();
+        let components = super::response_components(&HttpExchange {
+            response: &response,
+            request: &request,
+        });
+        assert_eq!(
+            components[..3],
+            [
+                Component::Status,
+                Component::Req(Box::new(Component::Method)),
+                Component::Req(Box::new(Component::Authority)),
+            ]
+        );
+        assert!(!components.contains(&Component::Req(Box::new(Component::Path))));
+    }
+
+    #[test]
+    fn verifies_a_connect_signed_over_its_authority() {
+        let key = SigningKey::from_ed25519_seed(&[5u8; 32]);
+        let request = connect_request();
+        let components = super::request_components(&request);
+        let signed = sign(&request, &components, &wimse_params(), "wimse", &key).unwrap();
+        let config = VerifyConfig {
+            required_components: components,
+            ..wimse_config()
+        };
+        verify(
+            &request,
+            &signed.signature_input,
+            &signed.signature,
+            &key.verifying_key(),
+            &config,
+        )
+        .unwrap();
+    }
+
+    // The draft's MUST NOT: a `CONNECT` signature covering `@path` or `@query`
+    // is turned away even though it verifies cryptographically.
+    #[test]
+    fn rejects_a_connect_covering_path_or_query() {
+        let key = SigningKey::from_ed25519_seed(&[5u8; 32]);
+        let request = connect_request();
+        for covered in [Component::Path, Component::Query] {
+            let components = vec![Component::Method, Component::Authority, covered.clone()];
+            let signed = sign(&request, &components, &wimse_params(), "wimse", &key).unwrap();
+            let err = verify(
+                &request,
+                &signed.signature_input,
+                &signed.signature,
+                &key.verifying_key(),
+                &wimse_config(),
+            );
+            assert!(
+                matches!(&err, Err(HttpSigError::ForbiddenComponent(c)) if *c == covered.quoted_id()),
+                "{err:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_a_connect_response_covering_path_req() {
+        let key = SigningKey::from_ed25519_seed(&[5u8; 32]);
+        let request = connect_request();
+        let response = rfc_response();
+        let exchange = HttpExchange {
+            response: &response,
+            request: &request,
+        };
+        let components = vec![
+            Component::Status,
+            Component::Req(Box::new(Component::Method)),
+            Component::Req(Box::new(Component::Path)),
+        ];
+        let signed = sign(&exchange, &components, &response_params(), "wimse", &key).unwrap();
+        let err = verify(
+            &exchange,
+            &signed.signature_input,
+            &signed.signature,
+            &key.verifying_key(),
+            &response_config(),
+        );
+        assert!(
+            matches!(&err, Err(HttpSigError::ForbiddenComponent(c)) if c == r#""@path";req"#),
+            "{err:?}"
+        );
+    }
+
+    // Outside `CONNECT` the profile only omits `@authority`; covering it is not
+    // forbidden, and covering `@path` is what every other request does.
+    #[test]
+    fn the_connect_rule_leaves_other_methods_alone() {
+        let (key, request, signed) = sign_with(&wimse_params());
+        assert!(rfc_components().contains(&Component::Path));
+        verify(
+            &request,
+            &signed.signature_input,
+            &signed.signature,
+            &key.verifying_key(),
+            &wimse_config(),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn accepts_any_one_of_the_configured_audiences() {
+        let (key, request, signed) = sign_with(&wimse_params());
+        let config = VerifyConfig {
+            expected_audiences: vec![
+                "https://svcb.example.com/other".to_owned(),
+                "https://svcb.example.com/gimme-ice-cream".to_owned(),
+            ],
+            ..wimse_config()
+        };
+        verify(
+            &request,
+            &signed.signature_input,
+            &signed.signature,
+            &key.verifying_key(),
+            &config,
+        )
+        .unwrap();
+    }
+
+    // Simple String Comparison: spellings that URI normalization would equate
+    // are still different audiences.
+    #[test]
+    fn compares_the_audience_without_normalizing_it() {
+        let (key, request, signed) = sign_with(&wimse_params());
+        for configured in [
+            "https://svcb.example.com/gimme-ice-cream/",
+            "https://svcb.example.com:443/gimme-ice-cream",
+            "HTTPS://svcb.example.com/gimme-ice-cream",
+        ] {
+            let config = VerifyConfig {
+                expected_audiences: vec![configured.to_owned()],
+                ..wimse_config()
+            };
+            let err = verify(
+                &request,
+                &signed.signature_input,
+                &signed.signature,
+                &key.verifying_key(),
+                &config,
+            );
+            assert!(
+                matches!(err, Err(HttpSigError::AudienceMismatch)),
+                "{configured}: {err:?}"
+            );
+        }
+    }
+
+    // -08 makes the audience check a recipient MUST, so a profile verifier
+    // with nothing configured must not accept every audience.
+    #[test]
+    fn profile_without_an_audience_fails_closed() {
+        let (key, request, signed) = sign_with(&wimse_params());
+        let config = VerifyConfig {
+            expected_audiences: Vec::new(),
+            ..wimse_config()
+        };
+        let err = verify(
+            &request,
+            &signed.signature_input,
+            &signed.signature,
+            &key.verifying_key(),
+            &config,
+        );
+        assert!(
+            matches!(err, Err(HttpSigError::AudienceMismatch)),
+            "{err:?}"
+        );
     }
 }

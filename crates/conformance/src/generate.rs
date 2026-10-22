@@ -79,7 +79,7 @@ const RESPONSE_NONCE: &str = "abcd2222";
 
 const WIT_SPEC: &str = "draft-ietf-wimse-workload-creds-02";
 const WPT_SPEC: &str = "draft-ietf-wimse-wpt-02";
-const HTTPSIG_SPEC: &str = "draft-ietf-wimse-http-signature-07";
+const HTTPSIG_SPEC: &str = "draft-ietf-wimse-http-signature-08";
 
 /// Names a vector after what it covers and which algorithm it covers it with.
 fn vector_id(base: &str, algorithm: Algorithm) -> String {
@@ -545,7 +545,7 @@ pub fn httpsig_vector(algorithm: Algorithm) -> HttpSigVector {
     };
     // Exactly the set Section 3 of the http-signature draft mandates: the three
     // derived components, plus each listed header the message actually carries.
-    let components = request_components(&request.headers);
+    let components = request_components(&request);
     // No `keyid` and no `alg`: the profile forbids both.
     let params = SignatureParams {
         created: Some(IAT),
@@ -558,13 +558,7 @@ pub fn httpsig_vector(algorithm: Algorithm) -> HttpSigVector {
     };
     let signed = sign(&request, &components, &params, "wimse", &pop_key).expect("sign");
 
-    let vector_request = VectorRequest {
-        method: request.method.clone(),
-        authority: request.authority.clone(),
-        path: request.path.clone(),
-        query: request.query.clone(),
-        headers: request.headers.clone(),
-    };
+    let vector_request = vector_request_of(&request);
     let negative = httpsig_negatives(&vector_request, &request, &components, &params, &pop_key);
     let accepted = httpsig_accepted(
         &vector_request,
@@ -678,6 +672,8 @@ fn httpsig_accepted(
             }),
             signature_input: None,
             signature: None,
+            accept_audiences: None,
+            required_components: None,
         },
         HttpSigAccepted {
             id: "wimse-signature-found-by-tag".to_owned(),
@@ -689,6 +685,8 @@ fn httpsig_accepted(
             request: None,
             signature_input: Some(signature_input),
             signature: Some(signature),
+            accept_audiences: None,
+            required_components: None,
         },
         HttpSigAccepted {
             id: "intermediary-signature-outside-this-profile".to_owned(),
@@ -706,8 +704,70 @@ fn httpsig_accepted(
                 STANDARD.encode([0u8; 64]),
                 signed_signature
             )),
+            accept_audiences: None,
+            required_components: None,
+        },
+        HttpSigAccepted {
+            id: "audience-among-several".to_owned(),
+            description: "the recipient answers to more than one audience, and `wimse-aud` \
+                          equals one of them exactly"
+                .to_owned(),
+            request: None,
+            signature_input: None,
+            signature: None,
+            accept_audiences: Some(vec![
+                "https://other.example/inbox".to_owned(),
+                AUDIENCE.to_owned(),
+            ]),
+            required_components: None,
+        },
+        {
+            let connect = connect_request(request);
+            let covered = request_components(&connect);
+            let signed = sign(&connect, &covered, params, "wimse", pop_key)
+                .expect("the fixed CONNECT request is signable");
+            HttpSigAccepted {
+                id: "connect-covers-authority".to_owned(),
+                description: "a `CONNECT` has an authority-form target and no path, so it covers \
+                              `@method` and `@authority` in place of `@path` and `@query`"
+                    .to_owned(),
+                request: Some(vector_request_of(&connect)),
+                signature_input: Some(signed.signature_input),
+                signature: Some(signed.signature),
+                accept_audiences: None,
+                required_components: Some(covered.iter().map(Component::quoted_id).collect()),
+            }
         },
     ]
+}
+
+/// The `host:port` a `CONNECT` asks a forward proxy to tunnel to.
+const CONNECT_AUTHORITY: &str = "ledger.example:443";
+
+/// A `CONNECT` carrying the golden request's WIT.
+fn connect_request(request: &HttpRequest) -> HttpRequest {
+    HttpRequest {
+        method: "CONNECT".to_owned(),
+        authority: CONNECT_AUTHORITY.to_owned(),
+        path: String::new(),
+        query: None,
+        headers: request
+            .headers
+            .iter()
+            .filter(|(name, _)| name.eq_ignore_ascii_case("workload-identity-token"))
+            .cloned()
+            .collect(),
+    }
+}
+
+fn vector_request_of(request: &HttpRequest) -> VectorRequest {
+    VectorRequest {
+        method: request.method.clone(),
+        authority: request.authority.clone(),
+        path: request.path.clone(),
+        query: request.query.clone(),
+        headers: request.headers.clone(),
+    }
 }
 
 /// Builds the signed response to the golden request.
@@ -745,7 +805,7 @@ fn httpsig_response(
         response: &response,
         request,
     };
-    let components = response_components(&response.headers);
+    let components = response_components(&exchange);
     let params = SignatureParams {
         created: Some(IAT),
         expires: Some(IAT + 300),
@@ -802,6 +862,7 @@ fn httpsig_response(
                         ErrorCode::RequestNonceMismatch,
                     )
                 },
+                connect_response_negative(request, &response, &components, &params, &pop_key),
                 ResponseNegative {
                     wit: Some(request_wit.to_owned()),
                     ..response_neg(
@@ -814,6 +875,40 @@ fn httpsig_response(
             ]);
             cases
         },
+    }
+}
+
+/// A response to a `CONNECT`, signed over the components a non-`CONNECT`
+/// answer covers — which reach for a path and query the request does not have.
+fn connect_response_negative(
+    request: &HttpRequest,
+    response: &HttpResponse,
+    components: &[Component],
+    params: &SignatureParams,
+    pop_key: &SigningKey,
+) -> ResponseNegative {
+    let connect = connect_request(request);
+    let signed = sign(
+        &HttpExchange {
+            response,
+            request: &connect,
+        },
+        components,
+        params,
+        "wimse",
+        pop_key,
+    )
+    .expect("the fixed CONNECT response is signable");
+    ResponseNegative {
+        request: Some(vector_request_of(&connect)),
+        signature_input: Some(signed.signature_input),
+        signature: Some(signed.signature),
+        ..response_neg(
+            "connect-response-covers-path-req",
+            "the response to a `CONNECT` covers `@path;req` and `@query;req`, which the \
+             profile forbids there",
+            ErrorCode::ForbiddenComponent,
+        )
     }
 }
 
@@ -1069,6 +1164,35 @@ fn httpsig_selection_negatives(
     ]
 }
 
+/// A `CONNECT` signed over the components a non-`CONNECT` request covers —
+/// which reach for a path and query it does not have.
+fn connect_request_negative(
+    request: &HttpRequest,
+    params: &SignatureParams,
+    pop_key: &SigningKey,
+) -> HttpSigNegative {
+    let connect = connect_request(request);
+    let covered = [
+        Component::Method,
+        Component::Path,
+        Component::Query,
+        Component::header("workload-identity-token"),
+    ];
+    let signed = sign(&connect, &covered, params, "wimse", pop_key)
+        .expect("the fixed CONNECT request is signable");
+    HttpSigNegative {
+        request: Some(vector_request_of(&connect)),
+        signature_input: Some(signed.signature_input),
+        signature: Some(signed.signature),
+        required_components: Some(covered.iter().map(Component::quoted_id).collect()),
+        ..httpsig_neg(
+            "connect-covers-path",
+            "a `CONNECT` covers `@path` and `@query`, which the profile forbids there",
+            ErrorCode::ForbiddenComponent,
+        )
+    }
+}
+
 /// The inputs an httpsig verifier must reject, given the signed request.
 ///
 /// Note that `accept_audience`, `max_age` and `required_components` describe how
@@ -1112,6 +1236,16 @@ fn httpsig_negatives(
                 ErrorCode::AudienceMismatch,
             )
         },
+        HttpSigNegative {
+            accept_audience: Some(format!("{AUDIENCE}/")),
+            ..httpsig_neg(
+                "audience-differs-only-by-normalization",
+                "the recipient's configured audience differs from `wimse-aud` only by a trailing \
+                 slash; audiences compare as exact strings, without URI normalization",
+                ErrorCode::AudienceMismatch,
+            )
+        },
+        connect_request_negative(request, params, pop_key),
         HttpSigNegative {
             body: Some(r#"{"amount":999}"#.to_owned()),
             ..httpsig_neg(

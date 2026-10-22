@@ -10,6 +10,39 @@ silently.
 
 ## [Unreleased]
 
+### Changed
+
+- **`wimsey-httpsig` targets `draft-ietf-wimse-http-signature-08`** (published
+  2026-10-20, addressing the document shepherd's review). Breaking for callers of the component helpers and
+  of `VerifyConfig`; signatures made under -07 for non-`CONNECT` requests still
+  verify unchanged.
+  - `CONNECT` covers `@method` and `@authority` in place of `@path` and
+    `@query`, and its signed response `@authority;req` in place of `@path;req`
+    and `@query;req`. `request_components` now takes the `HttpRequest` and
+    `response_components` the `HttpExchange`, so both can see the method.
+    Under either WIMSE profile, a `CONNECT` signature covering `@path` or
+    `@query` (or their `;req` forms) is the new
+    `HttpSigError::ForbiddenComponent`.
+  - `VerifyConfig::expected_audience: Option<String>` is now
+    `expected_audiences: Vec<String>`: the recipient answers to any one of its
+    configured audiences, compared by Simple String Comparison (RFC 3986
+    Section 6.2.1) with no normalization. -08 makes the check a recipient MUST,
+    so under `wimse_profile` an empty list now fails closed with
+    `AudienceMismatch` where `None` used to skip it. `wimsey httpsig verify
+    --aud` may be repeated.
+
+### Added
+
+- `wimsey-httpsig` exports the RFC 9457 problem type URIs -08 registers:
+  `PROBLEM_SIGNATURE_INVALID`, `PROBLEM_SIGNED_RESPONSE_UNSUPPORTED` and
+  `PROBLEM_SIGNED_RESPONSE_UNAVAILABLE`.
+- Conformance format `wimse-conformance/v7`: httpsig `accepted` cases may carry
+  `required_components` and `accept_audiences`, and the new error code
+  `forbidden_component`. New cases: `connect-covers-authority`,
+  `audience-among-several`, `connect-covers-path`,
+  `audience-differs-only-by-normalization` and
+  `connect-response-covers-path-req`.
+
 ## [0.8.0] - 2026-09-29
 
 A breaking release for the same reason as 0.7.0: `draft-ietf-wimse-http-signature`

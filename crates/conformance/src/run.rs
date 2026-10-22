@@ -598,7 +598,7 @@ pub fn run_httpsig(vector: &HttpSigVector, report: &mut Report) {
             now: Some(vector.verify_now),
             required_components: covered.clone(),
             wimse_profile: true,
-            expected_audience: Some(vector.params.wimse_aud.clone()),
+            expected_audiences: vec![vector.params.wimse_aud.clone()],
             ..VerifyConfig::default()
         };
         let verified = verify_httpsig(
@@ -824,19 +824,23 @@ fn run_httpsig_accepted(
             return;
         }
     };
-    let config = VerifyConfig {
-        now: Some(vector.verify_now),
-        required_components: covered.to_vec(),
-        wimse_profile: true,
-        expected_audience: Some(vector.params.wimse_aud.clone()),
-        ..VerifyConfig::default()
-    };
-
     for case in &vector.accepted {
         let request = case.request.as_ref().unwrap_or(&vector.request);
-        report.record(
-            name,
-            &format!("accept/{}", case.id),
+        let required = match case.required_components.as_deref() {
+            Some(quoted) => components(quoted),
+            None => Ok(covered.to_vec()),
+        };
+        let outcome = required.and_then(|required| {
+            let config = VerifyConfig {
+                now: Some(vector.verify_now),
+                required_components: required,
+                wimse_profile: true,
+                expected_audiences: case
+                    .accept_audiences
+                    .clone()
+                    .unwrap_or_else(|| vec![vector.params.wimse_aud.clone()]),
+                ..VerifyConfig::default()
+            };
             verify_httpsig(
                 &http_request(request),
                 case.signature_input
@@ -847,8 +851,9 @@ fn run_httpsig_accepted(
                 &config,
             )
             .map(|_| ())
-            .map_err(|e| format!("must still verify, but was rejected: {e}")),
-        );
+            .map_err(|e| format!("must still verify, but was rejected: {e}"))
+        });
+        report.record(name, &format!("accept/{}", case.id), outcome);
     }
 }
 
@@ -901,11 +906,10 @@ fn run_httpsig_negatives(
                 required_components: required,
                 max_age: case.max_age,
                 wimse_profile: true,
-                expected_audience: Some(
-                    case.accept_audience
-                        .clone()
-                        .unwrap_or_else(|| vector.params.wimse_aud.clone()),
-                ),
+                expected_audiences: vec![case
+                    .accept_audience
+                    .clone()
+                    .unwrap_or_else(|| vector.params.wimse_aud.clone())],
                 ..VerifyConfig::default()
             };
             let actual = verify_httpsig(
