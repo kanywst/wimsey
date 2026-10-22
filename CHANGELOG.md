@@ -10,12 +10,20 @@ silently.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-22
+
+A breaking release: `draft-ietf-wimse-http-signature` published **-08** on
+2026-10-20, and its changes are normative. Only `wimsey-httpsig`, the CLI's
+`httpsig verify --aud` and the conformance vectors change; the other crates
+move version in lockstep. Also carried: `serde_json` 1.0.154, `sha2` 0.11.1 and
+`tokio` 1.53.3.
+
 ### Changed
 
 - **`wimsey-httpsig` targets `draft-ietf-wimse-http-signature-08`** (published
-  2026-10-20, addressing the document shepherd's review). Breaking for callers of the component helpers and
-  of `VerifyConfig`; signatures made under -07 for non-`CONNECT` requests still
-  verify unchanged.
+  2026-10-20, addressing the document shepherd's review). Breaking for
+  callers of the component helpers and of `VerifyConfig`; signatures made under
+  -07 for non-`CONNECT` requests still verify unchanged.
   - `CONNECT` covers `@method` and `@authority` in place of `@path` and
     `@query`, and its signed response `@authority;req` in place of `@path;req`
     and `@query;req`. `request_components` now takes the `HttpRequest` and
@@ -535,7 +543,8 @@ public API.
 - Project governance, security policy, contributing guide (DCO), and OpenSSF
   Scorecard automation.
 
-[Unreleased]: https://github.com/kanywst/wimsey/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/kanywst/wimsey/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/kanywst/wimsey/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/kanywst/wimsey/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/kanywst/wimsey/compare/v0.6.3...v0.7.0
 [0.6.3]: https://github.com/kanywst/wimsey/compare/v0.6.2...v0.6.3
