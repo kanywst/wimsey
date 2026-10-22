@@ -1,8 +1,8 @@
 {
-  "format": "wimse-conformance/v6",
+  "format": "wimse-conformance/v7",
   "suite": "httpsig",
   "id": "sign-eddsa",
-  "spec": "draft-ietf-wimse-http-signature-07",
+  "spec": "draft-ietf-wimse-http-signature-08",
   "description": "WIMSE HTTP Message Signature (RFC 9421, EdDSA) carrying a WIT, plus the inputs a verifier must reject",
   "pop_signing_key": {
     "alg": "EdDSA",
@@ -137,6 +137,37 @@
       "accept_audience": "https://other.example/inbox"
     },
     {
+      "id": "audience-differs-only-by-normalization",
+      "description": "the recipient's configured audience differs from `wimse-aud` only by a trailing slash; audiences compare as exact strings, without URI normalization",
+      "expect": "audience_mismatch",
+      "accept_audience": "https://service.example/transfer/"
+    },
+    {
+      "id": "connect-covers-path",
+      "description": "a `CONNECT` covers `@path` and `@query`, which the profile forbids there",
+      "expect": "forbidden_component",
+      "request": {
+        "method": "CONNECT",
+        "authority": "ledger.example:443",
+        "path": "",
+        "query": null,
+        "headers": [
+          [
+            "Workload-Identity-Token",
+            "eyJ0eXAiOiJ3aXQrand0IiwiYWxnIjoiRWREU0EiLCJraWQiOiJpc3N1ZXIta2V5LTEifQ.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvYXBpIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDM2MDAsImp0aSI6ImExYjJjMyIsImNuZiI6eyJqd2siOnsiYWxnIjoiRWREU0EiLCJrdHkiOiJPS1AiLCJjcnYiOiJFZDI1NTE5IiwieCI6Il9SY2tPRnFneDF0ay0zak5ZQy1oMlpIOTZfZHJFOFdPMXdMcXlEWHA5aGcifX19.gEOIwRVXNwJTSXRGBDPV4CQLRUFeKYx-oK_nwSxaxegepaEEcKbn1TIPacMI0rWR2M8kRikyzB4jkcudkUtXCA"
+          ]
+        ]
+      },
+      "signature_input": "wimse=(\"@method\" \"@path\" \"@query\" \"workload-identity-token\");created=1700000000;expires=1700000300;nonce=\"abcd1111\";tag=\"wimse-workload-to-workload\";wimse-aud=\"https://service.example/transfer\";wimse-sign-response",
+      "signature": "wimse=:m7k0cbGg9vRC4+quabfHZ4rwcNHQhdGk3AxuP3Y6paSpELoHkP/836bCYbSvQQYlzOGxDQeGK57eFLU/t/NPAQ==:",
+      "required_components": [
+        "\"@method\"",
+        "\"@path\"",
+        "\"@query\"",
+        "\"workload-identity-token\""
+      ]
+    },
+    {
       "id": "tampered-body",
       "description": "the body no longer hashes to the signed `Content-Digest`",
       "expect": "content_digest_mismatch",
@@ -252,6 +283,37 @@
       "description": "an intermediary's signature covers `@target-uri` and a `;sf` header, which a WIMSE profile never needs; it is not the WIMSE signature, so a recipient must find the tagged one without parsing or verifying it (its bytes are zeros)",
       "signature_input": "proxy=(\"@target-uri\" \"content-type\";sf);created=1700000000;tag=\"example-proxy-hop\", wimse=(\"@method\" \"@path\" \"@query\" \"content-type\" \"content-digest\" \"workload-identity-token\");created=1700000000;expires=1700000300;nonce=\"abcd1111\";tag=\"wimse-workload-to-workload\";wimse-aud=\"https://service.example/transfer\";wimse-sign-response",
       "signature": "proxy=:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==:, wimse=:nHRUGilugagBEL8QqU3jfaRdB5EHO0D6Qz2KhEZbjZ5Owr+kwt26lDZ+HXhxGWb9PgPpiElPKSRo/OjlkJEQAg==:"
+    },
+    {
+      "id": "audience-among-several",
+      "description": "the recipient answers to more than one audience, and `wimse-aud` equals one of them exactly",
+      "accept_audiences": [
+        "https://other.example/inbox",
+        "https://service.example/transfer"
+      ]
+    },
+    {
+      "id": "connect-covers-authority",
+      "description": "a `CONNECT` has an authority-form target and no path, so it covers `@method` and `@authority` in place of `@path` and `@query`",
+      "request": {
+        "method": "CONNECT",
+        "authority": "ledger.example:443",
+        "path": "",
+        "query": null,
+        "headers": [
+          [
+            "Workload-Identity-Token",
+            "eyJ0eXAiOiJ3aXQrand0IiwiYWxnIjoiRWREU0EiLCJraWQiOiJpc3N1ZXIta2V5LTEifQ.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvYXBpIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDM2MDAsImp0aSI6ImExYjJjMyIsImNuZiI6eyJqd2siOnsiYWxnIjoiRWREU0EiLCJrdHkiOiJPS1AiLCJjcnYiOiJFZDI1NTE5IiwieCI6Il9SY2tPRnFneDF0ay0zak5ZQy1oMlpIOTZfZHJFOFdPMXdMcXlEWHA5aGcifX19.gEOIwRVXNwJTSXRGBDPV4CQLRUFeKYx-oK_nwSxaxegepaEEcKbn1TIPacMI0rWR2M8kRikyzB4jkcudkUtXCA"
+          ]
+        ]
+      },
+      "signature_input": "wimse=(\"@method\" \"@authority\" \"workload-identity-token\");created=1700000000;expires=1700000300;nonce=\"abcd1111\";tag=\"wimse-workload-to-workload\";wimse-aud=\"https://service.example/transfer\";wimse-sign-response",
+      "signature": "wimse=:TPxRAqsbCrjA7MgYrr265nU4mhLfSVc3PeLLWXSW7C6vsCdEVOugRAaP01JKd8LiBcRgh6uDD94INm7MgCcWDQ==:",
+      "required_components": [
+        "\"@method\"",
+        "\"@authority\"",
+        "\"workload-identity-token\""
+      ]
     }
   ],
   "response": {
@@ -393,6 +455,25 @@
         "description": "the client's nonce is not the one the response carries back",
         "expect": "request_nonce_mismatch",
         "expected_req_nonce": "some-other-nonce"
+      },
+      {
+        "id": "connect-response-covers-path-req",
+        "description": "the response to a `CONNECT` covers `@path;req` and `@query;req`, which the profile forbids there",
+        "expect": "forbidden_component",
+        "signature_input": "wimse=(\"@status\" \"@method\";req \"@path\";req \"@query\";req \"content-type\" \"content-digest\" \"workload-identity-token\");created=1700000000;expires=1700000300;nonce=\"abcd2222\";tag=\"wimse-workload-to-workload\";wimse-req-nonce=\"abcd1111\"",
+        "signature": "wimse=:l4E8IW6Dte95dTs6b5/Uz6G8IRkn0cu32zx6ldv7qOBUbAXq1YeYTll7/oBKH0HIA7Sn2nqZhAF4X18RdImtAg==:",
+        "request": {
+          "method": "CONNECT",
+          "authority": "ledger.example:443",
+          "path": "",
+          "query": null,
+          "headers": [
+            [
+              "Workload-Identity-Token",
+              "eyJ0eXAiOiJ3aXQrand0IiwiYWxnIjoiRWREU0EiLCJraWQiOiJpc3N1ZXIta2V5LTEifQ.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvYXBpIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDM2MDAsImp0aSI6ImExYjJjMyIsImNuZiI6eyJqd2siOnsiYWxnIjoiRWREU0EiLCJrdHkiOiJPS1AiLCJjcnYiOiJFZDI1NTE5IiwieCI6Il9SY2tPRnFneDF0ay0zak5ZQy1oMlpIOTZfZHJFOFdPMXdMcXlEWHA5aGcifX19.gEOIwRVXNwJTSXRGBDPV4CQLRUFeKYx-oK_nwSxaxegepaEEcKbn1TIPacMI0rWR2M8kRikyzB4jkcudkUtXCA"
+            ]
+          ]
+        }
       },
       {
         "id": "verified-with-the-requester-key",

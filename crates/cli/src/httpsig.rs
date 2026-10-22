@@ -104,10 +104,11 @@ pub(crate) struct VerifyArgs {
     /// The `Signature` field value.
     #[arg(long)]
     signature: String,
-    /// The audience this service answers to; the signature's `wimse-aud` must
-    /// match it.
-    #[arg(long)]
-    aud: String,
+    /// An audience this service answers to; the signature's `wimse-aud` must
+    /// equal one of them, compared as exact strings. Repeat for each spelling
+    /// the service accepts.
+    #[arg(long, required = true)]
+    aud: Vec<String>,
     /// Comma-separated components that must be covered (overrides the default).
     #[arg(long)]
     require: Option<String>,
@@ -335,7 +336,7 @@ fn run_sign(args: SignArgs) -> Result<()> {
 
     // Base the mandatory set on the headers actually present, so a WIT or
     // Content-Digest supplied via --header is covered like --wit/--body-file.
-    let mandatory = request_components(&request.headers);
+    let mandatory = request_components(&request);
     let components = if let Some(list) = args.cover {
         let components = parse_components(&list)?;
         ensure_covers(&components, &mandatory)?;
@@ -418,7 +419,7 @@ fn run_verify(args: VerifyArgs) -> Result<()> {
         return Err("the supplied Workload-Identity-Token header does not match --wit".into());
     }
 
-    let mandatory = request_components(&request.headers);
+    let mandatory = request_components(&request);
     let required = if let Some(list) = args.require {
         let required = parse_components(&list)?;
         ensure_covers(&required, &mandatory)?;
@@ -433,7 +434,7 @@ fn run_verify(args: VerifyArgs) -> Result<()> {
         required_components: required,
         max_age: args.max_age,
         wimse_profile: true,
-        expected_audience: Some(args.aud.trim().to_owned()),
+        expected_audiences: args.aud.iter().map(|aud| aud.trim().to_owned()).collect(),
         ..VerifyConfig::default()
     };
     let verified = verify(

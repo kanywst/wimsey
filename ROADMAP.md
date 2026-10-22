@@ -47,9 +47,9 @@ reviewed, since a stale status misleads more than a missing one.
 - `wimsey-mtls`: the mTLS binding, client cert = WIC.
 - **Gate:** a signed request survives an intermediary; tamper detection test
   fails closed.
-- **Status: met.** `wimsey-httpsig` follows `http-signature-07`, including
-  signed responses and tag-based selection alongside an intermediary's own
-  signature. `wimsey-mtls` issues and verifies the WIC but does not depend on
+- **Status: met.** `wimsey-httpsig` follows `http-signature-08`, including
+  signed responses, tag-based selection alongside an intermediary's own
+  signature, the `CONNECT` exception and multi-valued audience matching. `wimsey-mtls` issues and verifies the WIC but does not depend on
   `rustls`: wiring it into a TLS stack, and PKIX chain building, are left to
   the caller (`SPEC-MAP.md`, Known divergences).
 

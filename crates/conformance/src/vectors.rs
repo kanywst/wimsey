@@ -37,7 +37,7 @@ use wimsey_wpt::{WptClaims, WptError};
 /// which `draft-ietf-wimse-wpt-02` covers with the `tth` and `oth` claims. A v4
 /// reader has nowhere to put them, so it verifies the positive case having
 /// checked neither binding and reports a pass.
-pub const FORMAT: &str = "wimse-conformance/v6";
+pub const FORMAT: &str = "wimse-conformance/v7";
 
 /// The index of every vector in the suite, written to `manifest.json`.
 ///
@@ -147,6 +147,9 @@ pub enum ErrorCode {
     MissingParameter,
     /// A signature parameter the WIMSE profile forbids was present.
     ForbiddenParameter,
+    /// A covered component the WIMSE profile forbids was present: `@path` or
+    /// `@query` (or their `;req` forms) on a signature over a `CONNECT`.
+    ForbiddenComponent,
     /// The signature's `tag` was not `wimse-workload-to-workload`.
     WrongTag,
     /// A signed response carried back a `wimse-req-nonce` that is not the nonce
@@ -309,6 +312,7 @@ impl From<&HttpSigError> for ErrorCode {
             HttpSigError::CreatedInFuture => Self::CreatedInFuture,
             HttpSigError::MissingParameter(_) => Self::MissingParameter,
             HttpSigError::ForbiddenParameter(_) => Self::ForbiddenParameter,
+            HttpSigError::ForbiddenComponent(_) => Self::ForbiddenComponent,
             HttpSigError::WrongTag { .. } => Self::WrongTag,
             HttpSigError::AudienceMismatch => Self::AudienceMismatch,
             HttpSigError::RequestNonceMismatch => Self::RequestNonceMismatch,
@@ -538,6 +542,12 @@ pub struct HttpSigAccepted {
     /// Replaces the positive case's `signature`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub signature: Option<String>,
+    /// The audiences the verifier answers to, instead of the vector's one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub accept_audiences: Option<Vec<String>>,
+    /// Components the verifier requires, instead of the default set.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub required_components: Option<Vec<String>>,
 }
 
 /// A signed response, and the request-bound checks a client must apply to it.

@@ -1,6 +1,6 @@
 //! `wimsey-httpsig` — the WIMSE HTTP Message Signatures transport binding.
 //!
-//! Target spec: `draft-ietf-wimse-http-signature-07`, a profile of RFC 9421.
+//! Target spec: `draft-ietf-wimse-http-signature-08`, a profile of RFC 9421.
 //! The calling workload signs the outgoing HTTP request — including the header
 //! that carries its WIT — with its proof-of-possession key, so an intermediary
 //! can read but not tamper with the covered components. The receiver recovers
@@ -23,11 +23,21 @@
 //!   `Content-Digest`, `Authorization`, `Txn-Token` and `Workload-Identity-Token`
 //!   whenever the message carries them — [`request_components`] builds that set.
 //!   `@authority` is not covered, because proxies rewrite it.
+//! - A `CONNECT` is the exception: its target is `host:port`, so it covers
+//!   `@method` and `@authority` instead and MUST NOT cover `@path` or `@query`
+//!   (`@authority;req` in place of `@path;req` and `@query;req` on the signed
+//!   response). [`request_components`] and [`response_components`] switch on the
+//!   method, and the profile rejects a `CONNECT` covering what it forbids.
 //! - `created`, `expires`, `nonce` and `tag` MUST all be present, with `tag`
 //!   equal to [`WIMSE_TAG`] and a tight `expires` window (minutes, not hours).
 //! - `wimse-aud` MUST be present on a request, naming the service the signature
-//!   is for. A verifier binds itself to that audience with
-//!   [`VerifyConfig::expected_audience`].
+//!   is for. A verifier binds itself to the audiences it answers to with
+//!   [`VerifyConfig::expected_audiences`], compared by Simple String Comparison
+//!   (RFC 3986 Section 6.2.1) — no normalization, so list every spelling.
+//!   Under the profile the list is mandatory: left empty, every request fails.
+//! - Each `nonce` MUST come from a CSPRNG with at least 64 bits of entropy. The
+//!   crate signs the nonce it is handed and stays deterministic, so drawing one
+//!   is the caller's.
 //! - `keyid` and `alg` MUST NOT be used: the key travels in the WIT and its
 //!   `cnf` JWK pins the algorithm, so repeating either would only add confusion.
 //!   [`VerifyConfig::accepted_algorithms`] is the recipient's policy on which
@@ -56,6 +66,14 @@
 //!   signature to hand this crate.
 //! - Replay defense is the caller's: this crate checks that a `nonce` is present
 //!   but does not remember the ones it has seen.
+//! - Answering a failure is the server's. Any failed check on a signed request —
+//!   the WIT or the signature, whichever [`HttpSigError`] it is — is a `400`
+//!   with the [`PROBLEM_SIGNATURE_INVALID`] problem type, and the response MUST
+//!   NOT say which check failed. A server that cannot honor
+//!   `wimse-sign-response` answers `501` with
+//!   [`PROBLEM_SIGNED_RESPONSE_UNSUPPORTED`], or `400` with
+//!   [`PROBLEM_SIGNED_RESPONSE_UNAVAILABLE`] when it signs responses but not
+//!   this one — never a successful unsigned response.
 //!
 //! ```
 //! use wimsey_httpsig::{
@@ -77,7 +95,7 @@
 //!     ],
 //! };
 //! // `@method`, `@path`, `@query`, and the two headers the request carries.
-//! let components = request_components(&request.headers);
+//! let components = request_components(&request);
 //! let params = SignatureParams {
 //!     created: Some(1_700_000_000),
 //!     expires: Some(1_700_000_300),
@@ -95,7 +113,7 @@
 //!     now: Some(1_700_000_030),
 //!     required_components: components.clone(),
 //!     wimse_profile: true,
-//!     expected_audience: Some("https://service.example/transfer".to_owned()),
+//!     expected_audiences: vec!["https://service.example/transfer".to_owned()],
 //!     ..VerifyConfig::default()
 //! };
 //! let verified =
@@ -109,7 +127,10 @@ mod error;
 mod message;
 mod signature;
 
-pub use error::HttpSigError;
+pub use error::{
+    HttpSigError, PROBLEM_SIGNATURE_INVALID, PROBLEM_SIGNED_RESPONSE_UNAVAILABLE,
+    PROBLEM_SIGNED_RESPONSE_UNSUPPORTED,
+};
 pub use message::{
     content_digest_sha256, verify_content_digest, Component, ComponentSource, HttpExchange,
     HttpRequest, HttpResponse,
