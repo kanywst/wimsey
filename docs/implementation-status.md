@@ -29,7 +29,7 @@ The detailed coverage prose is kept under [What the short coverage lines stand f
 
 ### `draft-ietf-wimse-http-signature`
 
-The date was refreshed in [#309](https://github.com/ietf-wg-wimse/draft-ietf-wimse-s2s-protocol/pull/309), after re-verifying the coverage against the code.
+The date was refreshed in [#309](https://github.com/ietf-wg-wimse/draft-ietf-wimse-s2s-protocol/pull/309), after re-verifying the coverage against the code. [#406](https://github.com/ietf-wg-wimse/draft-ietf-wimse-s2s-protocol/pull/406) refreshes it again for -08 and, at the editor's suggestion, names the draft version in `Coverage`. The text below is what #406 proposes.
 
 ```markdown
 ## wimsey
@@ -38,10 +38,10 @@ The date was refreshed in [#309](https://github.com/ietf-wg-wimse/draft-ietf-wim
 * Implementation: <https://github.com/kanywst/wimsey>
 * Maturity:
     * WIT + HTTP Message Signatures: alpha
-* Coverage: WIT, HTTP Message Signatures, signed responses
+* Coverage: WIT, HTTP Message Signatures, signed responses as per version -08 of the draft
 * License: Apache 2.0
 * Contact: [kanywst on GitHub](https://github.com/kanywst)
-* Last updated: 08-Sep-2026
+* Last updated: 22-Oct-2026
 ```
 
 ### `draft-ietf-wimse-workload-creds`
