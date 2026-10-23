@@ -14,7 +14,7 @@ The drafts are kramdown-rfc markdown. Four of the five live in one repository:
 | `draft-ietf-wimse-workload-creds` | `ietf-wg-wimse/draft-ietf-wimse-s2s-protocol` | Published |
 | `draft-ietf-wimse-wpt` | `ietf-wg-wimse/draft-ietf-wimse-s2s-protocol` | No section; proposal withdrawn ([s2s#310](https://github.com/ietf-wg-wimse/draft-ietf-wimse-s2s-protocol/pull/310)) |
 | `draft-ietf-wimse-mutual-tls` | `ietf-wg-wimse/draft-ietf-wimse-s2s-protocol` | No section; proposal withdrawn ([s2s#311](https://github.com/ietf-wg-wimse/draft-ietf-wimse-s2s-protocol/pull/311)) |
-| `draft-ietf-wimse-identifier` | `ietf-wg-wimse/draft-ietf-wimse-identifier` | Proposed with the section in [identifier#98](https://github.com/ietf-wg-wimse/draft-ietf-wimse-identifier/pull/98) |
+| `draft-ietf-wimse-identifier` | `ietf-wg-wimse/draft-ietf-wimse-identifier` | No section; [identifier#98](https://github.com/ietf-wg-wimse/draft-ietf-wimse-identifier/pull/98) closed after WGLC, implementation to be cited in the shepherd write-up |
 
 Two things to know before opening a pull request:
 
@@ -64,7 +64,7 @@ wimsey
 
 None of these three documents has an Implementation Status section, so an entry means adding the [section boilerplate](#section-boilerplate) too.
 
-That is not always wanted. Adding the section to the WPT draft drew a preference against having one at all ([s2s#310](https://github.com/ietf-wg-wimse/draft-ietf-wimse-s2s-protocol/pull/310)), so that proposal and the matching one for mutual TLS were withdrawn. Ask before proposing a section again; the entries below stay ready for the day a document grows one. [identifier#98](https://github.com/ietf-wg-wimse/draft-ietf-wimse-identifier/pull/98) is open in the other repository.
+That is not always wanted. Adding the section to the WPT draft drew a preference against having one at all ([s2s#310](https://github.com/ietf-wg-wimse/draft-ietf-wimse-s2s-protocol/pull/310)), so that proposal and the matching one for mutual TLS were withdrawn. Ask before proposing a section again; the entries below stay ready for the day a document grows one. [identifier#98](https://github.com/ietf-wg-wimse/draft-ietf-wimse-identifier/pull/98) was closed by the editor because the document is past WGLC; in the closing comment the editor said they would ask the chairs to cite the implementation in the shepherd write-up instead.
 
 ### `draft-ietf-wimse-wpt`
 
@@ -110,6 +110,8 @@ That is not always wanted. Adding the section to the WPT draft drew a preference
 ```
 
 ### `draft-ietf-wimse-identifier`
+
+This document will not get the section (see above). The entry is kept as the source for what the shepherd write-up may cite, not as section text waiting to be proposed.
 
 ```markdown
 ## wimsey
