@@ -64,7 +64,7 @@ wimsey
 
 None of these three documents has an Implementation Status section, so an entry means adding the [section boilerplate](#section-boilerplate) too.
 
-That is not always wanted. Adding the section to the WPT draft drew a preference against having one at all ([s2s#310](https://github.com/ietf-wg-wimse/draft-ietf-wimse-s2s-protocol/pull/310)), so that proposal and the matching one for mutual TLS were withdrawn. Ask before proposing a section again; the entries below stay ready for the day a document grows one. [identifier#98](https://github.com/ietf-wg-wimse/draft-ietf-wimse-identifier/pull/98) was closed by the editor because the document is past WGLC; the editor will ask the chairs to cite the implementation in the shepherd write-up instead.
+That is not always wanted. Adding the section to the WPT draft drew a preference against having one at all ([s2s#310](https://github.com/ietf-wg-wimse/draft-ietf-wimse-s2s-protocol/pull/310)), so that proposal and the matching one for mutual TLS were withdrawn. Ask before proposing a section again; the entries below stay ready for the day a document grows one. [identifier#98](https://github.com/ietf-wg-wimse/draft-ietf-wimse-identifier/pull/98) was closed by the editor because the document is past WGLC; in the closing comment the editor said they would ask the chairs to cite the implementation in the shepherd write-up instead.
 
 ### `draft-ietf-wimse-wpt`
 
@@ -110,6 +110,8 @@ That is not always wanted. Adding the section to the WPT draft drew a preference
 ```
 
 ### `draft-ietf-wimse-identifier`
+
+This document will not get the section (see above). The entry is kept as the source for what the shepherd write-up may cite, not as section text waiting to be proposed.
 
 ```markdown
 ## wimsey
