@@ -1594,7 +1594,7 @@ fn identifier_spelling_rejects() -> Vec<IdentifierReject> {
     ]
 }
 
-const MTLS_SPEC: &str = "draft-ietf-wimse-mutual-tls-02";
+const MTLS_SPEC: &str = "draft-ietf-wimse-mutual-tls-03";
 /// The workload CA's seed. Fixed so the CA certificate is reproducible.
 const CA_SEED: [u8; 32] = [3u8; 32];
 /// A second CA, used only as the wrong trust anchor in a negative case.

@@ -102,11 +102,12 @@ That is not always wanted. Adding the section to the WPT draft drew a preference
   than the certificate's claim. Issuance takes the workload's public key only,
   so the CA never holds the key it certifies.
   Verification is a single-issuer model against a directly provided CA: it
-  does not build a chain, and does not enforce `basicConstraints`, `keyUsage`
-  or name constraints. Wiring into a TLS stack is left to the caller.
+  does not build a chain, does not enforce `basicConstraints`, `keyUsage` or
+  name constraints, and does not check revocation status. Wiring into a TLS
+  stack, including the server DNS-ID and IP-ID checks, is left to the caller.
 * License: Apache 2.0
 * Contact: [kanywst on GitHub](https://github.com/kanywst)
-* Last updated: 08-Sep-2026
+* Last updated: 08-Nov-2026
 ```
 
 ### `draft-ietf-wimse-identifier`

@@ -39,6 +39,18 @@ silently.
   recorded in `SPEC-MAP.md`. The rest of -03 is architecture prose,
   security considerations and editorial.
 
+- **`wimsey-mtls` targets `draft-ietf-wimse-mutual-tls-03`** (submitted
+  2026-10-23). No code change. The changelog of -03 calls it editorial, but the
+  text adds requirements: revocation status per RFC 5280 Section 6.1.3, RFC
+  5280 Section 6 path validation against the trust domain's anchors, and
+  rejecting a server whose certificate lacks the expected DNS-ID or IP-ID even
+  when its identifier validates. All of them sit with the caller, which
+  `verify` already documented for path validation; `SPEC-MAP.md` now lists
+  revocation and the DNS-ID/IP-ID rule too. The one check that is the
+  crate's, exactly one URI SAN, was already enforced.
+- The `draft-ietf-wimse-workload-identity-practices` pin moves to -08,
+  which is deployment guidance with no bearing on the code.
+
 ### Fixed
 
 - `wimsey-wpt` applies the same `typ` rule: `draft-ietf-wimse-wpt-02` already
