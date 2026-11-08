@@ -115,6 +115,20 @@ pub fn issue(
 
 /// Verifies a Workload Identity Token against `verifying_key` and `validation`.
 ///
+/// Whether a JOSE `typ` value conveys the `application/wit+jwt` media type.
+///
+/// RFC 7515 Section 4.1.9: a recipient treats a `typ` without a `/` as if
+/// `application/` were prepended, and media type names are case-insensitive
+/// (RFC 2045 Section 5.1).
+fn conveys_wit_media_type(typ: &str) -> bool {
+    let subtype = match typ.split_once('/') {
+        Some((kind, subtype)) if kind.eq_ignore_ascii_case("application") => subtype,
+        Some(_) => return false,
+        None => typ,
+    };
+    subtype.eq_ignore_ascii_case(TYP)
+}
+
 /// Checks, in order: the structure, the `typ` and `alg` header fields, the
 /// signature, the claim set (which must include `cnf`), and the time and issuer
 /// constraints. The verification fails closed on any deviation.
@@ -141,9 +155,11 @@ pub fn verify(
     };
 
     let header: Header = serde_json::from_slice(&URL_SAFE_NO_PAD.decode(header_b64)?)?;
-    // `typ` is pinned to the exact draft value; media-type spellings such as
-    // `application/wit+jwt` are intentionally not accepted here.
-    if header.typ != TYP {
+    // Section 5.1.3 (since -03) requires `typ` to convey the media type
+    // `wit+jwt`. RFC 7515 Section 4.1.9 makes `wit+jwt` the compact spelling of
+    // `application/wit+jwt`, and media types compare case-insensitively, so all
+    // of those convey it. Anything else does not.
+    if !conveys_wit_media_type(&header.typ) {
         return Err(WitError::WrongType { found: header.typ });
     }
     // Parsing rejects `none`, symmetric and encryption algorithms outright;
@@ -179,7 +195,7 @@ pub fn verify(
     if validation.now >= claims.exp.saturating_add(validation.leeway) {
         return Err(WitError::Expired);
     }
-    // `iat` is not a required claim in -02, so it is only checked when set.
+    // `iat` is not a required claim, so it is only checked when set.
     if let Some(iat) = claims.iat {
         if iat > validation.now.saturating_add(validation.leeway) {
             return Err(WitError::IssuedInFuture);
@@ -521,5 +537,46 @@ mod tests {
 
         let err = verify(&token, &key.verifying_key(), &Validation::at(1_700_000_000));
         assert!(matches!(err, Err(WitError::UnsupportedCritical)));
+    }
+
+    /// Signs `header` and the sample claims into a compact token.
+    fn token_with_header(key: &SigningKey, header: &str) -> String {
+        use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+
+        let header = URL_SAFE_NO_PAD.encode(header);
+        let claims = URL_SAFE_NO_PAD.encode(serde_json::to_vec(&sample_claims()).unwrap());
+        let signing_input = format!("{header}.{claims}");
+        let signature = URL_SAFE_NO_PAD.encode(key.sign(signing_input.as_bytes()));
+        format!("{signing_input}.{signature}")
+    }
+
+    // Section 5.1.3: `typ` must convey the `wit+jwt` media type, and RFC 7515
+    // Section 4.1.9 makes the `application/` prefix optional.
+    #[test]
+    fn accepts_every_spelling_of_the_wit_media_type() {
+        let key = SigningKey::from_ed25519_seed(&[1u8; 32]);
+        for typ in [
+            "wit+jwt",
+            "application/wit+jwt",
+            "WIT+JWT",
+            "Application/Wit+Jwt",
+        ] {
+            let token = token_with_header(&key, &format!(r#"{{"typ":"{typ}","alg":"EdDSA"}}"#));
+            let verified = verify(&token, &key.verifying_key(), &Validation::at(1_700_000_000));
+            assert!(verified.is_ok(), "`{typ}` conveys wit+jwt: {verified:?}");
+        }
+    }
+
+    #[test]
+    fn rejects_a_typ_that_is_not_the_wit_media_type() {
+        let key = SigningKey::from_ed25519_seed(&[1u8; 32]);
+        for typ in ["jwt", "wpt+jwt", "text/wit+jwt", "application/jwt"] {
+            let token = token_with_header(&key, &format!(r#"{{"typ":"{typ}","alg":"EdDSA"}}"#));
+            let err = verify(&token, &key.verifying_key(), &Validation::at(1_700_000_000));
+            assert!(
+                matches!(err, Err(WitError::WrongType { .. })),
+                "`{typ}`: {err:?}"
+            );
+        }
     }
 }

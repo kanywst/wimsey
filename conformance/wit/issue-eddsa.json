@@ -2,7 +2,7 @@
   "format": "wimse-conformance/v7",
   "suite": "wit",
   "id": "issue-eddsa",
-  "spec": "draft-ietf-wimse-workload-creds-02",
+  "spec": "draft-ietf-wimse-workload-creds-03",
   "description": "WIT issuance with EdDSA, plus the inputs a verifier must reject",
   "alg": "EdDSA",
   "issuer_signing_key": {

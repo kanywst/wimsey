@@ -19,8 +19,8 @@ Signing is EdDSA over Ed25519 (RFC 8037) or ES256 (ECDSA P-256), and both are de
 conformance/
   manifest.json                    index of every vector
   identifier/parse-basic.json      draft-ietf-wimse-identifier-04
-  wit/issue-eddsa.json             draft-ietf-wimse-workload-creds-02
-  wit/issue-es256.json             draft-ietf-wimse-workload-creds-02
+  wit/issue-eddsa.json             draft-ietf-wimse-workload-creds-03
+  wit/issue-es256.json             draft-ietf-wimse-workload-creds-03
   wpt/proof-eddsa.json             draft-ietf-wimse-wpt-02
   wpt/proof-es256.json             draft-ietf-wimse-wpt-02
   httpsig/sign-eddsa.json          draft-ietf-wimse-http-signature-08

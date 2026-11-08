@@ -77,7 +77,7 @@ const AUDIENCE: &str = "https://service.example/transfer";
 /// The responding peer's own `nonce`, distinct from the request's.
 const RESPONSE_NONCE: &str = "abcd2222";
 
-const WIT_SPEC: &str = "draft-ietf-wimse-workload-creds-02";
+const WIT_SPEC: &str = "draft-ietf-wimse-workload-creds-03";
 const WPT_SPEC: &str = "draft-ietf-wimse-wpt-02";
 const HTTPSIG_SPEC: &str = "draft-ietf-wimse-http-signature-08";
 
