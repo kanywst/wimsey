@@ -59,13 +59,13 @@
       "id": "wrong-typ",
       "description": "validly signed, but the JOSE `typ` is `jwt` and not `wpt+jwt`",
       "expect": "wrong_type",
-      "proof": "eyJ0eXAiOiJqd3QiLCJhbGciOiJFZERTQSJ9.eyJhdWQiOiJodHRwczovL3dvcmtsb2FkLmV4YW1wbGUuY29tL3BhdGgiLCJleHAiOjE3MDAwMDAzMDAsImp0aSI6IjAxMjM0NTY3ODlhYmNkZWYiLCJ3dGgiOiJvamZQdk0xUkZVV0FkbGc4UU5reGM1aDJEbUo4T3R0ZHowZGw5WjNIVnk0IiwidHRoIjoid05xUEdUUzN2cDRaNTlzMklvd1FHeDJJeHBUREdjVk9zaGpqM3c1WXlNdyIsIm90aCI6eyJjdHgtdG9rZW4iOiIyTHpZME5IM1VKOXhsb0ZvaXZmQ2NGZUlEM1R2RXpiMVlqaDdua2pFb2dnIn19.4rR5IbAcXGzmTDLj8VrVRXeF-VQZvQERSBkUtr_U79r_BA9w5tU6jKURdi7gtiK_Wi9cseZV253wvvLCAfzODA"
+      "proof": "eyJhbGciOiJFZERTQSIsInR5cCI6Imp3dCJ9.eyJhdWQiOiJodHRwczovL3dvcmtsb2FkLmV4YW1wbGUuY29tL3BhdGgiLCJleHAiOjE3MDAwMDAzMDAsImp0aSI6IjAxMjM0NTY3ODlhYmNkZWYiLCJ3dGgiOiJvamZQdk0xUkZVV0FkbGc4UU5reGM1aDJEbUo4T3R0ZHowZGw5WjNIVnk0IiwidHRoIjoid05xUEdUUzN2cDRaNTlzMklvd1FHeDJJeHBUREdjVk9zaGpqM3c1WXlNdyIsIm90aCI6eyJjdHgtdG9rZW4iOiIyTHpZME5IM1VKOXhsb0ZvaXZmQ2NGZUlEM1R2RXpiMVlqaDdua2pFb2dnIn19.mKASaeTOr4O7Lcz8yUMf4v32_B8ktucnf2ESWc-5XlatcS7dcZ6apXIO4p0Ys3e62Fu0HaIjSKDAqIURcRVjDQ"
     },
     {
       "id": "wrong-typ-media-type",
       "description": "validly signed, but `text/wpt+jwt` is not the `application/wpt+jwt` media type",
       "expect": "wrong_type",
-      "proof": "eyJ0eXAiOiJ0ZXh0L3dwdCtqd3QiLCJhbGciOiJFZERTQSJ9.eyJhdWQiOiJodHRwczovL3dvcmtsb2FkLmV4YW1wbGUuY29tL3BhdGgiLCJleHAiOjE3MDAwMDAzMDAsImp0aSI6IjAxMjM0NTY3ODlhYmNkZWYiLCJ3dGgiOiJvamZQdk0xUkZVV0FkbGc4UU5reGM1aDJEbUo4T3R0ZHowZGw5WjNIVnk0IiwidHRoIjoid05xUEdUUzN2cDRaNTlzMklvd1FHeDJJeHBUREdjVk9zaGpqM3c1WXlNdyIsIm90aCI6eyJjdHgtdG9rZW4iOiIyTHpZME5IM1VKOXhsb0ZvaXZmQ2NGZUlEM1R2RXpiMVlqaDdua2pFb2dnIn19.fL6WhMBJQzqhElNqZBAYNwQokdTKYIN1nkBM2VOwJ6JvGK3QnNqFrEOztamhB4HzF0sABeS98grXJsOgBSyTBg"
+      "proof": "eyJhbGciOiJFZERTQSIsInR5cCI6InRleHQvd3B0K2p3dCJ9.eyJhdWQiOiJodHRwczovL3dvcmtsb2FkLmV4YW1wbGUuY29tL3BhdGgiLCJleHAiOjE3MDAwMDAzMDAsImp0aSI6IjAxMjM0NTY3ODlhYmNkZWYiLCJ3dGgiOiJvamZQdk0xUkZVV0FkbGc4UU5reGM1aDJEbUo4T3R0ZHowZGw5WjNIVnk0IiwidHRoIjoid05xUEdUUzN2cDRaNTlzMklvd1FHeDJJeHBUREdjVk9zaGpqM3c1WXlNdyIsIm90aCI6eyJjdHgtdG9rZW4iOiIyTHpZME5IM1VKOXhsb0ZvaXZmQ2NGZUlEM1R2RXpiMVlqaDdua2pFb2dnIn19.pGteRZv0riXfxXvvd2N-DfAuXFElAKk-4CVMjBjqKpYZzOVAUe8nwBY-JyTE2LahgzkZL2MqVXsvrgn8GISGCQ"
     },
     {
       "id": "tampered-payload",

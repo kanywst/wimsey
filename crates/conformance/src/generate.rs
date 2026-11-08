@@ -194,6 +194,19 @@ fn resign_with_header(token: &str, header_json: &str, key: &SigningKey) -> Strin
     format!("{signing_input}.{}", URL_SAFE_NO_PAD.encode(signature))
 }
 
+/// A JOSE header naming `typ`, the algorithm of `key`, and `kid` when set.
+///
+/// The `alg` follows the key, so a negative case that swaps only `typ` is
+/// still a valid signature under either algorithm and fails for the `typ`
+/// alone.
+fn jws_header(typ: &str, key: &SigningKey, kid: Option<&str>) -> String {
+    let mut header = serde_json::json!({ "typ": typ, "alg": key.algorithm().as_str() });
+    if let Some(kid) = kid {
+        header["kid"] = serde_json::Value::from(kid);
+    }
+    header.to_string()
+}
+
 /// Rewrites one claim value in a token's payload, leaving the signature alone.
 ///
 /// `from` and `to` must be the same length so the payload stays valid JSON: the
@@ -247,7 +260,7 @@ fn wit_negatives(
         WitNegative {
             token: Some(resign_with_header(
                 token,
-                r#"{"typ":"jwt","alg":"EdDSA","kid":"issuer-key-1"}"#,
+                &jws_header("jwt", issuer_key, kid),
                 issuer_key,
             )),
             ..wit_neg(
@@ -259,7 +272,7 @@ fn wit_negatives(
         WitNegative {
             token: Some(resign_with_header(
                 token,
-                r#"{"typ":"text/wit+jwt","alg":"EdDSA","kid":"issuer-key-1"}"#,
+                &jws_header("text/wit+jwt", issuer_key, kid),
                 issuer_key,
             )),
             ..wit_neg(
@@ -403,7 +416,7 @@ fn wpt_negatives(
         WptNegative {
             proof: Some(resign_with_header(
                 proof,
-                r#"{"typ":"jwt","alg":"EdDSA"}"#,
+                &jws_header("jwt", pop_key, None),
                 pop_key,
             )),
             ..wpt_neg(
@@ -415,7 +428,7 @@ fn wpt_negatives(
         WptNegative {
             proof: Some(resign_with_header(
                 proof,
-                r#"{"typ":"text/wpt+jwt","alg":"EdDSA"}"#,
+                &jws_header("text/wpt+jwt", pop_key, None),
                 pop_key,
             )),
             ..wpt_neg(
