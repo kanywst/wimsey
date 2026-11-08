@@ -28,6 +28,29 @@ silently.
   `accept` to `reject` with the new `empty_path` error code. The format stays
   `wimse-conformance/v7`: a v7 reader that does not know the code reports a
   mismatch rather than a silent pass.
+- **`wimsey-wit` targets `draft-ietf-wimse-workload-creds-03`** (submitted
+  2026-10-30). -03 adds a "Validating the WIT" procedure for recipients
+  (Section 5.1.3). `verify` already met every step but one: it required `typ`
+  to be exactly `wit+jwt`, while the step asks that `typ` convey the
+  `wit+jwt` media type. It now also accepts `application/wit+jwt`, compared
+  case-insensitively, as RFC 7515 Section 4.1.9 requires. Trust-anchor
+  selection stays with the caller, and two new caller-side items (`jti` when a
+  deployment revokes, the fully-specified `Ed25519` algorithm identifier) are
+  recorded in `SPEC-MAP.md`. The rest of -03 is architecture prose,
+  security considerations and editorial.
+
+### Fixed
+
+- `wimsey-wpt` applies the same `typ` rule: `draft-ietf-wimse-wpt-02` already
+  asked that `typ` convey the `wpt+jwt` media type, and `verify` had refused
+  `application/wpt+jwt`. The comparison lives in `wimsey_jose::typ_conveys`,
+  shared by both tokens. The `wit` and `wpt` vectors gain a
+  `wrong-typ-media-type` negative (`text/<subtype>`). Only the reject side is
+  in the vectors: the `wit` and `wpt` suites have no `accepted` array yet, so
+  that `application/wit+jwt` verifies is pinned by unit tests alone.
+- The `wrong-typ` negatives of the ES256 `wit` and `wpt` vectors named
+  `alg: EdDSA` while being signed with ES256; their headers now name the
+  signing key's algorithm.
 
 ## [0.9.0] - 2026-10-22
 

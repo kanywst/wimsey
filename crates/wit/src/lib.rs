@@ -1,6 +1,6 @@
 //! `wimsey-wit` — WIMSE Workload Identity Token (WIT) issuance and verification.
 //!
-//! Target spec: `draft-ietf-wimse-workload-creds-02`. A WIT is a JWT with JOSE
+//! Target spec: `draft-ietf-wimse-workload-creds-03`. A WIT is a JWT with JOSE
 //! header `typ: wit+jwt`, signed by an issuer, carrying the workload's
 //! identifier in `sub` and a proof-of-possession key in `cnf`.
 //!

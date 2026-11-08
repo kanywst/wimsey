@@ -21,7 +21,8 @@ pub enum WitError {
     /// A JSON component could not be parsed or serialized.
     #[error("invalid json: {0}")]
     Json(#[from] serde_json::Error),
-    /// The JOSE header `typ` was not `wit+jwt`.
+    /// The JOSE header `typ` did not convey the `wit+jwt` media type
+    /// (`wit+jwt` or `application/wit+jwt`, case-insensitively).
     #[error("unexpected token type `{found}`, expected `wit+jwt`")]
     WrongType {
         /// The `typ` value that was found.

@@ -19,8 +19,8 @@ Signing is EdDSA over Ed25519 (RFC 8037) or ES256 (ECDSA P-256), and both are de
 conformance/
   manifest.json                    index of every vector
   identifier/parse-basic.json      draft-ietf-wimse-identifier-04
-  wit/issue-eddsa.json             draft-ietf-wimse-workload-creds-02
-  wit/issue-es256.json             draft-ietf-wimse-workload-creds-02
+  wit/issue-eddsa.json             draft-ietf-wimse-workload-creds-03
+  wit/issue-es256.json             draft-ietf-wimse-workload-creds-03
   wpt/proof-eddsa.json             draft-ietf-wimse-wpt-02
   wpt/proof-es256.json             draft-ietf-wimse-wpt-02
   httpsig/sign-eddsa.json          draft-ietf-wimse-http-signature-08
@@ -92,7 +92,7 @@ Every vector has a `negative` array. Each entry records **only the fields it ove
 | `token_too_long` | Larger than the accepted maximum |
 | `unsupported_critical` | A critical JOSE header extension was not understood |
 | `invalid_encoding` | A Base64 or JSON component could not be decoded |
-| `wrong_type` | The JOSE `typ` was not the one this token type requires |
+| `wrong_type` | The JOSE `typ` did not convey the media type this token type requires (`wit+jwt` or `application/wit+jwt`, case-insensitively; likewise for `wpt+jwt`) |
 | `unsupported_alg` | The `alg` header or signature parameter was not supported |
 | `invalid_signature` | The signature did not verify against the key |
 | `expired` | The token or signature has expired |

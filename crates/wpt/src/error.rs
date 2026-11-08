@@ -17,7 +17,8 @@ pub enum WptError {
     /// A JSON component could not be parsed or serialized.
     #[error("invalid json: {0}")]
     Json(#[from] serde_json::Error),
-    /// The JOSE header `typ` was not `wpt+jwt`.
+    /// The JOSE header `typ` did not convey the `wpt+jwt` media type
+    /// (`wpt+jwt` or `application/wpt+jwt`, case-insensitively).
     #[error("unexpected token type `{found}`, expected `wpt+jwt`")]
     WrongType {
         /// The `typ` value that was found.

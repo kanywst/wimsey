@@ -77,7 +77,7 @@ const AUDIENCE: &str = "https://service.example/transfer";
 /// The responding peer's own `nonce`, distinct from the request's.
 const RESPONSE_NONCE: &str = "abcd2222";
 
-const WIT_SPEC: &str = "draft-ietf-wimse-workload-creds-02";
+const WIT_SPEC: &str = "draft-ietf-wimse-workload-creds-03";
 const WPT_SPEC: &str = "draft-ietf-wimse-wpt-02";
 const HTTPSIG_SPEC: &str = "draft-ietf-wimse-http-signature-08";
 
@@ -194,6 +194,19 @@ fn resign_with_header(token: &str, header_json: &str, key: &SigningKey) -> Strin
     format!("{signing_input}.{}", URL_SAFE_NO_PAD.encode(signature))
 }
 
+/// A JOSE header naming `typ`, the algorithm of `key`, and `kid` when set.
+///
+/// The `alg` follows the key, so a negative case that swaps only `typ` is
+/// still a valid signature under either algorithm and fails for the `typ`
+/// alone.
+fn jws_header(typ: &str, key: &SigningKey, kid: Option<&str>) -> String {
+    let mut header = serde_json::json!({ "typ": typ, "alg": key.algorithm().as_str() });
+    if let Some(kid) = kid {
+        header["kid"] = serde_json::Value::from(kid);
+    }
+    header.to_string()
+}
+
 /// Rewrites one claim value in a token's payload, leaving the signature alone.
 ///
 /// `from` and `to` must be the same length so the payload stays valid JSON: the
@@ -247,12 +260,24 @@ fn wit_negatives(
         WitNegative {
             token: Some(resign_with_header(
                 token,
-                r#"{"typ":"jwt","alg":"EdDSA","kid":"issuer-key-1"}"#,
+                &jws_header("jwt", issuer_key, kid),
                 issuer_key,
             )),
             ..wit_neg(
                 "wrong-typ",
                 "validly signed, but the JOSE `typ` is `jwt` and not `wit+jwt`",
+                ErrorCode::WrongType,
+            )
+        },
+        WitNegative {
+            token: Some(resign_with_header(
+                token,
+                &jws_header("text/wit+jwt", issuer_key, kid),
+                issuer_key,
+            )),
+            ..wit_neg(
+                "wrong-typ-media-type",
+                "validly signed, but `text/wit+jwt` is not the `application/wit+jwt` media type",
                 ErrorCode::WrongType,
             )
         },
@@ -391,12 +416,24 @@ fn wpt_negatives(
         WptNegative {
             proof: Some(resign_with_header(
                 proof,
-                r#"{"typ":"jwt","alg":"EdDSA"}"#,
+                &jws_header("jwt", pop_key, None),
                 pop_key,
             )),
             ..wpt_neg(
                 "wrong-typ",
                 "validly signed, but the JOSE `typ` is `jwt` and not `wpt+jwt`",
+                ErrorCode::WrongType,
+            )
+        },
+        WptNegative {
+            proof: Some(resign_with_header(
+                proof,
+                &jws_header("text/wpt+jwt", pop_key, None),
+                pop_key,
+            )),
+            ..wpt_neg(
+                "wrong-typ-media-type",
+                "validly signed, but `text/wpt+jwt` is not the `application/wpt+jwt` media type",
                 ErrorCode::WrongType,
             )
         },

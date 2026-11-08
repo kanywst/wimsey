@@ -61,7 +61,13 @@
       "id": "wrong-typ",
       "description": "validly signed, but the JOSE `typ` is `jwt` and not `wpt+jwt`",
       "expect": "wrong_type",
-      "proof": "eyJ0eXAiOiJqd3QiLCJhbGciOiJFZERTQSJ9.eyJhdWQiOiJodHRwczovL3dvcmtsb2FkLmV4YW1wbGUuY29tL3BhdGgiLCJleHAiOjE3MDAwMDAzMDAsImp0aSI6IjAxMjM0NTY3ODlhYmNkZWYiLCJ3dGgiOiJZdUpxY29UMEVJWkZYT056N3RjM3ZTaUIyVFBCZ3UyOUtBakduanVFNUJZIiwidHRoIjoid05xUEdUUzN2cDRaNTlzMklvd1FHeDJJeHBUREdjVk9zaGpqM3c1WXlNdyIsIm90aCI6eyJjdHgtdG9rZW4iOiIyTHpZME5IM1VKOXhsb0ZvaXZmQ2NGZUlEM1R2RXpiMVlqaDdua2pFb2dnIn19.4xm4S61jySUyL546zoIZkwhUCDUbwVNofKo7_HJ1XF8sRifKDFL0AtpdpOD6GJPF61qSiDd1ysPREJgDfW5D5A"
+      "proof": "eyJhbGciOiJFUzI1NiIsInR5cCI6Imp3dCJ9.eyJhdWQiOiJodHRwczovL3dvcmtsb2FkLmV4YW1wbGUuY29tL3BhdGgiLCJleHAiOjE3MDAwMDAzMDAsImp0aSI6IjAxMjM0NTY3ODlhYmNkZWYiLCJ3dGgiOiJZdUpxY29UMEVJWkZYT056N3RjM3ZTaUIyVFBCZ3UyOUtBakduanVFNUJZIiwidHRoIjoid05xUEdUUzN2cDRaNTlzMklvd1FHeDJJeHBUREdjVk9zaGpqM3c1WXlNdyIsIm90aCI6eyJjdHgtdG9rZW4iOiIyTHpZME5IM1VKOXhsb0ZvaXZmQ2NGZUlEM1R2RXpiMVlqaDdua2pFb2dnIn19.TEKrg1mhaPpajHnykGT2AW516enH3e2hUGasAJigJ6KwaGIZA4JpoSZgSKWPdw9wFmA3jgq2ccqle50CCc6JFA"
+    },
+    {
+      "id": "wrong-typ-media-type",
+      "description": "validly signed, but `text/wpt+jwt` is not the `application/wpt+jwt` media type",
+      "expect": "wrong_type",
+      "proof": "eyJhbGciOiJFUzI1NiIsInR5cCI6InRleHQvd3B0K2p3dCJ9.eyJhdWQiOiJodHRwczovL3dvcmtsb2FkLmV4YW1wbGUuY29tL3BhdGgiLCJleHAiOjE3MDAwMDAzMDAsImp0aSI6IjAxMjM0NTY3ODlhYmNkZWYiLCJ3dGgiOiJZdUpxY29UMEVJWkZYT056N3RjM3ZTaUIyVFBCZ3UyOUtBakduanVFNUJZIiwidHRoIjoid05xUEdUUzN2cDRaNTlzMklvd1FHeDJJeHBUREdjVk9zaGpqM3c1WXlNdyIsIm90aCI6eyJjdHgtdG9rZW4iOiIyTHpZME5IM1VKOXhsb0ZvaXZmQ2NGZUlEM1R2RXpiMVlqaDdua2pFb2dnIn19.JjC0tq-sLE2Dt8iuMcgHCOA_fyeVBdM9W02u078ME-T6zoTs3qa4lg3q1USh_e0c5fbbOn6KlBcjDFTfyXPFIQ"
     },
     {
       "id": "tampered-payload",

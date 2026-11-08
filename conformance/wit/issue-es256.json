@@ -2,7 +2,7 @@
   "format": "wimse-conformance/v7",
   "suite": "wit",
   "id": "issue-es256",
-  "spec": "draft-ietf-wimse-workload-creds-02",
+  "spec": "draft-ietf-wimse-workload-creds-03",
   "description": "WIT issuance with ES256, plus the inputs a verifier must reject",
   "alg": "ES256",
   "issuer_signing_key": {
@@ -49,7 +49,13 @@
       "id": "wrong-typ",
       "description": "validly signed, but the JOSE `typ` is `jwt` and not `wit+jwt`",
       "expect": "wrong_type",
-      "token": "eyJ0eXAiOiJqd3QiLCJhbGciOiJFZERTQSIsImtpZCI6Imlzc3Vlci1rZXktMSJ9.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvYXBpIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDM2MDAsImp0aSI6ImExYjJjMyIsImNuZiI6eyJqd2siOnsiYWxnIjoiRVMyNTYiLCJrdHkiOiJFQyIsImNydiI6IlAtMjU2IiwieCI6IkhoaFRMOVIxVEFMekJCMmNkYzZ6TzRQXzJCckh6a19vZ3N5eHlZdkZpVzQiLCJ5IjoicEd3eEhFNHY5QTNaYWpaVDV1UlVSZE10X2todXp0ZGNlcERHb1lpQndLTSJ9fX0.mmGza_pzRtiaY8_OqptZnRapKkKktzSUPDP1QCVB9ydLWYZwGybOmQQlHvwE97SVCKoD-FhC01v83nQMJ41YQQ"
+      "token": "eyJhbGciOiJFUzI1NiIsImtpZCI6Imlzc3Vlci1rZXktMSIsInR5cCI6Imp3dCJ9.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvYXBpIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDM2MDAsImp0aSI6ImExYjJjMyIsImNuZiI6eyJqd2siOnsiYWxnIjoiRVMyNTYiLCJrdHkiOiJFQyIsImNydiI6IlAtMjU2IiwieCI6IkhoaFRMOVIxVEFMekJCMmNkYzZ6TzRQXzJCckh6a19vZ3N5eHlZdkZpVzQiLCJ5IjoicEd3eEhFNHY5QTNaYWpaVDV1UlVSZE10X2todXp0ZGNlcERHb1lpQndLTSJ9fX0.EPTNkiTf5KWJ42sF21VDrFlYkQHiDtB7STizJ1WfjPC7Ie02lOc06vx67yy6TruxgSeCYTLNjNAfc0xPnmsc8w"
+    },
+    {
+      "id": "wrong-typ-media-type",
+      "description": "validly signed, but `text/wit+jwt` is not the `application/wit+jwt` media type",
+      "expect": "wrong_type",
+      "token": "eyJhbGciOiJFUzI1NiIsImtpZCI6Imlzc3Vlci1rZXktMSIsInR5cCI6InRleHQvd2l0K2p3dCJ9.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvYXBpIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDM2MDAsImp0aSI6ImExYjJjMyIsImNuZiI6eyJqd2siOnsiYWxnIjoiRVMyNTYiLCJrdHkiOiJFQyIsImNydiI6IlAtMjU2IiwieCI6IkhoaFRMOVIxVEFMekJCMmNkYzZ6TzRQXzJCckh6a19vZ3N5eHlZdkZpVzQiLCJ5IjoicEd3eEhFNHY5QTNaYWpaVDV1UlVSZE10X2todXp0ZGNlcERHb1lpQndLTSJ9fX0.7qhf6LkcAj0GimyJFQteHBueFVuMJbHYcGg1Zcve3WKtJBKcz198DYZPvRkDE_z80GfW9wpN8WmmDl5UznEKXQ"
     },
     {
       "id": "tampered-payload",

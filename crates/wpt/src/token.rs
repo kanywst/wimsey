@@ -214,9 +214,10 @@ pub fn verify(
     };
 
     let header: Header = serde_json::from_slice(&URL_SAFE_NO_PAD.decode(header_b64)?)?;
-    // `typ` is pinned to the exact draft value; the media-type spelling
-    // `application/wpt+jwt` is intentionally not accepted here.
-    if header.typ != TYP {
+    // Section 2 requires `typ` to convey the media type `wpt+jwt`, which
+    // `application/wpt+jwt` and any change of case also do (RFC 7515 Section
+    // 4.1.9, RFC 2045 Section 5.1).
+    if !wimsey_jose::typ_conveys(&header.typ, TYP) {
         return Err(WptError::WrongType { found: header.typ });
     }
     // The proof MUST be produced with the algorithm the WIT's `cnf` JWK names,
@@ -442,6 +443,41 @@ mod tests {
 
         let err = verify(&wpt, &key.verifying_key(), &valid_at(1_700_000_000));
         assert!(matches!(err, Err(WptError::UnsupportedCritical)));
+    }
+
+    // Section 2: `typ` must convey the `wpt+jwt` media type, and RFC 7515
+    // Section 4.1.9 makes the `application/` prefix optional.
+    #[test]
+    fn checks_that_typ_conveys_the_wpt_media_type() {
+        use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+
+        let key = SigningKey::from_ed25519_seed(&[9u8; 32]);
+        let wpt_with = |typ: &str| {
+            let header = URL_SAFE_NO_PAD.encode(format!(r#"{{"typ":"{typ}","alg":"EdDSA"}}"#));
+            let claims = URL_SAFE_NO_PAD.encode(serde_json::to_vec(&sample_claims()).unwrap());
+            let signing_input = format!("{header}.{claims}");
+            let signature = URL_SAFE_NO_PAD.encode(key.sign(signing_input.as_bytes()));
+            format!("{signing_input}.{signature}")
+        };
+        for typ in ["wpt+jwt", "application/wpt+jwt", "Application/WPT+JWT"] {
+            let verified = verify(
+                &wpt_with(typ),
+                &key.verifying_key(),
+                &valid_at(1_700_000_000),
+            );
+            assert!(verified.is_ok(), "`{typ}` conveys wpt+jwt: {verified:?}");
+        }
+        for typ in ["jwt", "wit+jwt", "text/wpt+jwt"] {
+            let err = verify(
+                &wpt_with(typ),
+                &key.verifying_key(),
+                &valid_at(1_700_000_000),
+            );
+            assert!(
+                matches!(err, Err(WptError::WrongType { .. })),
+                "`{typ}`: {err:?}"
+            );
+        }
     }
 
     #[test]

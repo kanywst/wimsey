@@ -33,7 +33,9 @@
 mod error;
 mod jwk;
 mod key;
+mod typ;
 
 pub use error::JoseError;
 pub use jwk::{Jwk, PrivateJwk};
 pub use key::{Algorithm, SigningKey, VerifyingKey, SIGNATURE_LEN};
+pub use typ::typ_conveys;

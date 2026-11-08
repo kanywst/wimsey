@@ -9,12 +9,12 @@
     {
       "suite": "wit",
       "path": "wit/issue-eddsa.json",
-      "spec": "draft-ietf-wimse-workload-creds-02"
+      "spec": "draft-ietf-wimse-workload-creds-03"
     },
     {
       "suite": "wit",
       "path": "wit/issue-es256.json",
-      "spec": "draft-ietf-wimse-workload-creds-02"
+      "spec": "draft-ietf-wimse-workload-creds-03"
     },
     {
       "suite": "wpt",
