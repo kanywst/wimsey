@@ -1,6 +1,6 @@
 //! `wimsey-mtls` — the WIMSE mutual TLS transport binding.
 //!
-//! Target spec: `draft-ietf-wimse-mutual-tls-02`. The workload authenticates
+//! Target spec: `draft-ietf-wimse-mutual-tls-03`. The workload authenticates
 //! with a Workload Identity Certificate (WIC): an X.509 client certificate that
 //! carries the workload identifier in a URI subjectAltName, signed by a workload
 //! CA. This is the X.509-SVID shape SPIFFE uses.
@@ -35,8 +35,11 @@
 //! [`verify`] checks that the WIC is signed by the *directly provided* CA, is
 //! within its validity window, and carries a URI SAN. It is a
 //! single-issuer trust model: it does not build or validate a chain, and does
-//! not yet enforce `basicConstraints`, `keyUsage` or name constraints. Callers
-//! needing full path validation should use a dedicated X.509 verifier.
+//! not yet enforce `basicConstraints`, `keyUsage` or name constraints, and it
+//! does not check revocation status. Callers needing the RFC 5280 Section 6
+//! path validation and revocation check Section 3.2 of the draft requires
+//! should use a dedicated X.509 verifier. Matching the peer's trust domain,
+//! and a server's DNS-ID or IP-ID (Section 3.2.1), is also the caller's.
 //!
 //! Wiring a WIC into a rustls client or server configuration is left to the
 //! caller; this crate does not depend on rustls and does not pick one.

@@ -2,7 +2,7 @@
   "format": "wimse-conformance/v7",
   "suite": "mtls",
   "id": "wic-es256",
-  "spec": "draft-ietf-wimse-mutual-tls-02",
+  "spec": "draft-ietf-wimse-mutual-tls-03",
   "description": "Workload Identity Certificate issuance over a workload-supplied public key (ES256), plus the inputs a verifier must reject",
   "ca_signing_key": {
     "alg": "ES256",

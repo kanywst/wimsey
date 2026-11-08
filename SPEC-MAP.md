@@ -13,10 +13,10 @@ revision**. Bumping a pin is a deliberate, reviewed change.
 | `draft-ietf-wimse-workload-creds` | -03 | `wimsey-wit` | Defines WIT and WIC |
 | `draft-ietf-wimse-wpt` | -02 | `wimsey-wpt` | Workload Proof Token (DPoP-style PoP) |
 | `draft-ietf-wimse-http-signature` | -08 | `wimsey-httpsig` | Profile of RFC 9421 |
-| `draft-ietf-wimse-mutual-tls` | -02 | `wimsey-mtls` | mTLS binding, client cert = WIC |
-| `draft-ietf-wimse-workload-identity-practices` | -07 | — | Informational; with the IESG |
+| `draft-ietf-wimse-mutual-tls` | -03 | `wimsey-mtls` | mTLS binding, client cert = WIC |
+| `draft-ietf-wimse-workload-identity-practices` | -08 | — | Informational; with the IESG. -08 is editorial only for this workspace (AD feedback on deployment guidance) |
 
-Every pin above is the current *published* revision as of 2026-10-22.
+Every pin above is the current *published* revision as of 2026-11-08.
 
 ## Drafts in progress upstream
 
@@ -28,11 +28,11 @@ first entry of its Document History section.
 | --- | --- | --- | --- |
 | `identifier` | -04 | -04 | — |
 | `workload-creds` | -03 | -03 | — |
-| `wpt` | -02 | -03 | Moves the key-management section to `workload-creds`; no normative change for `wimsey-wpt`. |
+| `wpt` | -02 | -03 | Moves the key-management section to `workload-creds`; no normative change for `wimsey-wpt`. Also switches the examples to `Ed25519` and spells out the `alg` checks, which lands with [#91](https://github.com/kanywst/wimsey/issues/91). |
 | `http-signature` | -08 | -08 | — |
-| `mutual-tls` | -02 | -03 | Editorial (capitalization of defined terms). |
+| `mutual-tls` | -03 | -03 | — |
 
-Checked 2026-09-29 (`http-signature` 2026-10-22), and re-checked by
+Checked 2026-09-29 (`http-signature` 2026-10-22; `identifier`, `workload-creds`, `mutual-tls` and `wpt` 2026-11-08), and re-checked by
 `scripts/check-draft-revisions.sh`.
 
 The editors'-copy column is a forecast, not a diff. It described
@@ -53,8 +53,9 @@ the pinned drafts.
 | Mapping an external handle (DNS name, service name) to the expected identifier | `identifier` §5 | Left to the caller: the crate has no notion of how a workload was addressed. |
 | Accepting the fully-specified `Ed25519` algorithm identifier (RFC 9864) | `workload-creds` §5.1 | Not yet: -03's example WIT, like the `http-signature` -08 examples, names `Ed25519` in `cnf.jwk.alg` in place of the deprecated `EdDSA`. `wimsey-jose` emits and accepts `EdDSA` only, so such a WIT is rejected with `unsupported_confirmation_alg`. The text still allows any registered value, so this is an interop gap rather than a violation; switching needs the key to carry its `alg` label, because `wpt` requires the proof's `alg` to string-equal the WIT's, and is tracked in [#91](https://github.com/kanywst/wimsey/issues/91). |
 | Requiring `jti` in every WIT when a deployment runs a status list or `jti` deny-list | `workload-creds` §9.3.1 | Left to the caller: `jti` is optional in `WitClaims`, and only the deployment knows whether it revokes. |
-| Trust-domain match on the TLS peer certificate | `mutual-tls` §4 | Left to the caller: `wimsey-mtls::verify` returns the identifier and the caller compares it, since chain building and rustls wiring are out of scope. |
-| Chain building, `basicConstraints`, `keyUsage`, name constraints | `mutual-tls` §4 | Not enforced. `verify` is a single-issuer model that checks the directly provided CA only; deployments needing full PKIX path validation should use a dedicated X.509 verifier. |
+| Trust-domain match on the TLS peer certificate | `mutual-tls` §3.2, §3.2.1 | Left to the caller: `wimsey-mtls::verify` returns the identifier and the caller compares it, since chain building and rustls wiring are out of scope. |
+| Chain building, `basicConstraints`, `keyUsage`, name constraints, revocation status | `mutual-tls` §3.2 | Not enforced. `verify` is a single-issuer model that checks the directly provided CA only; deployments needing full PKIX path validation should use a dedicated X.509 verifier. |
+| Rejecting a server whose certificate lacks the expected DNS-ID or IP-ID even when its Workload Identifier validates | `mutual-tls` §3.2.1 | Left to the caller: TLS server identity checks (RFC 9525) belong to the TLS stack, which this crate does not wire. |
 | Selecting the trust anchor from the `sub` trust domain | `workload-creds` §3 | Left to the caller: `wimsey_wit::verify` takes the issuer's verifying key as an argument, so mapping the trust domain of `sub` to its configured anchors — and picking the key within them, by `kid` where one is present — is the deployment's. This also means anchor material can never be resolved from the token's own `iss`, which -03 removed and §9.1 describes as an attack. Validating a credential only against the anchors of its own trust domain (§3, new in -03) is part of the same mapping. |
 | Local policy on the peer's algorithm per trust domain | `http-signature` §3.1 | Partly left to the caller: `VerifyConfig::accepted_algorithms` rejects an algorithm outside the configured set, but choosing that set by the peer's trust domain is the deployment's. |
 | Rejecting an unsigned response the client required (`wimse-sign-response`) | `http-signature` §3.5 | Left to the caller: with no signature there is nothing to hand `verify`, so the client that set the parameter has to treat a missing `Signature` as a failure. |

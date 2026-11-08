@@ -25,8 +25,8 @@ conformance/
   wpt/proof-es256.json             draft-ietf-wimse-wpt-02
   httpsig/sign-eddsa.json          draft-ietf-wimse-http-signature-08
   httpsig/sign-es256.json          draft-ietf-wimse-http-signature-08
-  mtls/wic-eddsa.json              draft-ietf-wimse-mutual-tls-02
-  mtls/wic-es256.json              draft-ietf-wimse-mutual-tls-02
+  mtls/wic-eddsa.json              draft-ietf-wimse-mutual-tls-03
+  mtls/wic-es256.json              draft-ietf-wimse-mutual-tls-03
 ```
 
 Every suite has one vector per signature algorithm. `ES256` is not extra credit:
