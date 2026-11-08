@@ -37,7 +37,7 @@ use wimsey_wpt::{WptClaims, WptError};
 /// which `draft-ietf-wimse-wpt-02` covers with the `tth` and `oth` claims. A v4
 /// reader has nowhere to put them, so it verifies the positive case having
 /// checked neither binding and reports a pass.
-pub const FORMAT: &str = "wimse-conformance/v7";
+pub const FORMAT: &str = "wimse-conformance/v8";
 
 /// The index of every vector in the suite, written to `manifest.json`.
 ///
@@ -350,6 +350,24 @@ pub struct WitVector {
     pub token: String,
     /// Inputs that MUST be rejected, and why.
     pub negative: Vec<WitNegative>,
+    /// Altered inputs that MUST still verify, and why.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub accepted: Vec<WitAccepted>,
+}
+
+/// A WIT that differs from the recorded one and MUST still verify, recovering
+/// the recorded claims.
+///
+/// Rejections alone cannot catch a verifier that refuses more than the draft
+/// does, such as one that compares `typ` as an exact string.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct WitAccepted {
+    /// A stable identifier, unique within the file.
+    pub id: String,
+    /// Why the altered input is still valid, in prose.
+    pub description: String,
+    /// Replaces the positive case's `token`.
+    pub token: String,
 }
 
 /// A WIT verification input that must fail, and the reason it must fail with.
@@ -411,6 +429,31 @@ pub struct WptVector {
     pub proof: String,
     /// Inputs that MUST be rejected, and why.
     pub negative: Vec<WptNegative>,
+    /// Altered inputs that MUST still verify, and why.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub accepted: Vec<WptAccepted>,
+}
+
+/// A WPT input that differs from the recorded one and MUST still verify,
+/// recovering the recorded claims.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct WptAccepted {
+    /// A stable identifier, unique within the file.
+    pub id: String,
+    /// Why the altered input is still valid, in prose.
+    pub description: String,
+    /// Replaces the positive case's `proof`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proof: Option<String>,
+    /// Replaces the positive case's `wit`. The proof-of-possession key is
+    /// recovered from this WIT, verified against `issuer_verifying_key`, and
+    /// `wth` must bind to it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wit: Option<String>,
+    /// Replaces the claims verification must recover. Needed when `wit` is
+    /// replaced, since the proof's `wth` then names the other WIT.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub claims: Option<WptClaims>,
 }
 
 /// A WPT verification input that must fail, and the reason it must fail with.

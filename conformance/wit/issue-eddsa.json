@@ -1,5 +1,5 @@
 {
-  "format": "wimse-conformance/v7",
+  "format": "wimse-conformance/v8",
   "suite": "wit",
   "id": "issue-eddsa",
   "spec": "draft-ietf-wimse-workload-creds-03",
@@ -95,6 +95,18 @@
       "description": "the `cnf` JWK names `none`, which the draft forbids outright",
       "expect": "forbidden_confirmation_alg",
       "token": "eyJ0eXAiOiJ3aXQrand0IiwiYWxnIjoiRWREU0EiLCJraWQiOiJpc3N1ZXIta2V5LTEifQ.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvYXBpIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDM2MDAsImp0aSI6ImExYjJjMyIsImNuZiI6eyJqd2siOnsiYWxnIjoibm9uZSIsImt0eSI6Ik9LUCIsImNydiI6IkVkMjU1MTkiLCJ4IjoiNmtwc1ktS2NVZ3EtOVZCN0V5N0YtWlZIZHE2LXZudVNRaDdxYVJSRzBpdyJ9fX0.J1YKsWESVcC7VQDXjxyqmipAW3PJ7II5K0TZz6SzCuUGTwliN8c8_xoUMG0YHQUa5cW3ifgAJ25WV2Z_DVWQCA"
+    }
+  ],
+  "accepted": [
+    {
+      "id": "typ-with-application-prefix",
+      "description": "`application/wit+jwt` is the same media type as `wit+jwt`",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6Imlzc3Vlci1rZXktMSIsInR5cCI6ImFwcGxpY2F0aW9uL3dpdCtqd3QifQ.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvYXBpIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDM2MDAsImp0aSI6ImExYjJjMyIsImNuZiI6eyJqd2siOnsiYWxnIjoiRWREU0EiLCJrdHkiOiJPS1AiLCJjcnYiOiJFZDI1NTE5IiwieCI6IjZrcHNZLUtjVWdxLTlWQjdFeTdGLVpWSGRxNi12bnVTUWg3cWFSUkcwaXcifX19.jPOkZiUQXtAUD7knKlcSwhB2SV6KKU-mcHkkHF2TGjpOqH4_UwRcG7tHNatVspK6B4c87L6zQhnGH83rSqvnBA"
+    },
+    {
+      "id": "typ-in-another-case",
+      "description": "media type names compare case-insensitively",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6Imlzc3Vlci1rZXktMSIsInR5cCI6IkFwcGxpY2F0aW9uL1dJVCtKV1QifQ.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvYXBpIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDM2MDAsImp0aSI6ImExYjJjMyIsImNuZiI6eyJqd2siOnsiYWxnIjoiRWREU0EiLCJrdHkiOiJPS1AiLCJjcnYiOiJFZDI1NTE5IiwieCI6IjZrcHNZLUtjVWdxLTlWQjdFeTdGLVpWSGRxNi12bnVTUWg3cWFSUkcwaXcifX19.36nIv5jy4D_41Q-8NVOJm8apWrYZbepKxxtpl5Q5i8AJFag_bn79vCT0GbtIuIgoJEttnsTw17fvt_0sol3YBw"
     }
   ]
 }

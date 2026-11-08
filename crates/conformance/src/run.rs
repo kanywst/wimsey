@@ -429,6 +429,23 @@ pub fn run_wit(vector: &WitVector, report: &mut Report) {
         });
         report.record(&name, &format!("reject/{}", case.id), outcome);
     }
+
+    for case in &vector.accepted {
+        let outcome = verify_wit(
+            &case.token,
+            &key.verifying_key(),
+            &WitValidation::at(vector.verify_now),
+        )
+        .map_err(|e| format!("must still verify, but was rejected: {e}"))
+        .and_then(|verified| {
+            if verified.claims == vector.claims {
+                Ok(())
+            } else {
+                Err("verified claims differ from the recorded ones".to_owned())
+            }
+        });
+        report.record(&name, &format!("accept/{}", case.id), outcome);
+    }
 }
 
 /// Builds the WPT validation for a case, including the context tokens the
@@ -537,6 +554,33 @@ pub fn run_wpt(vector: &WptVector, report: &mut Report) {
             &format!("reject/{}", case.id),
             expect_reject(case.expect, actual),
         );
+    }
+
+    for case in &vector.accepted {
+        let proof = case.proof.as_deref().unwrap_or(&vector.proof);
+        let wit = case.wit.as_deref().unwrap_or(&vector.wit);
+        let expected = case.claims.as_ref().unwrap_or(&vector.claims);
+        // As in the positive flow, the key comes out of the (possibly
+        // replaced) WIT rather than from the vector.
+        let outcome = verifying_key(&vector.issuer_verifying_key).and_then(|issuer| {
+            let verified_wit = verify_wit(wit, &issuer, &WitValidation::at(vector.verify_now))
+                .map_err(|e| format!("the bound WIT did not verify: {e}"))?;
+            let validation = wpt_validation(
+                vector.verify_now,
+                &vector.audience,
+                wit,
+                vector.txn_token.as_deref(),
+                &vector.other_tokens,
+            );
+            let verified = verify_wpt(proof, &verified_wit.pop_key, &validation)
+                .map_err(|e| format!("must still verify, but was rejected: {e}"))?;
+            if &verified.claims == expected {
+                Ok(())
+            } else {
+                Err("verified claims differ from the recorded ones".to_owned())
+            }
+        });
+        report.record(&name, &format!("accept/{}", case.id), outcome);
     }
 }
 

@@ -25,9 +25,13 @@ silently.
   comparing `as_str()`, because every spelling normalization would rewrite is
   refused at parse time; `SPEC-MAP.md` records that as a known divergence.
 - Conformance: `identifier/parse-basic.json` moves `trust-domain-only` from
-  `accept` to `reject` with the new `empty_path` error code. The format stays
-  `wimse-conformance/v7`: a v7 reader that does not know the code reports a
-  mismatch rather than a silent pass.
+  `accept` to `reject` with the new `empty_path` error code.
+- **Conformance format `wimse-conformance/v8`.** The `wit` and `wpt` vectors
+  gain an `accepted` array: inputs that differ from the positive case and must
+  still verify. The first cases re-sign the token with `typ` spelled
+  `application/wit+jwt` (or `application/wpt+jwt`) and in mixed case, so a
+  verifier that compares `typ` as an exact string now fails the suite. A v7
+  reader would skip the new cases silently, hence the bump.
 - **`wimsey-wit` targets `draft-ietf-wimse-workload-creds-03`** (submitted
   2026-10-30). -03 adds a "Validating the WIT" procedure for recipients
   (Section 5.1.3). `verify` already met every step but one: it required `typ`
@@ -38,7 +42,6 @@ silently.
   deployment revokes, the fully-specified `Ed25519` algorithm identifier) are
   recorded in `SPEC-MAP.md`. The rest of -03 is architecture prose,
   security considerations and editorial.
-
 - **`wimsey-mtls` targets `draft-ietf-wimse-mutual-tls-03`** (submitted
   2026-10-23). No code change. The changelog of -03 calls it editorial, but the
   text adds requirements: revocation status per RFC 5280 Section 6.1.3, RFC
@@ -57,9 +60,8 @@ silently.
   asked that `typ` convey the `wpt+jwt` media type, and `verify` had refused
   `application/wpt+jwt`. The comparison lives in `wimsey_jose::typ_conveys`,
   shared by both tokens. The `wit` and `wpt` vectors gain a
-  `wrong-typ-media-type` negative (`text/<subtype>`). Only the reject side is
-  in the vectors: the `wit` and `wpt` suites have no `accepted` array yet, so
-  that `application/wit+jwt` verifies is pinned by unit tests alone.
+  `wrong-typ-media-type` negative (`text/<subtype>`), and the accepted side is
+  in the v8 `accepted` cases.
 - The `wrong-typ` negatives of the ES256 `wit` and `wpt` vectors named
   `alg: EdDSA` while being signed with ES256; their headers now name the
   signing key's algorithm.

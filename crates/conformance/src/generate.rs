@@ -27,8 +27,8 @@ use wimsey_wpt::{
 use crate::vectors::{
     ErrorCode, Header, HttpSigAccepted, HttpSigNegative, HttpSigVector, IdentifierAccept,
     IdentifierReject, IdentifierVector, Manifest, ManifestEntry, MtlsNegative, MtlsVector,
-    ResponseNegative, VectorParams, VectorRequest, VectorResponse, WitNegative, WitVector,
-    WptNegative, WptVector, FORMAT,
+    ResponseNegative, VectorParams, VectorRequest, VectorResponse, WitAccepted, WitNegative,
+    WitVector, WptAccepted, WptNegative, WptVector, FORMAT,
 };
 
 /// Builds a signing key of `algorithm` from a fixed seed.
@@ -349,6 +349,7 @@ pub fn wit_vector(algorithm: Algorithm) -> WitVector {
     let claims = wit_claims(SUBJECT, &pop_key);
     let kid = Some(KID.to_owned());
     let token = issue_wit(&claims, kid.as_deref(), &issuer_key).expect("issue");
+    let accepted = wit_accepted(&token, kid.as_deref(), &issuer_key);
     let negative = wit_negatives(
         &claims,
         &token,
@@ -374,6 +375,7 @@ pub fn wit_vector(algorithm: Algorithm) -> WitVector {
         claims,
         token,
         negative,
+        accepted,
     }
 }
 
@@ -550,10 +552,67 @@ pub fn wpt_vector(algorithm: Algorithm) -> WptVector {
         wit,
         txn_token: Some(txn_token),
         other_tokens,
+        accepted: wpt_accepted(&proof, &pop_key),
         claims,
         proof,
         negative,
     }
+}
+
+/// WITs that differ from the recorded one only in how `typ` spells the
+/// `wit+jwt` media type. Section 5.1.3 asks that `typ` convey it, and RFC
+/// 7515 Section 4.1.9 makes the `application/` prefix optional; media types
+/// compare case-insensitively.
+fn wit_accepted(token: &str, kid: Option<&str>, issuer_key: &SigningKey) -> Vec<WitAccepted> {
+    vec![
+        WitAccepted {
+            id: "typ-with-application-prefix".to_owned(),
+            description: "`application/wit+jwt` is the same media type as `wit+jwt`".to_owned(),
+            token: resign_with_header(
+                token,
+                &jws_header("application/wit+jwt", issuer_key, kid),
+                issuer_key,
+            ),
+        },
+        WitAccepted {
+            id: "typ-in-another-case".to_owned(),
+            description: "media type names compare case-insensitively".to_owned(),
+            token: resign_with_header(
+                token,
+                &jws_header("Application/WIT+JWT", issuer_key, kid),
+                issuer_key,
+            ),
+        },
+    ]
+}
+
+/// The WPT counterpart of [`wit_accepted`], for `wpt+jwt`.
+fn wpt_accepted(proof: &str, pop_key: &SigningKey) -> Vec<WptAccepted> {
+    [
+        (
+            "typ-with-application-prefix",
+            "`application/wpt+jwt` is the same media type as `wpt+jwt`",
+            "application/wpt+jwt",
+        ),
+        (
+            "typ-in-another-case",
+            "media type names compare case-insensitively",
+            "Application/WPT+JWT",
+        ),
+    ]
+    .into_iter()
+    .map(|(id, description, typ)| WptAccepted {
+        id: id.to_owned(),
+        description: description.to_owned(),
+        proof: Some(resign_with_header(
+            proof,
+            &jws_header(typ, pop_key, None),
+            pop_key,
+        )),
+        wit: None,
+        claims: None,
+    })
+    .collect()
 }
 
 /// Builds the httpsig vector.

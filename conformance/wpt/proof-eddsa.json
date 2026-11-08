@@ -1,5 +1,5 @@
 {
-  "format": "wimse-conformance/v7",
+  "format": "wimse-conformance/v8",
   "suite": "wpt",
   "id": "proof-eddsa",
   "spec": "draft-ietf-wimse-wpt-02",
@@ -98,6 +98,18 @@
       "description": "`oth` names a header the request does not carry, so the entry cannot be understood and the proof must be rejected",
       "expect": "other_token_binding_mismatch",
       "other_tokens": {}
+    }
+  ],
+  "accepted": [
+    {
+      "id": "typ-with-application-prefix",
+      "description": "`application/wpt+jwt` is the same media type as `wpt+jwt`",
+      "proof": "eyJhbGciOiJFZERTQSIsInR5cCI6ImFwcGxpY2F0aW9uL3dwdCtqd3QifQ.eyJhdWQiOiJodHRwczovL3dvcmtsb2FkLmV4YW1wbGUuY29tL3BhdGgiLCJleHAiOjE3MDAwMDAzMDAsImp0aSI6IjAxMjM0NTY3ODlhYmNkZWYiLCJ3dGgiOiJvamZQdk0xUkZVV0FkbGc4UU5reGM1aDJEbUo4T3R0ZHowZGw5WjNIVnk0IiwidHRoIjoid05xUEdUUzN2cDRaNTlzMklvd1FHeDJJeHBUREdjVk9zaGpqM3c1WXlNdyIsIm90aCI6eyJjdHgtdG9rZW4iOiIyTHpZME5IM1VKOXhsb0ZvaXZmQ2NGZUlEM1R2RXpiMVlqaDdua2pFb2dnIn19.aiTnReBAoOLo5tdwAcDl38hdzJBVqZLSdGmvTx32zGzqxUEOFFfNypO1KNebrf4DnzhahR2c3xWrxsoPh70YCw"
+    },
+    {
+      "id": "typ-in-another-case",
+      "description": "media type names compare case-insensitively",
+      "proof": "eyJhbGciOiJFZERTQSIsInR5cCI6IkFwcGxpY2F0aW9uL1dQVCtKV1QifQ.eyJhdWQiOiJodHRwczovL3dvcmtsb2FkLmV4YW1wbGUuY29tL3BhdGgiLCJleHAiOjE3MDAwMDAzMDAsImp0aSI6IjAxMjM0NTY3ODlhYmNkZWYiLCJ3dGgiOiJvamZQdk0xUkZVV0FkbGc4UU5reGM1aDJEbUo4T3R0ZHowZGw5WjNIVnk0IiwidHRoIjoid05xUEdUUzN2cDRaNTlzMklvd1FHeDJJeHBUREdjVk9zaGpqM3c1WXlNdyIsIm90aCI6eyJjdHgtdG9rZW4iOiIyTHpZME5IM1VKOXhsb0ZvaXZmQ2NGZUlEM1R2RXpiMVlqaDdua2pFb2dnIn19.u8-zBWA6KhCPEyz2AFgRINJg0osLqv34d-VzFQ_tQybjy6riNtlm2-Nu02biOJ5bQDbXqGXc5WQeAr7JmBhPAw"
     }
   ]
 }
