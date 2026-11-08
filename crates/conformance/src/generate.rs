@@ -1359,7 +1359,7 @@ pub fn manifest() -> Manifest {
     }
 }
 
-const IDENTIFIER_SPEC: &str = "draft-ietf-wimse-identifier-03";
+const IDENTIFIER_SPEC: &str = "draft-ietf-wimse-identifier-04";
 
 fn accept(id: &str, description: &str, identifier: &str) -> IdentifierAccept {
     let parsed =
@@ -1416,11 +1416,6 @@ fn identifier_accepts() -> Vec<IdentifierAccept> {
             "wimse-basic",
             "the wimse scheme defined in Section 4.4",
             "wimse://trust.example.com/service/payment",
-        ),
-        accept(
-            "trust-domain-only",
-            "the path is optional; an identifier may be a bare trust domain",
-            "spiffe://prod.trust.domain",
         ),
         accept(
             "wimse-pchar-path",
@@ -1480,6 +1475,22 @@ fn identifier_rejects() -> Vec<IdentifierReject> {
             "spiffe:///path",
             ErrorCode::EmptyTrustDomain,
         ),
+        reject(
+            "trust-domain-only",
+            "Section 4.1 requires a non-empty path; a bare trust domain is an origin",
+            "spiffe://prod.trust.domain",
+            ErrorCode::EmptyPath,
+        ),
+    ]
+    .into_iter()
+    .chain(identifier_spelling_rejects())
+    .collect()
+}
+
+/// The identifier rejects that are second spellings rather than malformed
+/// URIs, plus the per-scheme character sets.
+fn identifier_spelling_rejects() -> Vec<IdentifierReject> {
+    vec![
         // The rest are spellings that RFC 3986 normalization would rewrite.
         // Accepting any of them would break the Section 4.3 rule that
         // consumers compare complete URIs.
@@ -1497,7 +1508,7 @@ fn identifier_rejects() -> Vec<IdentifierReject> {
         ),
         reject(
             "empty-path-segment",
-            "`//` in a path is an empty segment normalization would collapse",
+            "`//` in a path is an empty segment, which the SPIFFE ID path rules forbid",
             "spiffe://example.org/x//y",
             ErrorCode::EmptyPathSegment,
         ),

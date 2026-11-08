@@ -179,6 +179,8 @@ pub enum ErrorCode {
     HasPort,
     /// A workload identifier had an empty trust domain.
     EmptyTrustDomain,
+    /// A workload identifier had no path.
+    EmptyPath,
     /// A trust domain exceeded the maximum length its scheme allows.
     TrustDomainTooLong,
     /// A trust domain contained a character its scheme does not allow.
@@ -245,6 +247,7 @@ impl From<&ParseError> for ErrorCode {
             ParseError::HasUserInfo => Self::HasUserInfo,
             ParseError::HasPort => Self::HasPort,
             ParseError::EmptyTrustDomain => Self::EmptyTrustDomain,
+            ParseError::EmptyPath => Self::EmptyPath,
             ParseError::TrustDomainTooLong => Self::TrustDomainTooLong,
             ParseError::InvalidTrustDomainChar(_) => Self::InvalidTrustDomainChar,
             ParseError::EmptyPathSegment => Self::EmptyPathSegment,

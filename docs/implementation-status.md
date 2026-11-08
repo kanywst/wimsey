@@ -121,16 +121,16 @@ This document will not get the section (see above). The entry is kept as the sou
 * Maturity:
     * Workload Identifier: alpha, not for production
 * Coverage: Parses and validates both the `spiffe` scheme and the `wimse`
-  scheme of Section 4.4, enforcing the Section 4.1 prohibitions on query,
-  fragment, user-information and port components. Section 4.3 requires
-  comparing complete URIs, so rather than normalizing, it rejects any spelling
-  RFC 3986 Section 6.2.2 normalization would rewrite: an uppercase trust
-  domain, a dot segment, and a percent-escape that is lowercase or encodes an
-  unreserved character. Whether the draft intends normalizing or rejecting is
-  an open question raised on the mailing list.
+  scheme of Section 4.4, enforcing the Section 4.1 requirements of -04: a
+  non-empty path, no `.` or `..` segment, and no query, fragment,
+  user-information or port component. Section 4.3 compares identifiers after
+  RFC 3986 Section 6.2.2 normalization; rather than normalizing, it rejects
+  any spelling normalization would rewrite (an uppercase trust domain, a
+  percent-escape that is lowercase or encodes an unreserved character), so an
+  accepted identifier is already in normal form.
 * License: Apache 2.0
 * Contact: [kanywst on GitHub](https://github.com/kanywst)
-* Last updated: 08-Sep-2026
+* Last updated: 08-Nov-2026
 ```
 
 ## What the short coverage lines stand for

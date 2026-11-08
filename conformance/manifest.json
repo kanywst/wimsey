@@ -4,7 +4,7 @@
     {
       "suite": "identifier",
       "path": "identifier/parse-basic.json",
-      "spec": "draft-ietf-wimse-identifier-03"
+      "spec": "draft-ietf-wimse-identifier-04"
     },
     {
       "suite": "wit",

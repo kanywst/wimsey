@@ -17,11 +17,14 @@ assert_eq!(id.origin(), "wimse://trust.example.com");
 # Ok::<(), wimsey_identifier::ParseError>(())
 ```
 
-The draft tells consumers to compare *complete* URIs, which is only sound if an
-identifier has exactly one spelling. So rather than normalizing, this crate
-refuses the spellings RFC 3986 normalization would rewrite — an uppercase trust
-domain, a `.` or `..` segment, and a percent-escape that is lowercase or encodes
-an unreserved character.
+The draft tells consumers to compare *complete* URIs after RFC 3986
+normalization. Rather than normalizing, this crate refuses the spellings
+normalization would rewrite — an uppercase trust domain and a percent-escape
+that is lowercase or encodes an unreserved character — so an accepted
+identifier is already in normal form and compares byte for byte. It also
+enforces the draft's own rules: a non-empty path (a bare trust domain is an
+origin, not an identifier), no `.` or `..` segment, and an internationalized
+trust domain written as A-labels.
 
 Part of [`wimsey`](https://github.com/kanywst/wimsey), a vendor-neutral reference
 implementation of the IETF [WIMSE](https://datatracker.ietf.org/wg/wimse/about/)

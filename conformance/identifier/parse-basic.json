@@ -2,7 +2,7 @@
   "format": "wimse-conformance/v7",
   "suite": "identifier",
   "id": "parse-basic",
-  "spec": "draft-ietf-wimse-identifier-03",
+  "spec": "draft-ietf-wimse-identifier-04",
   "description": "Workload identifier syntax for the spiffe and wimse schemes, plus the inputs a parser must reject",
   "accept": [
     {
@@ -22,15 +22,6 @@
       "trust_domain": "trust.example.com",
       "path": "/service/payment",
       "origin": "wimse://trust.example.com"
-    },
-    {
-      "id": "trust-domain-only",
-      "description": "the path is optional; an identifier may be a bare trust domain",
-      "identifier": "spiffe://prod.trust.domain",
-      "scheme": "spiffe",
-      "trust_domain": "prod.trust.domain",
-      "path": "",
-      "origin": "spiffe://prod.trust.domain"
     },
     {
       "id": "wimse-pchar-path",
@@ -98,6 +89,12 @@
       "expect": "empty_trust_domain"
     },
     {
+      "id": "trust-domain-only",
+      "description": "Section 4.1 requires a non-empty path; a bare trust domain is an origin",
+      "identifier": "spiffe://prod.trust.domain",
+      "expect": "empty_path"
+    },
+    {
       "id": "uppercase-trust-domain",
       "description": "the authority is case-insensitive, so mixed case is a second spelling",
       "identifier": "spiffe://Example.org/x",
@@ -111,7 +108,7 @@
     },
     {
       "id": "empty-path-segment",
-      "description": "`//` in a path is an empty segment normalization would collapse",
+      "description": "`//` in a path is an empty segment, which the SPIFFE ID path rules forbid",
       "identifier": "spiffe://example.org/x//y",
       "expect": "empty_path_segment"
     },
