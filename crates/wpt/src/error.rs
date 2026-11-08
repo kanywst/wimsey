@@ -25,7 +25,7 @@ pub enum WptError {
         found: String,
     },
     /// The JOSE header `alg` was not a supported algorithm.
-    #[error("unsupported algorithm `{found}`, expected `EdDSA`")]
+    #[error("unsupported algorithm `{found}`, expected `Ed25519`, `EdDSA` or `ES256`")]
     UnsupportedAlg {
         /// The `alg` value that was found.
         found: String,

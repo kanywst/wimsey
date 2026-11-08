@@ -1,0 +1,117 @@
+{
+  "format": "wimse-conformance/v8",
+  "suite": "wit",
+  "id": "issue-ed25519",
+  "spec": "draft-ietf-wimse-workload-creds-03",
+  "description": "WIT issuance with Ed25519, plus the inputs a verifier must reject",
+  "alg": "Ed25519",
+  "issuer_signing_key": {
+    "alg": "Ed25519",
+    "kty": "OKP",
+    "crv": "Ed25519",
+    "x": "iojj3XQJ8ZX9UtstPLpdcspnCb8dlBIb83SIAbQPb1w",
+    "d": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+  },
+  "kid": "issuer-key-1",
+  "verify_now": 1700000000,
+  "claims": {
+    "iss": "https://issuer.example",
+    "sub": "spiffe://example.org/workload/api",
+    "iat": 1700000000,
+    "exp": 1700003600,
+    "jti": "a1b2c3",
+    "cnf": {
+      "jwk": {
+        "alg": "Ed25519",
+        "kty": "OKP",
+        "crv": "Ed25519",
+        "x": "6kpsY-KcUgq-9VB7Ey7F-ZVHdq6-vnuSQh7qaRRG0iw"
+      }
+    }
+  },
+  "token": "eyJ0eXAiOiJ3aXQrand0IiwiYWxnIjoiRWQyNTUxOSIsImtpZCI6Imlzc3Vlci1rZXktMSJ9.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvYXBpIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDM2MDAsImp0aSI6ImExYjJjMyIsImNuZiI6eyJqd2siOnsiYWxnIjoiRWQyNTUxOSIsImt0eSI6Ik9LUCIsImNydiI6IkVkMjU1MTkiLCJ4IjoiNmtwc1ktS2NVZ3EtOVZCN0V5N0YtWlZIZHE2LXZudVNRaDdxYVJSRzBpdyJ9fX0.aiyq2FVnT3G4uiDlevlP7E577n5OZPAXNw6hjSyaQ40qRqiQGKYwNzwpSWH9dQNE163rGidZkmOqjMrwxNjyCg",
+  "negative": [
+    {
+      "id": "expired",
+      "description": "verified one second after `exp`",
+      "expect": "expired",
+      "verify_now": 1700003601
+    },
+    {
+      "id": "issued-in-future",
+      "description": "verified one second before `iat`",
+      "expect": "issued_in_future",
+      "verify_now": 1699999999
+    },
+    {
+      "id": "wrong-typ",
+      "description": "validly signed, but the JOSE `typ` is `jwt` and not `wit+jwt`",
+      "expect": "wrong_type",
+      "token": "eyJhbGciOiJFZDI1NTE5Iiwia2lkIjoiaXNzdWVyLWtleS0xIiwidHlwIjoiand0In0.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvYXBpIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDM2MDAsImp0aSI6ImExYjJjMyIsImNuZiI6eyJqd2siOnsiYWxnIjoiRWQyNTUxOSIsImt0eSI6Ik9LUCIsImNydiI6IkVkMjU1MTkiLCJ4IjoiNmtwc1ktS2NVZ3EtOVZCN0V5N0YtWlZIZHE2LXZudVNRaDdxYVJSRzBpdyJ9fX0.RWTiSCC-XftumW2vgNqcq8uBruck3GO239L1Ezmq850vT0gewdPOWzIyWWwSjmj76ZPQEi4LkEGlvZCuD84WAA"
+    },
+    {
+      "id": "wrong-typ-media-type",
+      "description": "validly signed, but `text/wit+jwt` is not the `application/wit+jwt` media type",
+      "expect": "wrong_type",
+      "token": "eyJhbGciOiJFZDI1NTE5Iiwia2lkIjoiaXNzdWVyLWtleS0xIiwidHlwIjoidGV4dC93aXQrand0In0.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvYXBpIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDM2MDAsImp0aSI6ImExYjJjMyIsImNuZiI6eyJqd2siOnsiYWxnIjoiRWQyNTUxOSIsImt0eSI6Ik9LUCIsImNydiI6IkVkMjU1MTkiLCJ4IjoiNmtwc1ktS2NVZ3EtOVZCN0V5N0YtWlZIZHE2LXZudVNRaDdxYVJSRzBpdyJ9fX0.FDN9NIrj5--LJfx81fG8l5X1CSiVJnYIA26Aep-lCbCrVNIMXN1Zrlemw4WcdaBELPyS5BkF1EM8laIYF_UECQ"
+    },
+    {
+      "id": "tampered-payload",
+      "description": "`jti` was altered after signing; the payload is still valid JSON",
+      "expect": "invalid_signature",
+      "token": "eyJ0eXAiOiJ3aXQrand0IiwiYWxnIjoiRWQyNTUxOSIsImtpZCI6Imlzc3Vlci1rZXktMSJ9.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvYXBpIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDM2MDAsImp0aSI6ImExYjJjNCIsImNuZiI6eyJqd2siOnsiYWxnIjoiRWQyNTUxOSIsImt0eSI6Ik9LUCIsImNydiI6IkVkMjU1MTkiLCJ4IjoiNmtwc1ktS2NVZ3EtOVZCN0V5N0YtWlZIZHE2LXZudVNRaDdxYVJSRzBpdyJ9fX0.aiyq2FVnT3G4uiDlevlP7E577n5OZPAXNw6hjSyaQ40qRqiQGKYwNzwpSWH9dQNE163rGidZkmOqjMrwxNjyCg"
+    },
+    {
+      "id": "wrong-issuer-key",
+      "description": "verified against an issuer key that did not sign the token",
+      "expect": "invalid_signature",
+      "issuer_verifying_key": {
+        "alg": "Ed25519",
+        "kty": "OKP",
+        "crv": "Ed25519",
+        "x": "gTl3Dqh9F19Wo1Rmw0x-zMuNipG07jeiXfYPW4_Js5Q"
+      }
+    },
+    {
+      "id": "issuer-mismatch",
+      "description": "the verifier expects a different `iss` than the token carries",
+      "expect": "issuer_mismatch",
+      "expected_iss": "https://other-issuer.example"
+    },
+    {
+      "id": "cnf-missing-alg",
+      "description": "the `cnf` JWK omits the `alg` member the draft requires",
+      "expect": "missing_confirmation_alg",
+      "token": "eyJ0eXAiOiJ3aXQrand0IiwiYWxnIjoiRWQyNTUxOSIsImtpZCI6Imlzc3Vlci1rZXktMSJ9.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvYXBpIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDM2MDAsImp0aSI6ImExYjJjMyIsImNuZiI6eyJqd2siOnsia3R5IjoiT0tQIiwiY3J2IjoiRWQyNTUxOSIsIngiOiI2a3BzWS1LY1VncS05VkI3RXk3Ri1aVkhkcTYtdm51U1FoN3FhUlJHMGl3In19fQ.s3itNgtexQQSpNxZdG7umcHSwCxFtbbX-vZlOtaiJ532WVeCjnMq36gnjTTgNmB_Fm6Zfd4ZciR82WRrztGsAA"
+    },
+    {
+      "id": "cnf-symmetric-alg",
+      "description": "the `cnf` JWK names a symmetric algorithm, which cannot prove possession",
+      "expect": "forbidden_confirmation_alg",
+      "token": "eyJ0eXAiOiJ3aXQrand0IiwiYWxnIjoiRWQyNTUxOSIsImtpZCI6Imlzc3Vlci1rZXktMSJ9.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvYXBpIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDM2MDAsImp0aSI6ImExYjJjMyIsImNuZiI6eyJqd2siOnsiYWxnIjoiSFMyNTYiLCJrdHkiOiJPS1AiLCJjcnYiOiJFZDI1NTE5IiwieCI6IjZrcHNZLUtjVWdxLTlWQjdFeTdGLVpWSGRxNi12bnVTUWg3cWFSUkcwaXcifX19.4t8f_1yduvvXIS2md6_JovmEacJA64pNBu1QyE5gkrgT-RPJzdF8C8LkYqEkb64BdLHI-eSJElIGhBnUiW3TBQ"
+    },
+    {
+      "id": "cnf-unsecured-alg",
+      "description": "the `cnf` JWK names `none`, which the draft forbids outright",
+      "expect": "forbidden_confirmation_alg",
+      "token": "eyJ0eXAiOiJ3aXQrand0IiwiYWxnIjoiRWQyNTUxOSIsImtpZCI6Imlzc3Vlci1rZXktMSJ9.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvYXBpIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDM2MDAsImp0aSI6ImExYjJjMyIsImNuZiI6eyJqd2siOnsiYWxnIjoibm9uZSIsImt0eSI6Ik9LUCIsImNydiI6IkVkMjU1MTkiLCJ4IjoiNmtwc1ktS2NVZ3EtOVZCN0V5N0YtWlZIZHE2LXZudVNRaDdxYVJSRzBpdyJ9fX0.DUyqK_bKEpzSxcPwLW6dXu3pYmuC0KdQXIK9Fbcl2BKQIj_DLDnP5ynZwRzd11EktuAV13lo4nCA5sEhhY15Dg"
+    }
+  ],
+  "accepted": [
+    {
+      "id": "typ-with-application-prefix",
+      "description": "`application/wit+jwt` is the same media type as `wit+jwt`",
+      "token": "eyJhbGciOiJFZDI1NTE5Iiwia2lkIjoiaXNzdWVyLWtleS0xIiwidHlwIjoiYXBwbGljYXRpb24vd2l0K2p3dCJ9.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvYXBpIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDM2MDAsImp0aSI6ImExYjJjMyIsImNuZiI6eyJqd2siOnsiYWxnIjoiRWQyNTUxOSIsImt0eSI6Ik9LUCIsImNydiI6IkVkMjU1MTkiLCJ4IjoiNmtwc1ktS2NVZ3EtOVZCN0V5N0YtWlZIZHE2LXZudVNRaDdxYVJSRzBpdyJ9fX0.waUrklmN0rrEXKOGouic46uR4rcqKC6snZX_IyNwFQqMqk5x7KqW4omLjfxeTc-AYPhas5dnMeP-aKHTKfg4Cg"
+    },
+    {
+      "id": "typ-in-another-case",
+      "description": "media type names compare case-insensitively",
+      "token": "eyJhbGciOiJFZDI1NTE5Iiwia2lkIjoiaXNzdWVyLWtleS0xIiwidHlwIjoiQXBwbGljYXRpb24vV0lUK0pXVCJ9.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvYXBpIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDM2MDAsImp0aSI6ImExYjJjMyIsImNuZiI6eyJqd2siOnsiYWxnIjoiRWQyNTUxOSIsImt0eSI6Ik9LUCIsImNydiI6IkVkMjU1MTkiLCJ4IjoiNmtwc1ktS2NVZ3EtOVZCN0V5N0YtWlZIZHE2LXZudVNRaDdxYVJSRzBpdyJ9fX0.r2RWjQ4YgI8IkLJPzJvNM84scz7L1xNwO-NoeGMUhUGfsGSCylLPZ_gNBfcvVZHhb9dOwbmJSSLN-oTX4IB7AQ"
+    },
+    {
+      "id": "issuer-alg-eddsa",
+      "description": "signed under the deprecated `EdDSA` name, which is the same scheme",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6Imlzc3Vlci1rZXktMSIsInR5cCI6IndpdCtqd3QifQ.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvYXBpIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDM2MDAsImp0aSI6ImExYjJjMyIsImNuZiI6eyJqd2siOnsiYWxnIjoiRWQyNTUxOSIsImt0eSI6Ik9LUCIsImNydiI6IkVkMjU1MTkiLCJ4IjoiNmtwc1ktS2NVZ3EtOVZCN0V5N0YtWlZIZHE2LXZudVNRaDdxYVJSRzBpdyJ9fX0.GANvOoAMRxdzU8CmDIqIg82kZY3HxoLTVyJiPtxVv43AZxUPIbM4yYqMZS2ZuQBVuap6H3l0yWXycJ-MPQfLBw"
+    }
+  ]
+}

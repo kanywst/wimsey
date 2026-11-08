@@ -6,7 +6,7 @@ use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use serde::{Deserialize, Serialize};
 
 use crate::error::JoseError;
-use crate::key::{Algorithm, SigningKey, VerifyingKey};
+use crate::key::{Algorithm, SigningKey, VerifyingKey, VerifyingMaterial};
 
 /// A public JSON Web Key, in the two shapes WIMSE uses.
 ///
@@ -49,18 +49,19 @@ impl Jwk {
     /// been validated.
     #[must_use]
     pub fn from_verifying_key(key: &VerifyingKey) -> Self {
-        match key {
-            VerifyingKey::Ed25519(key) => Self {
-                alg: Some(Algorithm::EdDsa.as_str().to_owned()),
+        let alg = Some(key.algorithm().as_str().to_owned());
+        match &key.material {
+            VerifyingMaterial::Ed25519(key) => Self {
+                alg,
                 kty: "OKP".to_owned(),
                 crv: "Ed25519".to_owned(),
                 x: URL_SAFE_NO_PAD.encode(key.to_bytes()),
                 y: None,
             },
-            VerifyingKey::P256(key) => {
+            VerifyingMaterial::P256(key) => {
                 let point = key.to_sec1_point(false);
                 Self {
-                    alg: Some(Algorithm::Es256.as_str().to_owned()),
+                    alg,
                     kty: "EC".to_owned(),
                     crv: "P-256".to_owned(),
                     // Uncompressed SEC1 is `0x04 || x || y`, and the JWK carries
@@ -101,15 +102,16 @@ impl Jwk {
         // The algorithm is decided by `alg`, and `kty`/`crv` are then required
         // to agree. Reading the key type first and treating `alg` as a hint
         // would let a token name one algorithm and be verified under another.
-        match self.validated_alg()? {
-            Algorithm::EdDsa => {
+        let algorithm = self.validated_alg()?;
+        let material = match algorithm {
+            Algorithm::Ed25519 | Algorithm::EdDsa => {
                 if self.kty != "OKP" || self.crv != "Ed25519" || self.y.is_some() {
                     return Err(JoseError::InvalidKey);
                 }
                 let x = coordinate(&self.x)?;
                 ed25519_dalek::VerifyingKey::from_bytes(&x)
-                    .map(|key| VerifyingKey::Ed25519(Box::new(key)))
-                    .map_err(|_| JoseError::InvalidKey)
+                    .map(|key| VerifyingMaterial::Ed25519(Box::new(key)))
+                    .map_err(|_| JoseError::InvalidKey)?
             }
             Algorithm::Es256 => {
                 if self.kty != "EC" || self.crv != "P-256" {
@@ -122,10 +124,13 @@ impl Jwk {
                 sec1[1..33].copy_from_slice(&x);
                 sec1[33..].copy_from_slice(&y);
                 p256::ecdsa::VerifyingKey::from_sec1_bytes(&sec1)
-                    .map(|key| VerifyingKey::P256(Box::new(key)))
-                    .map_err(|_| JoseError::InvalidKey)
+                    .map(|key| VerifyingMaterial::P256(Box::new(key)))
+                    .map_err(|_| JoseError::InvalidKey)?
             }
-        }
+        };
+        // The key keeps the identifier its JWK named, so a proof checked
+        // against it is held to that exact `alg` string.
+        Ok(VerifyingKey::new(material, algorithm))
     }
 }
 
@@ -210,10 +215,12 @@ impl PrivateJwk {
     /// or does not match the public half.
     pub fn to_signing_key(&self) -> Result<SigningKey, JoseError> {
         let secret = coordinate(&self.d)?;
-        let signing_key = match self.to_public().validated_alg()? {
-            Algorithm::EdDsa => SigningKey::from_ed25519_seed(&secret),
+        let algorithm = self.to_public().validated_alg()?;
+        let signing_key = match algorithm {
+            Algorithm::Ed25519 | Algorithm::EdDsa => SigningKey::from_ed25519_seed(&secret),
             Algorithm::Es256 => SigningKey::from_p256_scalar(&secret)?,
-        };
+        }
+        .with_algorithm(algorithm)?;
         if signing_key.verifying_key() != self.to_public().to_verifying_key()? {
             return Err(JoseError::InvalidKey);
         }
@@ -260,7 +267,7 @@ mod tests {
     fn serializes_in_a_fixed_member_order() {
         let ed =
             serde_json::to_string(&Jwk::from_verifying_key(&ed25519().verifying_key())).unwrap();
-        assert!(ed.starts_with(r#"{"alg":"EdDSA","kty":"OKP","crv":"Ed25519","x":"#));
+        assert!(ed.starts_with(r#"{"alg":"Ed25519","kty":"OKP","crv":"Ed25519","x":"#));
         assert!(!ed.contains("\"y\""), "an OKP key has no y coordinate");
 
         let ec = serde_json::to_string(&Jwk::from_verifying_key(&p256().verifying_key())).unwrap();

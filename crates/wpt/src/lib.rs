@@ -23,8 +23,8 @@
 //! into a server is the caller's job.
 //!
 //! The proof is signed with whatever algorithm the bound WIT's `cnf` JWK names
-//! — `EdDSA` or `ES256` — and verification requires the header to match the key
-//! recovered from that JWK. Both algorithms are deterministic, so a proof is
+//! — `Ed25519`, `ES256` or the deprecated `EdDSA` — and verification requires
+//! the header's `alg` to string-equal the one that JWK names. Both algorithms are deterministic, so a proof is
 //! byte-for-byte reproducible for a given key and input.
 //!
 //! ```

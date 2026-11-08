@@ -1,6 +1,6 @@
 [package]
 name = "wimsey-jose"
-description = "JOSE keys and signatures for the WIMSE credential formats: EdDSA and ES256."
+description = "JOSE keys and signatures for the WIMSE credential formats: Ed25519 and ES256."
 readme = "README.md"
 version.workspace = true
 edition.workspace = true

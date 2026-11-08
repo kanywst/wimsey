@@ -159,7 +159,8 @@ pub struct VerifyConfig {
     /// `wimse_response_profile` is.
     pub expected_req_nonce: Option<String>,
     /// The algorithms this recipient accepts for the peer's key. Empty accepts
-    /// any algorithm the key supports.
+    /// any algorithm the key supports. Matched by signature scheme, so
+    /// `Ed25519` also admits a key published under the deprecated `EdDSA`.
     ///
     /// The draft takes the algorithm from the WIT's `cnf.jwk.alg` and requires
     /// the recipient to reject one its local policy does not accept for the
@@ -762,7 +763,7 @@ fn select_member(
 /// The RFC 9421 `alg` name (Section 6.2) for a key's algorithm.
 const fn rfc9421_alg(algorithm: Algorithm) -> Option<&'static str> {
     match algorithm {
-        Algorithm::EdDsa => Some("ed25519"),
+        Algorithm::Ed25519 | Algorithm::EdDsa => Some("ed25519"),
         Algorithm::Es256 => Some("ecdsa-p256-sha256"),
         _ => None,
     }
@@ -819,7 +820,14 @@ pub fn verify(
         check_connect_components(message, &components, config.wimse_response_profile)?;
     }
     let algorithm = verifying_key.algorithm();
-    if !config.accepted_algorithms.is_empty() && !config.accepted_algorithms.contains(&algorithm) {
+    // A policy names signature schemes; `Ed25519` and its deprecated alias
+    // `EdDSA` are one scheme, so listing either admits a key under both.
+    if !config.accepted_algorithms.is_empty()
+        && !config
+            .accepted_algorithms
+            .iter()
+            .any(|accepted| accepted.same_signature_as(algorithm))
+    {
         return Err(HttpSigError::UnsupportedAlg {
             found: algorithm.as_str().to_owned(),
         });
@@ -1937,7 +1945,7 @@ mod tests {
         assert!(matches!(err, Err(HttpSigError::UnsupportedAlg { .. })));
 
         let config = VerifyConfig {
-            accepted_algorithms: vec![Algorithm::EdDsa],
+            accepted_algorithms: vec![Algorithm::Ed25519],
             ..wimse_config()
         };
         assert!(verify(
@@ -1945,6 +1953,21 @@ mod tests {
             &signed.signature_input,
             &signed.signature,
             &key.verifying_key(),
+            &config,
+        )
+        .is_ok());
+
+        // A WIT issued under the deprecated `EdDSA` name yields a key labelled
+        // that way; a policy naming `Ed25519` admits it, being the same scheme.
+        let legacy = key
+            .verifying_key()
+            .with_algorithm(Algorithm::EdDsa)
+            .unwrap();
+        assert!(verify(
+            &request,
+            &signed.signature_input,
+            &signed.signature,
+            &legacy,
             &config,
         )
         .is_ok());

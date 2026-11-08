@@ -1,0 +1,137 @@
+{
+  "format": "wimse-conformance/v8",
+  "suite": "wpt",
+  "id": "proof-ed25519",
+  "spec": "draft-ietf-wimse-wpt-02",
+  "description": "WPT bound to a WIT via `wth`, plus the inputs a verifier must reject",
+  "alg": "Ed25519",
+  "pop_signing_key": {
+    "alg": "Ed25519",
+    "kty": "OKP",
+    "crv": "Ed25519",
+    "x": "_RckOFqgx1tk-3jNYC-h2ZH96_drE8WO1wLqyDXp9hg",
+    "d": "CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk"
+  },
+  "issuer_verifying_key": {
+    "alg": "Ed25519",
+    "kty": "OKP",
+    "crv": "Ed25519",
+    "x": "iojj3XQJ8ZX9UtstPLpdcspnCb8dlBIb83SIAbQPb1w"
+  },
+  "verify_now": 1700000000,
+  "audience": "https://workload.example.com/path",
+  "wit": "eyJ0eXAiOiJ3aXQrand0IiwiYWxnIjoiRWQyNTUxOSIsImtpZCI6Imlzc3Vlci1rZXktMSJ9.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvYXBpIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDM2MDAsImp0aSI6ImExYjJjMyIsImNuZiI6eyJqd2siOnsiYWxnIjoiRWQyNTUxOSIsImt0eSI6Ik9LUCIsImNydiI6IkVkMjU1MTkiLCJ4IjoiX1Jja09GcWd4MXRrLTNqTllDLWgyWkg5Nl9kckU4V08xd0xxeURYcDloZyJ9fX0.Um2PUziFfxsLFyqrW7PQUhO3CCPLx6IKHbT2LwPhQpUYKg9iED7mCMT5DbuQlHptZi79Dwkra--BZ9K2x3USAQ",
+  "txn_token": "txn-token-0123456789abcdef",
+  "other_tokens": {
+    "ctx-token": "ctx-token-0123456789abcdef"
+  },
+  "claims": {
+    "aud": "https://workload.example.com/path",
+    "exp": 1700000300,
+    "jti": "0123456789abcdef",
+    "wth": "478gySAqPCe8pdCAuzt8PZNBl8HQsec6EwEY5G9fwXk",
+    "tth": "wNqPGTS3vp4Z59s2IowQGx2IxpTDGcVOshjj3w5YyMw",
+    "oth": {
+      "ctx-token": "2LzY0NH3UJ9xloFoivfCcFeID3TvEzb1Yjh7nkjEogg"
+    }
+  },
+  "proof": "eyJ0eXAiOiJ3cHQrand0IiwiYWxnIjoiRWQyNTUxOSJ9.eyJhdWQiOiJodHRwczovL3dvcmtsb2FkLmV4YW1wbGUuY29tL3BhdGgiLCJleHAiOjE3MDAwMDAzMDAsImp0aSI6IjAxMjM0NTY3ODlhYmNkZWYiLCJ3dGgiOiI0NzhneVNBcVBDZThwZENBdXp0OFBaTkJsOEhRc2VjNkV3RVk1Rzlmd1hrIiwidHRoIjoid05xUEdUUzN2cDRaNTlzMklvd1FHeDJJeHBUREdjVk9zaGpqM3c1WXlNdyIsIm90aCI6eyJjdHgtdG9rZW4iOiIyTHpZME5IM1VKOXhsb0ZvaXZmQ2NGZUlEM1R2RXpiMVlqaDdua2pFb2dnIn19.Vv-KQqeDwrLMg2BzING2oVgkiWJEPQ2CbsJTSYWMTV6tFPgmbm50Bege7op5OAVaFP8XEDxUg6og3_Q380qvDg",
+  "negative": [
+    {
+      "id": "expired",
+      "description": "verified one second after `exp`",
+      "expect": "expired",
+      "verify_now": 1700000301
+    },
+    {
+      "id": "audience-mismatch",
+      "description": "presented to a service other than the one named in `aud`",
+      "expect": "audience_mismatch",
+      "audience": "https://other.example.com/path"
+    },
+    {
+      "id": "wit-binding-mismatch",
+      "description": "replayed alongside a different, otherwise valid WIT",
+      "expect": "wit_binding_mismatch",
+      "wit": "eyJ0eXAiOiJ3aXQrand0IiwiYWxnIjoiRWQyNTUxOSIsImtpZCI6Imlzc3Vlci1rZXktMSJ9.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvb3RoZXIiLCJpYXQiOjE3MDAwMDAwMDAsImV4cCI6MTcwMDAwMzYwMCwianRpIjoiYTFiMmMzIiwiY25mIjp7Imp3ayI6eyJhbGciOiJFZDI1NTE5Iiwia3R5IjoiT0tQIiwiY3J2IjoiRWQyNTUxOSIsIngiOiJfUmNrT0ZxZ3gxdGstM2pOWUMtaDJaSDk2X2RyRThXTzF3THF5RFhwOWhnIn19fQ.P9blQmEvPYCxts9RlM7dU86rzCI9EIEtNZZnmLuppSBTl6lF2xSmB9p6rzk-XatLh9lDr2djpnzXKGuXWDqoDg"
+    },
+    {
+      "id": "wrong-typ",
+      "description": "validly signed, but the JOSE `typ` is `jwt` and not `wpt+jwt`",
+      "expect": "wrong_type",
+      "proof": "eyJhbGciOiJFZDI1NTE5IiwidHlwIjoiand0In0.eyJhdWQiOiJodHRwczovL3dvcmtsb2FkLmV4YW1wbGUuY29tL3BhdGgiLCJleHAiOjE3MDAwMDAzMDAsImp0aSI6IjAxMjM0NTY3ODlhYmNkZWYiLCJ3dGgiOiI0NzhneVNBcVBDZThwZENBdXp0OFBaTkJsOEhRc2VjNkV3RVk1Rzlmd1hrIiwidHRoIjoid05xUEdUUzN2cDRaNTlzMklvd1FHeDJJeHBUREdjVk9zaGpqM3c1WXlNdyIsIm90aCI6eyJjdHgtdG9rZW4iOiIyTHpZME5IM1VKOXhsb0ZvaXZmQ2NGZUlEM1R2RXpiMVlqaDdua2pFb2dnIn19.MV0DgvQil1tPFG5Y4fS3fwgtzKM8FdHNPVMD7Ty6EojGGoFfCfZhnEIUPdagYgumKIuVNOEIGlCZrhvvYxAmDg"
+    },
+    {
+      "id": "wrong-typ-media-type",
+      "description": "validly signed, but `text/wpt+jwt` is not the `application/wpt+jwt` media type",
+      "expect": "wrong_type",
+      "proof": "eyJhbGciOiJFZDI1NTE5IiwidHlwIjoidGV4dC93cHQrand0In0.eyJhdWQiOiJodHRwczovL3dvcmtsb2FkLmV4YW1wbGUuY29tL3BhdGgiLCJleHAiOjE3MDAwMDAzMDAsImp0aSI6IjAxMjM0NTY3ODlhYmNkZWYiLCJ3dGgiOiI0NzhneVNBcVBDZThwZENBdXp0OFBaTkJsOEhRc2VjNkV3RVk1Rzlmd1hrIiwidHRoIjoid05xUEdUUzN2cDRaNTlzMklvd1FHeDJJeHBUREdjVk9zaGpqM3c1WXlNdyIsIm90aCI6eyJjdHgtdG9rZW4iOiIyTHpZME5IM1VKOXhsb0ZvaXZmQ2NGZUlEM1R2RXpiMVlqaDdua2pFb2dnIn19.2MJy6yspdaFSZRGy6JlKrQq61a8A-UBiG8A_H2tfj6vSS2S-CmskchUY8adLlWAyPi1dcFscFVhr6n4UW03fDA"
+    },
+    {
+      "id": "tampered-payload",
+      "description": "`jti` was altered after signing; the payload is still valid JSON",
+      "expect": "invalid_signature",
+      "proof": "eyJ0eXAiOiJ3cHQrand0IiwiYWxnIjoiRWQyNTUxOSJ9.eyJhdWQiOiJodHRwczovL3dvcmtsb2FkLmV4YW1wbGUuY29tL3BhdGgiLCJleHAiOjE3MDAwMDAzMDAsImp0aSI6IjAxMjM0NTY3ODlhYmNkZWUiLCJ3dGgiOiI0NzhneVNBcVBDZThwZENBdXp0OFBaTkJsOEhRc2VjNkV3RVk1Rzlmd1hrIiwidHRoIjoid05xUEdUUzN2cDRaNTlzMklvd1FHeDJJeHBUREdjVk9zaGpqM3c1WXlNdyIsIm90aCI6eyJjdHgtdG9rZW4iOiIyTHpZME5IM1VKOXhsb0ZvaXZmQ2NGZUlEM1R2RXpiMVlqaDdua2pFb2dnIn19.Vv-KQqeDwrLMg2BzING2oVgkiWJEPQ2CbsJTSYWMTV6tFPgmbm50Bege7op5OAVaFP8XEDxUg6og3_Q380qvDg"
+    },
+    {
+      "id": "txn-token-mismatch",
+      "description": "replayed against a request carrying a different Txn-Token",
+      "expect": "txn_token_binding_mismatch",
+      "txn_token": "txn-token-fedcba9876543210"
+    },
+    {
+      "id": "txn-token-absent",
+      "description": "`tth` is present but the request carries no Txn-Token",
+      "expect": "txn_token_binding_mismatch",
+      "no_txn_token": true
+    },
+    {
+      "id": "context-token-mismatch",
+      "description": "replayed against a request carrying a different context token",
+      "expect": "other_token_binding_mismatch",
+      "other_tokens": {
+        "ctx-token": "ctx-token-fedcba9876543210"
+      }
+    },
+    {
+      "id": "context-token-absent",
+      "description": "`oth` names a header the request does not carry, so the entry cannot be understood and the proof must be rejected",
+      "expect": "other_token_binding_mismatch",
+      "other_tokens": {}
+    },
+    {
+      "id": "proof-alg-not-the-cnf-alg",
+      "description": "signed by the right key, but `alg` is `EdDSA` while the WIT's `cnf.jwk.alg` is `Ed25519`; the two must be string-equal",
+      "expect": "algorithm_mismatch",
+      "proof": "eyJ0eXAiOiJ3cHQrand0IiwiYWxnIjoiRWREU0EifQ.eyJhdWQiOiJodHRwczovL3dvcmtsb2FkLmV4YW1wbGUuY29tL3BhdGgiLCJleHAiOjE3MDAwMDAzMDAsImp0aSI6IjAxMjM0NTY3ODlhYmNkZWYiLCJ3dGgiOiI0NzhneVNBcVBDZThwZENBdXp0OFBaTkJsOEhRc2VjNkV3RVk1Rzlmd1hrIiwidHRoIjoid05xUEdUUzN2cDRaNTlzMklvd1FHeDJJeHBUREdjVk9zaGpqM3c1WXlNdyIsIm90aCI6eyJjdHgtdG9rZW4iOiIyTHpZME5IM1VKOXhsb0ZvaXZmQ2NGZUlEM1R2RXpiMVlqaDdua2pFb2dnIn19.pXL1F4O7QjKfSyMe76Va8E6KUfG90_ts_eiv0icZhntB--YLyviCDSTEyUCVXDGvVyT57B-QKi2lX4YstaUfAw"
+    }
+  ],
+  "accepted": [
+    {
+      "id": "typ-with-application-prefix",
+      "description": "`application/wpt+jwt` is the same media type as `wpt+jwt`",
+      "proof": "eyJhbGciOiJFZDI1NTE5IiwidHlwIjoiYXBwbGljYXRpb24vd3B0K2p3dCJ9.eyJhdWQiOiJodHRwczovL3dvcmtsb2FkLmV4YW1wbGUuY29tL3BhdGgiLCJleHAiOjE3MDAwMDAzMDAsImp0aSI6IjAxMjM0NTY3ODlhYmNkZWYiLCJ3dGgiOiI0NzhneVNBcVBDZThwZENBdXp0OFBaTkJsOEhRc2VjNkV3RVk1Rzlmd1hrIiwidHRoIjoid05xUEdUUzN2cDRaNTlzMklvd1FHeDJJeHBUREdjVk9zaGpqM3c1WXlNdyIsIm90aCI6eyJjdHgtdG9rZW4iOiIyTHpZME5IM1VKOXhsb0ZvaXZmQ2NGZUlEM1R2RXpiMVlqaDdua2pFb2dnIn19.Hcz7eAvciI80PMfOljZzq79DoMH58YbYLDl-XDz7rWFlE3p1P2Uqzk_C82hnWuI0EfgOlR7il8CpV6hOmL3UDA"
+    },
+    {
+      "id": "typ-in-another-case",
+      "description": "media type names compare case-insensitively",
+      "proof": "eyJhbGciOiJFZDI1NTE5IiwidHlwIjoiQXBwbGljYXRpb24vV1BUK0pXVCJ9.eyJhdWQiOiJodHRwczovL3dvcmtsb2FkLmV4YW1wbGUuY29tL3BhdGgiLCJleHAiOjE3MDAwMDAzMDAsImp0aSI6IjAxMjM0NTY3ODlhYmNkZWYiLCJ3dGgiOiI0NzhneVNBcVBDZThwZENBdXp0OFBaTkJsOEhRc2VjNkV3RVk1Rzlmd1hrIiwidHRoIjoid05xUEdUUzN2cDRaNTlzMklvd1FHeDJJeHBUREdjVk9zaGpqM3c1WXlNdyIsIm90aCI6eyJjdHgtdG9rZW4iOiIyTHpZME5IM1VKOXhsb0ZvaXZmQ2NGZUlEM1R2RXpiMVlqaDdua2pFb2dnIn19.gLN0323edV3oB7lSLdq-OEIHvWwpamWu4q0W2ZUWDefj1m2UvCne2_jywYJE5If63vxt3Zxr29I2dPMgdub8Aw"
+    },
+    {
+      "id": "cnf-and-proof-alg-eddsa",
+      "description": "a WIT whose `cnf.jwk.alg` is the deprecated `EdDSA`, with a proof that says `EdDSA` as well",
+      "proof": "eyJ0eXAiOiJ3cHQrand0IiwiYWxnIjoiRWREU0EifQ.eyJhdWQiOiJodHRwczovL3dvcmtsb2FkLmV4YW1wbGUuY29tL3BhdGgiLCJleHAiOjE3MDAwMDAzMDAsImp0aSI6IjAxMjM0NTY3ODlhYmNkZWYiLCJ3dGgiOiIydmJnTGRQWFVpWVptNzg1cXFHMDBQcl8yMm5RemxSY3VyaHF0T1lwRW8wIiwidHRoIjoid05xUEdUUzN2cDRaNTlzMklvd1FHeDJJeHBUREdjVk9zaGpqM3c1WXlNdyIsIm90aCI6eyJjdHgtdG9rZW4iOiIyTHpZME5IM1VKOXhsb0ZvaXZmQ2NGZUlEM1R2RXpiMVlqaDdua2pFb2dnIn19.rGrKjnAgY6oUqOHuwhMl6ptoKsxH1l45ZC812Z-pz75RZWh0OYuv1pshoaz0kxHcK5TTB8b1H_14qB6q4fWxDA",
+      "wit": "eyJ0eXAiOiJ3aXQrand0IiwiYWxnIjoiRWQyNTUxOSIsImtpZCI6Imlzc3Vlci1rZXktMSJ9.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvYXBpIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDM2MDAsImp0aSI6ImExYjJjMyIsImNuZiI6eyJqd2siOnsiYWxnIjoiRWREU0EiLCJrdHkiOiJPS1AiLCJjcnYiOiJFZDI1NTE5IiwieCI6Il9SY2tPRnFneDF0ay0zak5ZQy1oMlpIOTZfZHJFOFdPMXdMcXlEWHA5aGcifX19._rpeB3TJlogov-GNUoWIuhXCHNYRZ6NkFTv8WFKEVljpxMmwLVlbg5-3FvtXmhmiu1z0zD_gRqTTIBSu7njBAA",
+      "claims": {
+        "aud": "https://workload.example.com/path",
+        "exp": 1700000300,
+        "jti": "0123456789abcdef",
+        "wth": "2vbgLdPXUiYZm785qqG00Pr_22nQzlRcurhqtOYpEo0",
+        "tth": "wNqPGTS3vp4Z59s2IowQGx2IxpTDGcVOshjj3w5YyMw",
+        "oth": {
+          "ctx-token": "2LzY0NH3UJ9xloFoivfCcFeID3TvEzb1Yjh7nkjEogg"
+        }
+      }
+    }
+  ]
+}

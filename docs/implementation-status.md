@@ -76,8 +76,8 @@ That is not always wanted. Adding the section to the WPT draft drew a preference
 * Maturity:
     * Workload Proof Token: alpha, not for production
 * Coverage: Issuance and verification with the mandatory `aud`, `exp`, `jti`
-  and `wth` claims and the conditional `tth` and `oth`, under `EdDSA` or
-  `ES256`. Verification recomputes `wth` from the WIT actually presented and
+  and `wth` claims and the conditional `tth` and `oth`, under `Ed25519`
+  (or the deprecated `EdDSA`) or `ES256`. Verification recomputes `wth` from the WIT actually presented and
   takes the proof-of-possession key from that WIT, and requires the proof's
   `alg` to be the one that WIT's `cnf` names. Single-use `jti` tracking is left
   to the caller, as is the `WPT` HTTP authentication scheme that conveys the
@@ -97,7 +97,7 @@ That is not always wanted. Adding the section to the WPT draft drew a preference
 * Maturity:
     * Workload Identity Certificate: alpha, not for production
 * Coverage: Issues and verifies a WIC carrying the identifier in a URI SAN,
-  with `id-kp-clientAuth` and `id-kp-serverAuth`, under `EdDSA` or `ES256`.
+  with `id-kp-clientAuth` and `id-kp-serverAuth`, under Ed25519 or `ES256`.
   The signature algorithm a verifier accepts follows the CA's own key rather
   than the certificate's claim. Issuance takes the workload's public key only,
   so the CA never holds the key it certifies.
@@ -140,7 +140,7 @@ The published entries compress this into a few words. `workload-creds` verified 
 
 **`http-signature` — "WIT, HTTP Message Signatures, signed responses".** The Section 3 profile of -08 for both requests and responses, with `Ed25519` and `ES256`. Requests: the mandatory covered components (`@method`, `@path`, `@query` and the listed headers, or `@method` and `@authority` on a `CONNECT`, which rejects `@path` and `@query`), `created`/`expires`/`nonce`/`tag`, `wimse-aud` matched by Simple String Comparison against any of the recipient's configured audiences, and rejection of the forbidden `keyid` and `alg` parameters. The WIMSE signature is selected by its `tag` rather than its label, alongside any signature an intermediary adds, and two carrying the tag are rejected. Responses: `@status`, `@method;req`/`@path;req`/`@query;req` (`@authority;req` for a `CONNECT`), `wimse-req-nonce` on every signed response, and a response profile in which `wimse-aud` is forbidden. `wimse-sign-response` serializes as a bare Boolean. Replay detection is left to the caller; the implementation checks that a `nonce` is present but does not remember the ones it has seen. Cross-implementation test vectors, whose negative cases each name the reason the input must be rejected, are published at <https://github.com/kanywst/wimsey/tree/main/conformance>; Yaron Sheffer ran the -07 (`wimse-conformance/v6`) vectors against his own RFC 9421 implementation and reported that they pass; the cases -08 added have not yet been run by another implementation.
 
-**`workload-creds` — "WIT, Workload Identity Certificate".** WIT issuance and verification with the mandatory `sub`, `exp` and `cnf` claims, the optional `iss`, `iat` and `jti`, and the required `alg` member inside the `cnf` JWK, which is enforced as the algorithm the proof must use. Both `EdDSA` and `ES256`, in any combination — an EdDSA issuer with an ES256 confirmation key is exercised by a conformance vector. WIC issuance and verification with the identifier in a URI SAN, under either algorithm. Selecting the trust anchor from the trust domain of `sub` (Section 3) is left to the caller, which is recorded in `SPEC-MAP.md`; verification takes the issuer key as an argument, so anchor material can never be resolved from the token's own `iss`.
+**`workload-creds` — "WIT, Workload Identity Certificate".** WIT issuance and verification with the mandatory `sub`, `exp` and `cnf` claims, the optional `iss`, `iat` and `jti`, and the required `alg` member inside the `cnf` JWK, which is enforced as the algorithm the proof must use. Both `Ed25519` and `ES256`, in any combination — an Ed25519 issuer with an ES256 confirmation key is exercised by a conformance vector — with the deprecated `EdDSA` identifier still accepted. WIC issuance and verification with the identifier in a URI SAN, under either algorithm. Selecting the trust anchor from the trust domain of `sub` (Section 3) is left to the caller, which is recorded in `SPEC-MAP.md`; verification takes the issuer key as an argument, so anchor material can never be resolved from the token's own `iss`.
 
 ## Section boilerplate
 

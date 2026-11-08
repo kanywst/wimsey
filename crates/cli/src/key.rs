@@ -66,7 +66,7 @@ impl JwkKey {
         let alg = match self.alg.as_deref() {
             Some(alg) => alg.to_owned(),
             None => match (self.kty.as_str(), self.crv.as_str()) {
-                ("OKP", "Ed25519") => "EdDSA".to_owned(),
+                ("OKP", "Ed25519") => "Ed25519".to_owned(),
                 ("EC", "P-256") => "ES256".to_owned(),
                 (kty, crv) => {
                     return Err(format!("unsupported key: kty={kty}, crv={crv}").into());

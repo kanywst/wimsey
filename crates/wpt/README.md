@@ -37,7 +37,7 @@ workload-identity drafts, in Rust.
 > revision; see [`SPEC-MAP.md`](https://github.com/kanywst/wimsey/blob/main/SPEC-MAP.md)
 > for the pin and for the requirements it does not yet meet.
 
-All signing is EdDSA over Ed25519, which is deterministic, so output is
+All signing is Ed25519 (RFC 8032), which is deterministic, so output is
 byte-for-byte reproducible. Time is injected rather than read from a clock, so
 verification is reproducible too. Cross-implementation test vectors live in
 [`conformance/`](https://github.com/kanywst/wimsey/tree/main/conformance).

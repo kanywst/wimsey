@@ -28,7 +28,7 @@ first entry of its Document History section.
 | --- | --- | --- | --- |
 | `identifier` | -04 | -04 | — |
 | `workload-creds` | -03 | -03 | — |
-| `wpt` | -02 | -03 | Moves the key-management section to `workload-creds`; no normative change for `wimsey-wpt`. Also switches the examples to `Ed25519` and spells out the `alg` checks, which lands with [#91](https://github.com/kanywst/wimsey/issues/91). |
+| `wpt` | -02 | -03 | Moves the key-management section to `workload-creds`; no normative change for `wimsey-wpt`. Also switches the examples to `Ed25519` (RFC 9864), which `wimsey-wpt` already emits, and spells out the `alg` checks. `verify` already requires it to string-equal `cnf.jwk.alg` and refuses `none` and symmetric algorithms; restricting it further by local policy would be the caller's, since `wimsey-wpt` has no per-trust-domain algorithm list. |
 | `http-signature` | -08 | -08 | — |
 | `mutual-tls` | -03 | -03 | — |
 
@@ -51,7 +51,6 @@ the pinned drafts.
 | Accepting a non-normalized `wimse` spelling and normalizing it | `identifier` §4.3 | Stricter than the draft: `WorkloadIdentifier::parse` refuses an uppercase trust domain, a lowercase-hex escape, an escape of an unreserved character, an empty path segment and an IPv6-literal trust domain instead of normalizing them, so every accepted identifier is already in normal form and byte comparison is the §4.3 comparison. The draft would accept the first three after normalizing. |
 | Matching the trust domain against an allowlist of trusted domains | `identifier` §6.3 | Left to the caller: the crate parses and exposes `trust_domain()` (always ASCII, A-labels for IDNs), and deciding which trust domains are trusted is the deployment's. |
 | Mapping an external handle (DNS name, service name) to the expected identifier | `identifier` §5 | Left to the caller: the crate has no notion of how a workload was addressed. |
-| Accepting the fully-specified `Ed25519` algorithm identifier (RFC 9864) | `workload-creds` §5.1 | Not yet: -03's example WIT, like the `http-signature` -08 examples, names `Ed25519` in `cnf.jwk.alg` in place of the deprecated `EdDSA`. `wimsey-jose` emits and accepts `EdDSA` only, so such a WIT is rejected with `unsupported_confirmation_alg`. The text still allows any registered value, so this is an interop gap rather than a violation; switching needs the key to carry its `alg` label, because `wpt` requires the proof's `alg` to string-equal the WIT's, and is tracked in [#91](https://github.com/kanywst/wimsey/issues/91). |
 | Requiring `jti` in every WIT when a deployment runs a status list or `jti` deny-list | `workload-creds` §9.3.1 | Left to the caller: `jti` is optional in `WitClaims`, and only the deployment knows whether it revokes. |
 | Trust-domain match on the TLS peer certificate | `mutual-tls` §3.2, §3.2.1 | Left to the caller: `wimsey-mtls::verify` returns the identifier and the caller compares it, since chain building and rustls wiring are out of scope. |
 | Chain building, `basicConstraints`, `keyUsage`, name constraints, revocation status | `mutual-tls` §3.2 | Not enforced. `verify` is a single-issuer model that checks the directly provided CA only; deployments needing full PKIX path validation should use a dedicated X.509 verifier. |

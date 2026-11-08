@@ -8,7 +8,7 @@
     },
     {
       "suite": "wit",
-      "path": "wit/issue-eddsa.json",
+      "path": "wit/issue-ed25519.json",
       "spec": "draft-ietf-wimse-workload-creds-03"
     },
     {
@@ -18,7 +18,7 @@
     },
     {
       "suite": "wpt",
-      "path": "wpt/proof-eddsa.json",
+      "path": "wpt/proof-ed25519.json",
       "spec": "draft-ietf-wimse-wpt-02"
     },
     {
@@ -28,7 +28,7 @@
     },
     {
       "suite": "httpsig",
-      "path": "httpsig/sign-eddsa.json",
+      "path": "httpsig/sign-ed25519.json",
       "spec": "draft-ietf-wimse-http-signature-08"
     },
     {
@@ -38,7 +38,7 @@
     },
     {
       "suite": "mtls",
-      "path": "mtls/wic-eddsa.json",
+      "path": "mtls/wic-ed25519.json",
       "spec": "draft-ietf-wimse-mutual-tls-03"
     },
     {
