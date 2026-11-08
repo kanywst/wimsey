@@ -61,6 +61,8 @@ const POP_SEED: [u8; 32] = [9u8; 32];
 const RESPONDER_POP_SEED: [u8; 32] = [11u8; 32];
 /// An intermediary that adds its own signature to a message in transit.
 const PROXY_SEED: [u8; 32] = [13u8; 32];
+/// A valid key that no WIT in the vectors confirms.
+const STRANGER_SEED: [u8; 32] = [15u8; 32];
 
 const ISSUER: &str = "https://issuer.example";
 const SUBJECT: &str = "spiffe://example.org/workload/api";
@@ -451,6 +453,7 @@ fn wpt_negatives(
                 ErrorCode::InvalidSignature,
             )
         },
+        stranger_proof_negative(claims, pop_key),
         WptNegative {
             txn_token: Some("txn-token-fedcba9876543210".to_owned()),
             ..wpt_neg(
@@ -488,6 +491,18 @@ fn wpt_negatives(
             )
         },
     ]
+}
+
+fn stranger_proof_negative(claims: &WptClaims, pop_key: &SigningKey) -> WptNegative {
+    let stranger = key(pop_key.algorithm(), STRANGER_SEED);
+    WptNegative {
+        proof: Some(issue_wpt(claims, &stranger).expect("issue WPT with another key")),
+        ..wpt_neg(
+            "signed-by-another-key",
+            "validly signed, but by a key other than the one in the WIT's `cnf`",
+            ErrorCode::InvalidSignature,
+        )
+    }
 }
 
 /// Builds the WPT vector.
@@ -1335,6 +1350,26 @@ fn connect_request_negative(
     }
 }
 
+fn stranger_request_negative(
+    request: &HttpRequest,
+    components: &[Component],
+    params: &SignatureParams,
+    pop_key: &SigningKey,
+) -> HttpSigNegative {
+    let stranger = key(pop_key.algorithm(), STRANGER_SEED);
+    let signed = sign(request, components, params, "wimse", &stranger)
+        .expect("the fixed request is signable");
+    HttpSigNegative {
+        signature_input: Some(signed.signature_input),
+        signature: Some(signed.signature),
+        ..httpsig_neg(
+            "signed-by-another-key",
+            "validly signed, but by a key other than the one in the WIT's `cnf`",
+            ErrorCode::InvalidSignature,
+        )
+    }
+}
+
 /// The inputs an httpsig verifier must reject, given the signed request.
 ///
 /// Note that `accept_audience`, `max_age` and `required_components` describe how
@@ -1415,6 +1450,7 @@ fn httpsig_negatives(
                 ErrorCode::InvalidSignature,
             )
         },
+        stranger_request_negative(request, components, params, pop_key),
         HttpSigNegative {
             verify_now: Some(IAT - 1),
             ..httpsig_neg(

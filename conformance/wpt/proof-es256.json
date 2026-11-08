@@ -76,6 +76,12 @@
       "proof": "eyJ0eXAiOiJ3cHQrand0IiwiYWxnIjoiRVMyNTYifQ.eyJhdWQiOiJodHRwczovL3dvcmtsb2FkLmV4YW1wbGUuY29tL3BhdGgiLCJleHAiOjE3MDAwMDAzMDAsImp0aSI6IjAxMjM0NTY3ODlhYmNkZWUiLCJ3dGgiOiJZdUpxY29UMEVJWkZYT056N3RjM3ZTaUIyVFBCZ3UyOUtBakduanVFNUJZIiwidHRoIjoid05xUEdUUzN2cDRaNTlzMklvd1FHeDJJeHBUREdjVk9zaGpqM3c1WXlNdyIsIm90aCI6eyJjdHgtdG9rZW4iOiIyTHpZME5IM1VKOXhsb0ZvaXZmQ2NGZUlEM1R2RXpiMVlqaDdua2pFb2dnIn19.P3Cf1mtcdlROaRJoXEBh8xeLOoRXbWs2deZqu24GNlMtTAUJ91BIwfDcnstPP5DKLLKoAI52mtFrn00MqR5HqQ"
     },
     {
+      "id": "signed-by-another-key",
+      "description": "validly signed, but by a key other than the one in the WIT's `cnf`",
+      "expect": "invalid_signature",
+      "proof": "eyJ0eXAiOiJ3cHQrand0IiwiYWxnIjoiRVMyNTYifQ.eyJhdWQiOiJodHRwczovL3dvcmtsb2FkLmV4YW1wbGUuY29tL3BhdGgiLCJleHAiOjE3MDAwMDAzMDAsImp0aSI6IjAxMjM0NTY3ODlhYmNkZWYiLCJ3dGgiOiJZdUpxY29UMEVJWkZYT056N3RjM3ZTaUIyVFBCZ3UyOUtBakduanVFNUJZIiwidHRoIjoid05xUEdUUzN2cDRaNTlzMklvd1FHeDJJeHBUREdjVk9zaGpqM3c1WXlNdyIsIm90aCI6eyJjdHgtdG9rZW4iOiIyTHpZME5IM1VKOXhsb0ZvaXZmQ2NGZUlEM1R2RXpiMVlqaDdua2pFb2dnIn19.XrhD1LX5AFnFaKwvn_bOMA7r3qX-iAnp1_xe6KHlvYq1SdurdMZM_IgT0I2KYcqT67u_6ABxkVOjnsYqjCfuYA"
+    },
+    {
       "id": "txn-token-mismatch",
       "description": "replayed against a request carrying a different Txn-Token",
       "expect": "txn_token_binding_mismatch",
