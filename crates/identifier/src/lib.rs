@@ -1,6 +1,6 @@
 //! `wimsey-identifier` — the WIMSE Workload Identifier URI.
 //!
-//! Target spec: `draft-ietf-wimse-identifier-03`.
+//! Target spec: `draft-ietf-wimse-identifier-04`.
 //!
 //! A workload identifier is an absolute URI whose authority component names the
 //! trust domain the identifier is scoped to. The draft deliberately does *not*
@@ -15,16 +15,19 @@
 //!   uninterpreted, so segments accept the generic RFC 3986 `pchar` set.
 //!
 //! Both schemes are held to the generic requirements of Section 4.1: a
-//! non-empty authority, no query, fragment, user-information or port component,
-//! and a total length of at most [`MAX_ID_LEN`] bytes.
+//! non-empty authority, a non-empty path, no `.` or `..` path segment, no
+//! query, fragment, user-information or port component, and a total length of
+//! at most [`MAX_ID_LEN`] bytes. A bare `scheme://trust-domain` is a Workload
+//! Identifier *Origin* (Section 4.6), not an identifier, and is rejected.
 //!
 //! # Normalization is rejected, not performed
 //!
-//! Section 4.3 requires consumers to "compare and authorize Workload
-//! Identifiers using the complete URI". Comparing whole URIs is only sound if
-//! each identifier has exactly one spelling, so this crate rejects the forms
-//! that RFC 3986 Section 6.2.2 normalization would rewrite, rather than
-//! silently rewriting them:
+//! Section 4.3 requires consumers to compare complete Workload Identifiers after
+//! RFC 3986 Section 6.2.2 syntax-based normalization, byte for byte. This crate
+//! gets the same answer without normalizing: it rejects every form that
+//! normalization would rewrite, so an accepted identifier is already in normal
+//! form and comparing [`WorkloadIdentifier::as_str`] byte for byte *is* the
+//! Section 4.3 comparison. The rejected forms are:
 //!
 //! - an uppercase trust domain (the authority is case-insensitive);
 //! - an empty path segment, and a `.` or `..` segment;
@@ -38,7 +41,22 @@
 //! it would change what the path means.
 //!
 //! Parsing therefore fails closed on any input that could compare unequal to a
-//! semantically identical peer.
+//! semantically identical peer. Section 4.3 also forbids normalization from
+//! making an otherwise invalid identifier acceptable, and Section 6.1 requires
+//! validating the received URI before normalization can hide prohibited
+//! syntax; refusing instead of rewriting satisfies both by construction.
+//!
+//! For the `spiffe` scheme these rules are the SPIFFE ID specification's own.
+//! For `wimse` they are stricter than the draft, which would normalize and then
+//! accept an uppercase trust domain, a lowercase-hex escape, an escape of an
+//! unreserved character other than `.`, and an empty path segment (RFC 3986
+//! normalization does not collapse `//`). It also accepts an IPv6-literal trust
+//! domain, which the draft discourages (SHOULD NOT) and this crate refuses.
+//! `SPEC-MAP.md` records this as a known divergence.
+//!
+//! An internationalized trust domain has to be written as A-labels
+//! (`xn--...`, Section 4.3): the trust-domain charset is ASCII, so a U-label
+//! or its percent-encoded UTF-8 form is refused.
 
 use std::fmt;
 use std::str::FromStr;
@@ -48,7 +66,8 @@ use serde::{Deserialize, Serialize};
 /// The maximum length, in bytes, of a workload identifier.
 ///
 /// Section 4.1 of the draft requires implementations to support identifiers of
-/// at least 2048 bytes and recommends that identifiers not exceed it.
+/// at least 2048 bytes and recommends that identifiers not exceed it, and
+/// Section 6.1 allows rejecting a longer one, which this crate does.
 pub const MAX_ID_LEN: usize = 2048;
 
 /// The maximum length, in bytes, of a `spiffe` trust domain.
@@ -118,6 +137,11 @@ pub enum ParseError {
     /// The trust domain is empty.
     #[error("trust domain is empty")]
     EmptyTrustDomain,
+    /// The path is empty. Section 4.1 requires a non-empty path; a bare
+    /// `scheme://trust-domain` is a Workload Identifier Origin, not an
+    /// identifier.
+    #[error("identifier must contain a non-empty path")]
+    EmptyPath,
     /// The trust domain is longer than [`MAX_TRUST_DOMAIN_LEN`] bytes.
     #[error("trust domain exceeds {MAX_TRUST_DOMAIN_LEN} bytes")]
     TrustDomainTooLong,
@@ -238,7 +262,7 @@ impl WorkloadIdentifier {
         &self.uri[start..start + self.trust_domain_len]
     }
 
-    /// Returns the path, including the leading `/`, or `""` when there is none.
+    /// Returns the path, including the leading `/`. It is never empty.
     #[must_use]
     pub fn path(&self) -> &str {
         let start = self.scheme.prefix().len() + self.trust_domain_len;
@@ -275,10 +299,11 @@ fn validate_trust_domain(scheme: Scheme, td: &str) -> Result<(), ParseError> {
 }
 
 fn validate_path(scheme: Scheme, path: &str) -> Result<(), ParseError> {
+    // Section 4.1 (since -04): a non-empty path is required.
     if path.is_empty() {
-        return Ok(());
+        return Err(ParseError::EmptyPath);
     }
-    // A non-empty path must begin with `/` and split into non-empty segments.
+    // The path begins with `/` and splits into non-empty segments.
     for segment in path.split('/').skip(1) {
         if segment.is_empty() {
             return Err(ParseError::EmptyPathSegment);
@@ -456,10 +481,17 @@ mod tests {
     }
 
     #[test]
-    fn parses_a_trust_domain_only_identifier() {
-        let id = WorkloadIdentifier::parse("spiffe://example.org").unwrap();
-        assert_eq!(id.trust_domain(), "example.org");
-        assert_eq!(id.path(), "");
+    fn rejects_a_trust_domain_only_identifier() {
+        // Section 4.1 (since -04) requires a non-empty path: a bare
+        // `scheme://trust-domain` is an origin, not an identifier.
+        assert_eq!(
+            WorkloadIdentifier::parse("spiffe://example.org"),
+            Err(ParseError::EmptyPath)
+        );
+        assert_eq!(
+            WorkloadIdentifier::parse("wimse://example.org"),
+            Err(ParseError::EmptyPath)
+        );
     }
 
     #[test]
@@ -467,8 +499,28 @@ mod tests {
         let id = WorkloadIdentifier::parse("wimse://trust.corp.example.com/workload/1").unwrap();
         assert_eq!(id.origin(), "wimse://trust.corp.example.com");
 
-        let bare = WorkloadIdentifier::parse("spiffe://prod.trust.domain").unwrap();
-        assert_eq!(bare.origin(), "spiffe://prod.trust.domain");
+        let spiffe = WorkloadIdentifier::parse("spiffe://prod.trust.domain/x").unwrap();
+        assert_eq!(spiffe.origin(), "spiffe://prod.trust.domain");
+    }
+
+    #[test]
+    fn accepts_an_a_label_trust_domain() {
+        // Section 4.3: an internationalized trust domain is written as A-labels.
+        let id = WorkloadIdentifier::parse("wimse://xn--bcher-kva.example/api").unwrap();
+        assert_eq!(id.trust_domain(), "xn--bcher-kva.example");
+    }
+
+    #[test]
+    fn rejects_a_u_label_trust_domain() {
+        // Section 4.3: U-labels and their percent-encoded UTF-8 must not be used.
+        assert_eq!(
+            WorkloadIdentifier::parse("wimse://b\u{fc}cher.example/api"),
+            Err(ParseError::InvalidTrustDomainChar('\u{fc}'))
+        );
+        assert_eq!(
+            WorkloadIdentifier::parse("wimse://b%C3%BCcher.example/api"),
+            Err(ParseError::InvalidTrustDomainChar('%'))
+        );
     }
 
     #[test]

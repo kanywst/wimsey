@@ -9,7 +9,7 @@ revision**. Bumping a pin is a deliberate, reviewed change.
 | Draft | Revision | Crate | Notes |
 | --- | --- | --- | --- |
 | `draft-ietf-wimse-arch` | -08 | — | Architecture; design guidance only |
-| `draft-ietf-wimse-identifier` | -03 | `wimsey-identifier` | URI scheme; `spiffe` and `wimse` |
+| `draft-ietf-wimse-identifier` | -04 | `wimsey-identifier` | URI scheme; `spiffe` and `wimse` |
 | `draft-ietf-wimse-workload-creds` | -02 | `wimsey-wit` | Defines WIT and WIC |
 | `draft-ietf-wimse-wpt` | -02 | `wimsey-wpt` | Workload Proof Token (DPoP-style PoP) |
 | `draft-ietf-wimse-http-signature` | -08 | `wimsey-httpsig` | Profile of RFC 9421 |
@@ -26,7 +26,7 @@ first entry of its Document History section.
 
 | Draft | Published | Editors' copy | Bearing on this workspace |
 | --- | --- | --- | --- |
-| `identifier` | -03 | -03 | — |
+| `identifier` | -04 | -04 | — |
 | `workload-creds` | -02 | -03 | Adds a "Validating the WIT" procedure for recipients; `wimsey-wit` already satisfies every item except trust-anchor selection, which is a divergence below. |
 | `wpt` | -02 | -03 | Moves the key-management section to `workload-creds`; no normative change for `wimsey-wpt`. |
 | `http-signature` | -08 | -08 | — |
@@ -48,6 +48,9 @@ the pinned drafts.
 
 | Requirement | Draft | Status |
 | --- | --- | --- |
+| Accepting a non-normalized `wimse` spelling and normalizing it | `identifier` §4.3 | Stricter than the draft: `WorkloadIdentifier::parse` refuses an uppercase trust domain, a lowercase-hex escape, an escape of an unreserved character, an empty path segment and an IPv6-literal trust domain instead of normalizing them, so every accepted identifier is already in normal form and byte comparison is the §4.3 comparison. The draft would accept the first three after normalizing. |
+| Matching the trust domain against an allowlist of trusted domains | `identifier` §6.3 | Left to the caller: the crate parses and exposes `trust_domain()` (always ASCII, A-labels for IDNs), and deciding which trust domains are trusted is the deployment's. |
+| Mapping an external handle (DNS name, service name) to the expected identifier | `identifier` §5 | Left to the caller: the crate has no notion of how a workload was addressed. |
 | Trust-domain match on the TLS peer certificate | `mutual-tls` §4 | Left to the caller: `wimsey-mtls::verify` returns the identifier and the caller compares it, since chain building and rustls wiring are out of scope. |
 | Chain building, `basicConstraints`, `keyUsage`, name constraints | `mutual-tls` §4 | Not enforced. `verify` is a single-issuer model that checks the directly provided CA only; deployments needing full PKIX path validation should use a dedicated X.509 verifier. |
 | Selecting the trust anchor from the `sub` trust domain | `workload-creds` §3 | Left to the caller: `wimsey_wit::verify` takes the issuer's verifying key as an argument, so mapping the trust domain of `sub` to its configured anchors — and picking the key within them, by `kid` where one is present — is the deployment's. This also means anchor material can never be resolved from the token's own `iss`, which the draft forbids. |

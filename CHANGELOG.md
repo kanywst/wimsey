@@ -10,6 +10,25 @@ silently.
 
 ## [Unreleased]
 
+### Changed
+
+- **`wimsey-identifier` targets `draft-ietf-wimse-identifier-04`** (published
+  2026-10-23). Breaking: `-04` adds "A Workload Identifier MUST contain a
+  non-empty path component" (Section 4.1), so a bare `spiffe://<td>` or
+  `wimse://<td>` is now refused with the new `ParseError::EmptyPath`. Such a
+  value is a Workload Identifier Origin (Section 4.6), not an identifier.
+  The rest of -04's normative changes were already met: `.`/`..` segments,
+  literal or percent-encoded, were refused; an internationalized trust domain
+  can only be written as A-labels because the trust-domain charset is ASCII;
+  identifiers up to 2048 bytes are accepted. The new comparison rule (RFC 3986
+  Section 6.2.2 normalization, then byte comparison) gives the same answer as
+  comparing `as_str()`, because every spelling normalization would rewrite is
+  refused at parse time; `SPEC-MAP.md` records that as a known divergence.
+- Conformance: `identifier/parse-basic.json` moves `trust-domain-only` from
+  `accept` to `reject` with the new `empty_path` error code. The format stays
+  `wimse-conformance/v7`: a v7 reader that does not know the code reports a
+  mismatch rather than a silent pass.
+
 ## [0.9.0] - 2026-10-22
 
 A breaking release: `draft-ietf-wimse-http-signature` published **-08** on
