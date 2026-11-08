@@ -10,6 +10,15 @@ silently.
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-11-08
+
+A breaking release. `draft-ietf-wimse-identifier` -04 refuses an identifier
+with an empty path, `workload-creds` -03 and `mutual-tls` -03 are now the
+targets, Ed25519 is emitted under its RFC 9864 name `Ed25519`, and the
+conformance format moves to v8. Every crate moves version in lockstep. Also
+carried: `crypto-bigint` 0.7.10 (RUSTSEC-2026-0387), `ctutils` 0.4.5
+(RUSTSEC-2026-0385) and `tokio` 1.54.1.
+
 ### Added
 
 - Conformance: a `signed-by-another-key` negative in the `wpt` and `httpsig`
@@ -627,7 +636,8 @@ public API.
 - Project governance, security policy, contributing guide (DCO), and OpenSSF
   Scorecard automation.
 
-[Unreleased]: https://github.com/kanywst/wimsey/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/kanywst/wimsey/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/kanywst/wimsey/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/kanywst/wimsey/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/kanywst/wimsey/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/kanywst/wimsey/compare/v0.6.3...v0.7.0
