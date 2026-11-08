@@ -26,15 +26,15 @@ jq -r '[.accept[].identifier, .reject[].identifier] | .[]' \
     printf '%s' "$id" | write identifier_parse "id-$(printf '%s' "$id" | shasum | cut -c1-8)"
   done
 
-# Tokens, including the negative cases: those are the interesting ones, being
-# well-formed enough to reach deep into the parser before being refused.
-jq -r '[.token] + [.negative[].token // empty] | .[]' \
+# Tokens, including the negative and accepted cases: those are the interesting
+# ones, being well-formed enough to reach deep into the parser.
+jq -r '[.token] + [.negative[].token // empty] + [.accepted[]?.token // empty] | .[]' \
   "$vectors"/wit/issue-*.json |
   while IFS= read -r token; do
     printf '%s' "$token" | write wit_verify "wit-$(printf '%s' "$token" | shasum | cut -c1-8)"
   done
 
-jq -r '[.proof] + [.negative[].proof // empty] | .[]' \
+jq -r '[.proof] + [.negative[].proof // empty] + [.accepted[]?.proof // empty] | .[]' \
   "$vectors"/wpt/proof-*.json |
   while IFS= read -r proof; do
     printf '%s' "$proof" | write wpt_verify "wpt-$(printf '%s' "$proof" | shasum | cut -c1-8)"

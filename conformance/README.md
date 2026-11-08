@@ -41,7 +41,7 @@ Start at `manifest.json`. Do not glob the directories — the manifest is the li
 Every file, including the manifest, carries a `format` field:
 
 ```json
-{ "format": "wimse-conformance/v7" }
+{ "format": "wimse-conformance/v8" }
 ```
 
 **v2 replaced the raw key bytes of v1 with JWKs.** v1 recorded a public key as 32 base64url bytes, which only worked because every v1 vector was Ed25519 — the bytes do not say which algorithm they are for. A JWK carries its own `alg`, so one suite can hold vectors for both. A private key is a JWK with `d`, so a consumer can re-sign from scratch as before.
@@ -55,6 +55,8 @@ Every file, including the manifest, carries a `format` field:
 **v6 follows `draft-ietf-wimse-http-signature-07`.** The request covers `@path` and `@query` in place of `@request-target`, and the response `@path;req` and `@query;req`. A recipient now finds the WIMSE signature by its `tag` and must not choose it by label, so the negative cases' `accept_label` is gone, and an `accepted` case may carry its own `signature_input` and `signature` — the case that proves a verifier looks past a `wimse`-labeled signature an intermediary added. A v5 reader would ignore those two fields and re-verify the positive case, reporting a pass for a check it never ran.
 
 **v7 follows `draft-ietf-wimse-http-signature-08`.** A `CONNECT` covers `@method` and `@authority` in place of `@path` and `@query`, so an `accepted` case may now carry its own `required_components`; and a recipient may answer to several audiences, compared as exact strings, so it may carry `accept_audiences`. A v6 reader would ignore both and verify `connect-covers-authority` against the default component set, failing it for a reason the case is not about, and would run `audience-among-several` against the vector's single audience, passing it without exercising the list.
+
+**v8 gave the `wit` and `wpt` vectors an `accepted` array**, as v3 did for httpsig. Each entry is an input that differs from the positive case and MUST still verify to the recorded claims: today, a token re-signed with `typ` spelled `application/wit+jwt` or in another case, which convey the same media type. The rejections alone could not catch a verifier that compares `typ` as an exact string. A v7 reader skips the new cases and reports a pass having run fewer checks than the file asks for, which is why this is a version bump.
 
 Reject a file whose `format` you do not recognise rather than guessing at its shape. The version changes when the format changes, not when a vector is added.
 
@@ -162,6 +164,7 @@ Note `wimse://example.org/a%2Fb` in `accept`: `%2F` encodes a **reserved** chara
 - Re-issue from `claims`, `kid` and `issuer_signing_key`; the result must equal `token` byte for byte.
 - Verify `token` at `verify_now` against the seed's public half; the recovered claims must equal `claims`.
 - Run every negative case. Unless it overrides `issuer_verifying_key`, verify against the issuer key's public half; `expected_iss`, when present, is an issuer the verifier must require.
+- Run every `accepted` case: verify its `token` at `verify_now` against the issuer key; it MUST succeed and recover `claims`.
 
 ### `wpt`
 
@@ -169,6 +172,7 @@ Note `wimse://example.org/a%2Fb` in `accept`: `%2F` encodes a **reserved** chara
 - `claims.wth` must equal `base64url(SHA-256(wit))`, computed over the WIT's ASCII compact serialization.
 - Verify the full chain: verify `wit` against `issuer_verifying_key`, take the proof-of-possession key from its `cnf`, then verify `proof` against that key with `audience` and `wit`. Recovering the key from the WIT rather than from the vector is the point — it is what catches a break in the WIT-to-WPT binding.
 - Run every negative case against the proof-of-possession key.
+- Run every `accepted` case through the full chain, as for the positive case: `proof` and `wit` replace the recorded ones when present, the key comes from that WIT's `cnf`, and verification MUST succeed and recover `claims` (or the case's own `claims`, when it carries them).
 
 Note `wit-binding-mismatch`: the substituted WIT is itself perfectly valid and signed by the same issuer for the same key. Only `wth` distinguishes them. An implementation that checks the signature but not the binding will pass everything else and fail here.
 

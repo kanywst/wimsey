@@ -1,5 +1,5 @@
 {
-  "format": "wimse-conformance/v7",
+  "format": "wimse-conformance/v8",
   "suite": "httpsig",
   "id": "sign-es256",
   "spec": "draft-ietf-wimse-http-signature-08",

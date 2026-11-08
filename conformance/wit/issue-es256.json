@@ -1,5 +1,5 @@
 {
-  "format": "wimse-conformance/v7",
+  "format": "wimse-conformance/v8",
   "suite": "wit",
   "id": "issue-es256",
   "spec": "draft-ietf-wimse-workload-creds-03",
@@ -98,6 +98,18 @@
       "description": "the `cnf` JWK names `none`, which the draft forbids outright",
       "expect": "forbidden_confirmation_alg",
       "token": "eyJ0eXAiOiJ3aXQrand0IiwiYWxnIjoiRVMyNTYiLCJraWQiOiJpc3N1ZXIta2V5LTEifQ.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvYXBpIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDM2MDAsImp0aSI6ImExYjJjMyIsImNuZiI6eyJqd2siOnsiYWxnIjoibm9uZSIsImt0eSI6IkVDIiwiY3J2IjoiUC0yNTYiLCJ4IjoiSGhoVEw5UjFUQUx6QkIyY2RjNnpPNFBfMkJySHprX29nc3l4eVl2RmlXNCIsInkiOiJwR3d4SEU0djlBM1phalpUNXVSVVJkTXRfa2h1enRkY2VwREdvWWlCd0tNIn19fQ.eaESqQKujgrGnWM97FoHObaS9GM1tJYUTM0jrM-ZnpSmxIn11au7z7bATZ57zUA-1UsFimwns71b1NBVBKujBg"
+    }
+  ],
+  "accepted": [
+    {
+      "id": "typ-with-application-prefix",
+      "description": "`application/wit+jwt` is the same media type as `wit+jwt`",
+      "token": "eyJhbGciOiJFUzI1NiIsImtpZCI6Imlzc3Vlci1rZXktMSIsInR5cCI6ImFwcGxpY2F0aW9uL3dpdCtqd3QifQ.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvYXBpIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDM2MDAsImp0aSI6ImExYjJjMyIsImNuZiI6eyJqd2siOnsiYWxnIjoiRVMyNTYiLCJrdHkiOiJFQyIsImNydiI6IlAtMjU2IiwieCI6IkhoaFRMOVIxVEFMekJCMmNkYzZ6TzRQXzJCckh6a19vZ3N5eHlZdkZpVzQiLCJ5IjoicEd3eEhFNHY5QTNaYWpaVDV1UlVSZE10X2todXp0ZGNlcERHb1lpQndLTSJ9fX0.xx31J72b8CmpEUKFlMow86BOAvQS7n1vxDywLQ1S7GOiUGqm-tYHPs398DbHjcppkCQAihfdekEY3wqz0kIzlg"
+    },
+    {
+      "id": "typ-in-another-case",
+      "description": "media type names compare case-insensitively",
+      "token": "eyJhbGciOiJFUzI1NiIsImtpZCI6Imlzc3Vlci1rZXktMSIsInR5cCI6IkFwcGxpY2F0aW9uL1dJVCtKV1QifQ.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvYXBpIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDM2MDAsImp0aSI6ImExYjJjMyIsImNuZiI6eyJqd2siOnsiYWxnIjoiRVMyNTYiLCJrdHkiOiJFQyIsImNydiI6IlAtMjU2IiwieCI6IkhoaFRMOVIxVEFMekJCMmNkYzZ6TzRQXzJCckh6a19vZ3N5eHlZdkZpVzQiLCJ5IjoicEd3eEhFNHY5QTNaYWpaVDV1UlVSZE10X2todXp0ZGNlcERHb1lpQndLTSJ9fX0.wcNd8N1y1wNaQpruxWYNT0Nkl3GBuFSSM0tIPFiY5p50aiYKdO_luEYyPEH6sZUb1uGd3FZrjLycVmrL6YPKZg"
     }
   ]
 }
