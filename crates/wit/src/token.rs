@@ -115,20 +115,6 @@ pub fn issue(
 
 /// Verifies a Workload Identity Token against `verifying_key` and `validation`.
 ///
-/// Whether a JOSE `typ` value conveys the `application/wit+jwt` media type.
-///
-/// RFC 7515 Section 4.1.9: a recipient treats a `typ` without a `/` as if
-/// `application/` were prepended, and media type names are case-insensitive
-/// (RFC 2045 Section 5.1).
-fn conveys_wit_media_type(typ: &str) -> bool {
-    let subtype = match typ.split_once('/') {
-        Some((kind, subtype)) if kind.eq_ignore_ascii_case("application") => subtype,
-        Some(_) => return false,
-        None => typ,
-    };
-    subtype.eq_ignore_ascii_case(TYP)
-}
-
 /// Checks, in order: the structure, the `typ` and `alg` header fields, the
 /// signature, the claim set (which must include `cnf`), and the time and issuer
 /// constraints. The verification fails closed on any deviation.
@@ -159,7 +145,7 @@ pub fn verify(
     // `wit+jwt`. RFC 7515 Section 4.1.9 makes `wit+jwt` the compact spelling of
     // `application/wit+jwt`, and media types compare case-insensitively, so all
     // of those convey it. Anything else does not.
-    if !conveys_wit_media_type(&header.typ) {
+    if !wimsey_jose::typ_conveys(&header.typ, TYP) {
         return Err(WitError::WrongType { found: header.typ });
     }
     // Parsing rejects `none`, symmetric and encryption algorithms outright;

@@ -257,6 +257,18 @@ fn wit_negatives(
             )
         },
         WitNegative {
+            token: Some(resign_with_header(
+                token,
+                r#"{"typ":"text/wit+jwt","alg":"EdDSA","kid":"issuer-key-1"}"#,
+                issuer_key,
+            )),
+            ..wit_neg(
+                "wrong-typ-media-type",
+                "validly signed, but `text/wit+jwt` is not the `application/wit+jwt` media type",
+                ErrorCode::WrongType,
+            )
+        },
+        WitNegative {
             token: Some(tamper_payload(token, "a1b2c3", "a1b2c4")),
             ..wit_neg(
                 "tampered-payload",
@@ -397,6 +409,18 @@ fn wpt_negatives(
             ..wpt_neg(
                 "wrong-typ",
                 "validly signed, but the JOSE `typ` is `jwt` and not `wpt+jwt`",
+                ErrorCode::WrongType,
+            )
+        },
+        WptNegative {
+            proof: Some(resign_with_header(
+                proof,
+                r#"{"typ":"text/wpt+jwt","alg":"EdDSA"}"#,
+                pop_key,
+            )),
+            ..wpt_neg(
+                "wrong-typ-media-type",
+                "validly signed, but `text/wpt+jwt` is not the `application/wpt+jwt` media type",
                 ErrorCode::WrongType,
             )
         },

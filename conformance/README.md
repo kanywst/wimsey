@@ -92,7 +92,7 @@ Every vector has a `negative` array. Each entry records **only the fields it ove
 | `token_too_long` | Larger than the accepted maximum |
 | `unsupported_critical` | A critical JOSE header extension was not understood |
 | `invalid_encoding` | A Base64 or JSON component could not be decoded |
-| `wrong_type` | The JOSE `typ` was not the one this token type requires |
+| `wrong_type` | The JOSE `typ` did not convey the media type this token type requires (`wit+jwt` or `application/wit+jwt`, case-insensitively; likewise for `wpt+jwt`) |
 | `unsupported_alg` | The `alg` header or signature parameter was not supported |
 | `invalid_signature` | The signature did not verify against the key |
 | `expired` | The token or signature has expired |

@@ -52,6 +52,12 @@
       "token": "eyJ0eXAiOiJqd3QiLCJhbGciOiJFZERTQSIsImtpZCI6Imlzc3Vlci1rZXktMSJ9.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvYXBpIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDM2MDAsImp0aSI6ImExYjJjMyIsImNuZiI6eyJqd2siOnsiYWxnIjoiRVMyNTYiLCJrdHkiOiJFQyIsImNydiI6IlAtMjU2IiwieCI6IkhoaFRMOVIxVEFMekJCMmNkYzZ6TzRQXzJCckh6a19vZ3N5eHlZdkZpVzQiLCJ5IjoicEd3eEhFNHY5QTNaYWpaVDV1UlVSZE10X2todXp0ZGNlcERHb1lpQndLTSJ9fX0.mmGza_pzRtiaY8_OqptZnRapKkKktzSUPDP1QCVB9ydLWYZwGybOmQQlHvwE97SVCKoD-FhC01v83nQMJ41YQQ"
     },
     {
+      "id": "wrong-typ-media-type",
+      "description": "validly signed, but `text/wit+jwt` is not the `application/wit+jwt` media type",
+      "expect": "wrong_type",
+      "token": "eyJ0eXAiOiJ0ZXh0L3dpdCtqd3QiLCJhbGciOiJFZERTQSIsImtpZCI6Imlzc3Vlci1rZXktMSJ9.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwic3ViIjoic3BpZmZlOi8vZXhhbXBsZS5vcmcvd29ya2xvYWQvYXBpIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDM2MDAsImp0aSI6ImExYjJjMyIsImNuZiI6eyJqd2siOnsiYWxnIjoiRVMyNTYiLCJrdHkiOiJFQyIsImNydiI6IlAtMjU2IiwieCI6IkhoaFRMOVIxVEFMekJCMmNkYzZ6TzRQXzJCckh6a19vZ3N5eHlZdkZpVzQiLCJ5IjoicEd3eEhFNHY5QTNaYWpaVDV1UlVSZE10X2todXp0ZGNlcERHb1lpQndLTSJ9fX0.739nKp5UktK_G9UE8x2tGmjnrHsUcYuETZ-aSs2r9wCuYj7dVwzKNnXIpDqr_XskwGyIEcXETwmgtujarccxbg"
+    },
+    {
       "id": "tampered-payload",
       "description": "`jti` was altered after signing; the payload is still valid JSON",
       "expect": "invalid_signature",

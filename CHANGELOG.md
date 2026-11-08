@@ -39,6 +39,15 @@ silently.
   recorded in `SPEC-MAP.md`. The rest of -03 is architecture prose,
   security considerations and editorial.
 
+### Fixed
+
+- `wimsey-wpt` applies the same `typ` rule: `draft-ietf-wimse-wpt-02` already
+  asked that `typ` convey the `wpt+jwt` media type, and `verify` had refused
+  `application/wpt+jwt`. The comparison lives in `wimsey_jose::typ_conveys`,
+  shared by both tokens. The `wit` and `wpt` vectors gain a
+  `wrong-typ-media-type` negative (`text/<subtype>`), so the reach of the rule
+  is in the contract and not only in unit tests.
+
 ## [0.9.0] - 2026-10-22
 
 A breaking release: `draft-ietf-wimse-http-signature` published **-08** on

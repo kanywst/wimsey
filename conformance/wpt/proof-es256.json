@@ -64,6 +64,12 @@
       "proof": "eyJ0eXAiOiJqd3QiLCJhbGciOiJFZERTQSJ9.eyJhdWQiOiJodHRwczovL3dvcmtsb2FkLmV4YW1wbGUuY29tL3BhdGgiLCJleHAiOjE3MDAwMDAzMDAsImp0aSI6IjAxMjM0NTY3ODlhYmNkZWYiLCJ3dGgiOiJZdUpxY29UMEVJWkZYT056N3RjM3ZTaUIyVFBCZ3UyOUtBakduanVFNUJZIiwidHRoIjoid05xUEdUUzN2cDRaNTlzMklvd1FHeDJJeHBUREdjVk9zaGpqM3c1WXlNdyIsIm90aCI6eyJjdHgtdG9rZW4iOiIyTHpZME5IM1VKOXhsb0ZvaXZmQ2NGZUlEM1R2RXpiMVlqaDdua2pFb2dnIn19.4xm4S61jySUyL546zoIZkwhUCDUbwVNofKo7_HJ1XF8sRifKDFL0AtpdpOD6GJPF61qSiDd1ysPREJgDfW5D5A"
     },
     {
+      "id": "wrong-typ-media-type",
+      "description": "validly signed, but `text/wpt+jwt` is not the `application/wpt+jwt` media type",
+      "expect": "wrong_type",
+      "proof": "eyJ0eXAiOiJ0ZXh0L3dwdCtqd3QiLCJhbGciOiJFZERTQSJ9.eyJhdWQiOiJodHRwczovL3dvcmtsb2FkLmV4YW1wbGUuY29tL3BhdGgiLCJleHAiOjE3MDAwMDAzMDAsImp0aSI6IjAxMjM0NTY3ODlhYmNkZWYiLCJ3dGgiOiJZdUpxY29UMEVJWkZYT056N3RjM3ZTaUIyVFBCZ3UyOUtBakduanVFNUJZIiwidHRoIjoid05xUEdUUzN2cDRaNTlzMklvd1FHeDJJeHBUREdjVk9zaGpqM3c1WXlNdyIsIm90aCI6eyJjdHgtdG9rZW4iOiIyTHpZME5IM1VKOXhsb0ZvaXZmQ2NGZUlEM1R2RXpiMVlqaDdua2pFb2dnIn19.idzt1whbu9sxflunVXRJp4g9w9xT8P5i9jJ7iWbhIsJe9fLw9v-XJx-h9Owmy5t3ufQtNcMCUUvqXtQ3PBGBdA"
+    },
+    {
       "id": "tampered-payload",
       "description": "`jti` was altered after signing; the payload is still valid JSON",
       "expect": "invalid_signature",
