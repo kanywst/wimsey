@@ -45,8 +45,12 @@ silently.
   asked that `typ` convey the `wpt+jwt` media type, and `verify` had refused
   `application/wpt+jwt`. The comparison lives in `wimsey_jose::typ_conveys`,
   shared by both tokens. The `wit` and `wpt` vectors gain a
-  `wrong-typ-media-type` negative (`text/<subtype>`), so the reach of the rule
-  is in the contract and not only in unit tests.
+  `wrong-typ-media-type` negative (`text/<subtype>`). Only the reject side is
+  in the vectors: the `wit` and `wpt` suites have no `accepted` array yet, so
+  that `application/wit+jwt` verifies is pinned by unit tests alone.
+- The `wrong-typ` negatives of the ES256 `wit` and `wpt` vectors named
+  `alg: EdDSA` while being signed with ES256; their headers now name the
+  signing key's algorithm.
 
 ## [0.9.0] - 2026-10-22
 
