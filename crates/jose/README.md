@@ -7,8 +7,10 @@ can sign or verify, and a JWK to carry the public half in. This crate holds them
 once, so the three cannot drift apart and so that adding an algorithm is one
 change rather than three.
 
-Two algorithms are supported. `EdDSA` over Ed25519 is what this workspace
-prefers, and `ES256` is here because Section 5.1 of
+Two signature schemes are supported. Ed25519 is what this workspace prefers,
+under its fully-specified identifier `Ed25519` (RFC 9864); the deprecated
+`EdDSA` is still accepted, and a key remembers which of the two it was
+published under. `ES256` is here because Section 5.1 of
 `draft-ietf-wimse-workload-creds` requires it of general-purpose implementations
 — it is also the practical interop baseline.
 

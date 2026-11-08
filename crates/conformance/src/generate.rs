@@ -1,7 +1,7 @@
 //! Deterministic generation of the conformance vectors.
 //!
 //! Everything here is fixed: the key seeds are constants, the timestamps are
-//! constants, and `EdDSA` is deterministic, so regenerating must reproduce the
+//! constants, and Ed25519 and ES256 sign deterministically, so regenerating must reproduce the
 //! committed files byte for byte. CI relies on that — it regenerates and diffs,
 //! so an unintended encoding change shows up as a failing build rather than as a
 //! silent interop break.
@@ -33,7 +33,7 @@ use crate::vectors::{
 
 /// Builds a signing key of `algorithm` from a fixed seed.
 ///
-/// The same seed under either algorithm, so an `EdDSA` vector and its `ES256`
+/// The same seed under either algorithm, so an `Ed25519` vector and its `ES256`
 /// twin differ only in the algorithm and not in which secret they use.
 ///
 /// # Panics
@@ -535,7 +535,37 @@ pub fn wpt_vector(algorithm: Algorithm) -> WptVector {
     };
     let proof = issue_wpt(&claims, &pop_key).expect("issue WPT");
 
-    let negative = wpt_negatives(&proof, &claims, other_wit, &pop_key);
+    let mut negative = wpt_negatives(&proof, &claims, other_wit, &pop_key);
+    let mut accepted = wpt_accepted(&proof, &pop_key);
+    if algorithm == Algorithm::Ed25519 {
+        // A WIT issued under the deprecated `EdDSA` name binds a proof that
+        // says `EdDSA` too: the WPT's `alg` string-equals `cnf.jwk.alg`.
+        let legacy_pop = pop_key
+            .clone()
+            .with_algorithm(Algorithm::EdDsa)
+            .expect("an Ed25519 key can be named EdDSA");
+        let legacy_wit = issue_wit(&wit_claims(SUBJECT, &legacy_pop), Some(KID), &issuer_key)
+            .expect("issue the EdDSA WIT");
+        let legacy_claims = WptClaims {
+            wth: wit_thumbprint(&legacy_wit),
+            ..claims.clone()
+        };
+        accepted.push(WptAccepted {
+            id: "cnf-and-proof-alg-eddsa".to_owned(),
+            description: "a WIT whose `cnf.jwk.alg` is the deprecated `EdDSA`, with a proof that says `EdDSA` as well".to_owned(),
+            proof: Some(issue_wpt(&legacy_claims, &legacy_pop).expect("issue the EdDSA WPT")),
+            wit: Some(legacy_wit),
+            claims: Some(legacy_claims),
+        });
+        negative.push(WptNegative {
+            proof: Some(issue_wpt(&claims, &legacy_pop).expect("issue the mislabelled WPT")),
+            ..wpt_neg(
+                "proof-alg-not-the-cnf-alg",
+                "signed by the right key, but `alg` is `EdDSA` while the WIT's `cnf.jwk.alg` is `Ed25519`; the two must be string-equal",
+                ErrorCode::AlgorithmMismatch,
+            )
+        });
+    }
 
     WptVector {
         header: header(
@@ -552,7 +582,7 @@ pub fn wpt_vector(algorithm: Algorithm) -> WptVector {
         wit,
         txn_token: Some(txn_token),
         other_tokens,
-        accepted: wpt_accepted(&proof, &pop_key),
+        accepted,
         claims,
         proof,
         negative,
@@ -564,7 +594,7 @@ pub fn wpt_vector(algorithm: Algorithm) -> WptVector {
 /// 7515 Section 4.1.9 makes the `application/` prefix optional; media types
 /// compare case-insensitively.
 fn wit_accepted(token: &str, kid: Option<&str>, issuer_key: &SigningKey) -> Vec<WitAccepted> {
-    vec![
+    let mut accepted = vec![
         WitAccepted {
             id: "typ-with-application-prefix".to_owned(),
             description: "`application/wit+jwt` is the same media type as `wit+jwt`".to_owned(),
@@ -583,7 +613,23 @@ fn wit_accepted(token: &str, kid: Option<&str>, issuer_key: &SigningKey) -> Vec<
                 issuer_key,
             ),
         },
-    ]
+    ];
+    // RFC 9864 deprecates `EdDSA` in favour of `Ed25519` but leaves it
+    // registered, and WITs issued under it are in the field. The issuer's `alg`
+    // has nothing to string-equal, so either name verifies against the anchor.
+    if issuer_key.algorithm() == Algorithm::Ed25519 {
+        let legacy = issuer_key
+            .clone()
+            .with_algorithm(Algorithm::EdDsa)
+            .expect("an Ed25519 key can be named EdDSA");
+        accepted.push(WitAccepted {
+            id: "issuer-alg-eddsa".to_owned(),
+            description: "signed under the deprecated `EdDSA` name, which is the same scheme"
+                .to_owned(),
+            token: resign_with_header(token, &jws_header("wit+jwt", &legacy, kid), &legacy),
+        });
+    }
+    accepted
 }
 
 /// The WPT counterpart of [`wit_accepted`], for `wpt+jwt`.
@@ -1413,7 +1459,7 @@ pub fn manifest() -> Manifest {
             },
             ManifestEntry {
                 suite: "wit".to_owned(),
-                path: "wit/issue-eddsa.json".to_owned(),
+                path: "wit/issue-ed25519.json".to_owned(),
                 spec: WIT_SPEC.to_owned(),
             },
             ManifestEntry {
@@ -1423,7 +1469,7 @@ pub fn manifest() -> Manifest {
             },
             ManifestEntry {
                 suite: "wpt".to_owned(),
-                path: "wpt/proof-eddsa.json".to_owned(),
+                path: "wpt/proof-ed25519.json".to_owned(),
                 spec: WPT_SPEC.to_owned(),
             },
             ManifestEntry {
@@ -1433,7 +1479,7 @@ pub fn manifest() -> Manifest {
             },
             ManifestEntry {
                 suite: "httpsig".to_owned(),
-                path: "httpsig/sign-eddsa.json".to_owned(),
+                path: "httpsig/sign-ed25519.json".to_owned(),
                 spec: HTTPSIG_SPEC.to_owned(),
             },
             ManifestEntry {
@@ -1443,7 +1489,7 @@ pub fn manifest() -> Manifest {
             },
             ManifestEntry {
                 suite: "mtls".to_owned(),
-                path: "mtls/wic-eddsa.json".to_owned(),
+                path: "mtls/wic-ed25519.json".to_owned(),
                 spec: MTLS_SPEC.to_owned(),
             },
             ManifestEntry {
@@ -1700,7 +1746,7 @@ pub fn mtls_vector(algorithm: Algorithm) -> MtlsVector {
     // algorithm rather than for a bad signature: which key type the CA holds is
     // what decides the signature algorithm a certificate may claim.
     let other_algorithm = match algorithm {
-        Algorithm::Es256 => Algorithm::EdDsa,
+        Algorithm::Es256 => Algorithm::Ed25519,
         _ => Algorithm::Es256,
     };
     let cross_ca =

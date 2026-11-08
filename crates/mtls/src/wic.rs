@@ -305,7 +305,10 @@ impl WorkloadCa {
         not_before: u64,
         not_after: u64,
     ) -> Result<Self, MtlsError> {
-        if signing_key.algorithm() != Algorithm::EdDsa {
+        if !signing_key
+            .algorithm()
+            .same_signature_as(Algorithm::Ed25519)
+        {
             return Err(MtlsError::UnsupportedAlgorithm);
         }
         Self::from_signing_key(signing_key, not_before, not_after)
@@ -429,7 +432,7 @@ pub fn verify(wic_der: &[u8], ca_der: &[u8], now: u64) -> Result<WorkloadIdentif
     // from the certificate's own claim is what stops a certificate naming one
     // algorithm and being checked under another.
     let algorithm = match ca.public_key().algorithm.algorithm {
-        ref oid if *oid == OID_SIG_ED25519 => Algorithm::EdDsa,
+        ref oid if *oid == OID_SIG_ED25519 => Algorithm::Ed25519,
         ref oid if *oid == OID_KEY_TYPE_EC_PUBLIC_KEY => Algorithm::Es256,
         _ => return Err(MtlsError::UnsupportedAlgorithm),
     };
@@ -613,11 +616,11 @@ mod tests {
     #[test]
     fn issues_and_verifies_across_both_algorithms() {
         let cas = [
-            ("EdDSA", SigningKey::from_ed25519_seed(&[3u8; 32])),
+            ("Ed25519", SigningKey::from_ed25519_seed(&[3u8; 32])),
             ("ES256", SigningKey::from_p256_scalar(&[4u8; 32]).unwrap()),
         ];
         let workloads = [
-            ("EdDSA", SigningKey::from_ed25519_seed(&[5u8; 32])),
+            ("Ed25519", SigningKey::from_ed25519_seed(&[5u8; 32])),
             ("ES256", SigningKey::from_p256_scalar(&[6u8; 32]).unwrap()),
         ];
         for (ca_alg, ca_key) in &cas {

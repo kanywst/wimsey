@@ -182,8 +182,8 @@ fn description_names_no_other_algorithm(
     declared: Option<&str>,
 ) -> Result<(), String> {
     const ALIASES: [(&str, &str); 4] = [
-        ("EdDSA", "EdDSA"),
-        ("Ed25519", "EdDSA"),
+        ("EdDSA", "Ed25519"),
+        ("Ed25519", "Ed25519"),
         ("ES256", "ES256"),
         ("P-256", "ES256"),
     ];

@@ -5,8 +5,9 @@
 //! holds them once so the three cannot drift apart, and so that adding an
 //! algorithm is one change rather than three.
 //!
-//! Two algorithms are supported. `EdDSA` over Ed25519 is what this workspace
-//! prefers, and `ES256` is there because Section 5.1 of
+//! Two signature schemes are supported. Ed25519 is what this workspace
+//! prefers, under the fully-specified identifier `Ed25519` (RFC 9864), with the
+//! deprecated `EdDSA` still accepted; `ES256` is there because Section 5.1 of
 //! `draft-ietf-wimse-workload-creds` requires it of general-purpose
 //! implementations, which is also the practical interop baseline.
 //!

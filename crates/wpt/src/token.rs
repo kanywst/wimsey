@@ -13,11 +13,13 @@ use crate::error::WptError;
 /// The JOSE `typ` of a Workload Proof Token.
 pub const TYP: &str = "wpt+jwt";
 
-/// The signature algorithm this crate prefers.
+/// The signature algorithm this crate prefers, by its fully-specified RFC 9864
+/// identifier.
 ///
 /// Not the only one: the proof must be produced with whatever the bound WIT's
-/// `cnf` JWK names, which may be `ES256`. The algorithm is taken from the key.
-pub const ALG: &str = "EdDSA";
+/// `cnf` JWK names, which may be `ES256` or the deprecated `EdDSA`. The
+/// algorithm is taken from the key.
+pub const ALG: &str = "Ed25519";
 
 /// The maximum accepted size, in bytes, of a compact WPT serialization.
 pub const MAX_TOKEN_LEN: usize = 8192;
@@ -221,8 +223,9 @@ pub fn verify(
         return Err(WptError::WrongType { found: header.typ });
     }
     // The proof MUST be produced with the algorithm the WIT's `cnf` JWK names,
-    // and `pop_key` came out of that JWK — so requiring the header to match the
-    // key is what enforces the binding.
+    // and the header must string-equal it. `pop_key` came out of that JWK and
+    // keeps the identifier it named, so `EdDSA` and `Ed25519` stay distinct
+    // here: a proof labelled one is refused for a key published as the other.
     let alg = Algorithm::parse(&header.alg).map_err(|e| match e {
         wimsey_jose::JoseError::UnsupportedAlg { found }
         | wimsey_jose::JoseError::ForbiddenAlg { found } => WptError::UnsupportedAlg { found },
@@ -303,7 +306,7 @@ pub fn verify(
 
 #[cfg(test)]
 mod tests {
-    use wimsey_jose::SigningKey;
+    use wimsey_jose::{Algorithm, SigningKey};
 
     use std::collections::BTreeMap;
 
@@ -435,7 +438,7 @@ mod tests {
         use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 
         let key = SigningKey::from_ed25519_seed(&[9u8; 32]);
-        let header = URL_SAFE_NO_PAD.encode(r#"{"typ":"wpt+jwt","alg":"EdDSA","crit":["exp"]}"#);
+        let header = URL_SAFE_NO_PAD.encode(r#"{"typ":"wpt+jwt","alg":"Ed25519","crit":["exp"]}"#);
         let claims = URL_SAFE_NO_PAD.encode(serde_json::to_vec(&sample_claims()).unwrap());
         let signing_input = format!("{header}.{claims}");
         let signature = URL_SAFE_NO_PAD.encode(key.sign(signing_input.as_bytes()));
@@ -453,7 +456,7 @@ mod tests {
 
         let key = SigningKey::from_ed25519_seed(&[9u8; 32]);
         let wpt_with = |typ: &str| {
-            let header = URL_SAFE_NO_PAD.encode(format!(r#"{{"typ":"{typ}","alg":"EdDSA"}}"#));
+            let header = URL_SAFE_NO_PAD.encode(format!(r#"{{"typ":"{typ}","alg":"Ed25519"}}"#));
             let claims = URL_SAFE_NO_PAD.encode(serde_json::to_vec(&sample_claims()).unwrap());
             let signing_input = format!("{header}.{claims}");
             let signature = URL_SAFE_NO_PAD.encode(key.sign(signing_input.as_bytes()));
@@ -478,6 +481,30 @@ mod tests {
                 "`{typ}`: {err:?}"
             );
         }
+    }
+
+    // RFC 9864 deprecates `EdDSA` but leaves it registered, so a WIT whose
+    // `cnf` names it is still valid. The proof must then say `EdDSA` too:
+    // the header string-equals the `cnf` value, it does not merely sign alike.
+    #[test]
+    fn holds_the_proof_to_the_identifier_the_key_was_published_under() {
+        let key = SigningKey::from_ed25519_seed(&[9u8; 32]);
+        let legacy = key.clone().with_algorithm(Algorithm::EdDsa).unwrap();
+        let claims = sample_claims();
+
+        let wpt = issue(&claims, &legacy).unwrap();
+        let verified = verify(&wpt, &legacy.verifying_key(), &valid_at(1_700_000_000)).unwrap();
+        assert_eq!(verified.claims, claims);
+
+        // An `Ed25519` proof for an `EdDSA` key, and the reverse.
+        let err = verify(
+            &issue(&claims, &key).unwrap(),
+            &legacy.verifying_key(),
+            &valid_at(1_700_000_000),
+        );
+        assert!(matches!(err, Err(WptError::AlgorithmMismatch)), "{err:?}");
+        let err = verify(&wpt, &key.verifying_key(), &valid_at(1_700_000_000));
+        assert!(matches!(err, Err(WptError::AlgorithmMismatch)), "{err:?}");
     }
 
     #[test]

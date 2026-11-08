@@ -37,6 +37,9 @@ use wimsey_wpt::{WptClaims, WptError};
 /// which `draft-ietf-wimse-wpt-02` covers with the `tth` and `oth` claims. A v4
 /// reader has nowhere to put them, so it verifies the positive case having
 /// checked neither binding and reports a pass.
+///
+/// v8 gave the wit and wpt vectors an `accepted` array as well. The
+/// `conformance/README.md` versioning notes cover v6 to v8 in full.
 pub const FORMAT: &str = "wimse-conformance/v8";
 
 /// The index of every vector in the suite, written to `manifest.json`.
@@ -107,6 +110,10 @@ pub enum ErrorCode {
     IssuedInFuture,
     /// The token's `iss` did not match the expected issuer.
     IssuerMismatch,
+    /// The JOSE `alg` did not match the key: for a WIT, a scheme the trust
+    /// anchor does not verify; for a WPT, a value that does not string-equal
+    /// the bound WIT's `cnf.jwk.alg`.
+    AlgorithmMismatch,
     /// A key could not be decoded.
     InvalidKey,
     /// The proof's `aud` did not match the expected audience.
@@ -226,6 +233,7 @@ impl From<&WitError> for ErrorCode {
             WitError::Expired => Self::Expired,
             WitError::IssuedInFuture => Self::IssuedInFuture,
             WitError::IssuerMismatch => Self::IssuerMismatch,
+            WitError::AlgorithmMismatch => Self::AlgorithmMismatch,
             WitError::InvalidKey => Self::InvalidKey,
             WitError::MissingConfirmationAlg => Self::MissingConfirmationAlg,
             WitError::ForbiddenConfirmationAlg { .. } => Self::ForbiddenConfirmationAlg,
@@ -284,6 +292,7 @@ impl From<&WptError> for ErrorCode {
             WptError::Base64(_) | WptError::Json(_) => Self::InvalidEncoding,
             WptError::WrongType { .. } => Self::WrongType,
             WptError::UnsupportedAlg { .. } => Self::UnsupportedAlg,
+            WptError::AlgorithmMismatch => Self::AlgorithmMismatch,
             WptError::UnsupportedCritical => Self::UnsupportedCritical,
             WptError::InvalidSignature => Self::InvalidSignature,
             WptError::Expired => Self::Expired,
@@ -332,7 +341,7 @@ pub struct WitVector {
     /// The common header fields.
     #[serde(flatten)]
     pub header: Header,
-    /// The JWS algorithm this vector is for: `EdDSA` or `ES256`.
+    /// The JWS algorithm this vector is for: `Ed25519` or `ES256`.
     ///
     /// It must agree with the algorithm the recorded keys name. A runner is
     /// expected to check that rather than ignore it — a declared algorithm
@@ -399,7 +408,7 @@ pub struct WptVector {
     /// The common header fields.
     #[serde(flatten)]
     pub header: Header,
-    /// The JWS algorithm this vector is for: `EdDSA` or `ES256`.
+    /// The JWS algorithm this vector is for: `Ed25519` or `ES256`.
     ///
     /// It must agree with the algorithm the recorded keys name. A runner is
     /// expected to check that rather than ignore it — a declared algorithm

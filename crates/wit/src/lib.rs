@@ -9,7 +9,7 @@
 //! must carry an `alg` member, which pins the algorithm the proof of possession
 //! has to be produced with.
 //!
-//! Signing uses `EdDSA` (Ed25519) or `ES256` (ECDSA P-256), the latter because
+//! Signing uses `Ed25519` or `ES256` (ECDSA P-256), the latter because
 //! Section 5.1 requires it of general-purpose implementations. Both are
 //! deterministic — ES256 through its RFC 6979 nonce — so a token is
 //! byte-for-byte reproducible for a given key and input. See the conformance

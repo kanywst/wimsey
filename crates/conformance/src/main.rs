@@ -64,8 +64,8 @@ fn write_vectors(out: &Path) -> std::io::Result<()> {
     )?;
     // One vector per suite per algorithm. ES256 is not an afterthought here:
     // `workload-creds` requires it of general-purpose implementations, so an
-    // implementation that only passes the EdDSA half is not done.
-    for algorithm in [Algorithm::EdDsa, Algorithm::Es256] {
+    // implementation that only passes the Ed25519 half is not done.
+    for algorithm in [Algorithm::Ed25519, Algorithm::Es256] {
         let suffix = algorithm.as_str().to_ascii_lowercase();
         write_json(
             &out.join(format!("wit/issue-{suffix}.json")),

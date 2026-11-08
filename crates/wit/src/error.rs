@@ -29,7 +29,7 @@ pub enum WitError {
         found: String,
     },
     /// The JOSE header `alg` was not a supported algorithm.
-    #[error("unsupported algorithm `{found}`, expected `EdDSA`")]
+    #[error("unsupported algorithm `{found}`, expected `Ed25519`, `EdDSA` or `ES256`")]
     UnsupportedAlg {
         /// The `alg` value that was found.
         found: String,
@@ -64,8 +64,10 @@ pub enum WitError {
         found: String,
     },
     /// The `cnf` JWK named a legal algorithm this crate cannot verify a proof
-    /// with. This crate supports `EdDSA` only.
-    #[error("unsupported confirmation key algorithm `{found}`, expected `EdDSA`")]
+    /// with: anything but `Ed25519`, `EdDSA` and `ES256`.
+    #[error(
+        "unsupported confirmation key algorithm `{found}`, expected `Ed25519`, `EdDSA` or `ES256`"
+    )]
     UnsupportedConfirmationAlg {
         /// The `alg` value that was found.
         found: String,

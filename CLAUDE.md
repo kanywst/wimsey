@@ -41,8 +41,9 @@ These are the things that break silently or fail CI in non-obvious ways.
   cargo run -q -p wimsey-conformance -- generate --out conformance     # regenerate
   ```
 
-- **Determinism is a design constraint, not an accident.** All signing is EdDSA/Ed25519
-  (RFC 8037), which is deterministic, so tokens and signatures are byte-for-byte reproducible.
+- **Determinism is a design constraint, not an accident.** All signing is Ed25519
+  (RFC 8037; JOSE `alg` `Ed25519` per RFC 9864, with the deprecated `EdDSA` still accepted) or
+  ES256 with RFC 6979 nonces, both deterministic, so tokens and signatures are byte-for-byte reproducible.
   Do not introduce non-deterministic crypto or randomize what a vector captures. Time is
   **injected** (a `Validation`/verify config carries `now`) so time-dependent tests are
   reproducible — never call a wall clock inside verification logic.

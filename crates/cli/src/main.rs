@@ -1,7 +1,7 @@
 //! `wimsey` — a command-line tool for WIMSE workload credentials.
 //!
 //! Issues, verifies and inspects Workload Identity Tokens, Workload Proof
-//! Tokens and Workload Identity Certificates, with `EdDSA` (Ed25519) or `ES256`
+//! Tokens and Workload Identity Certificates, with `Ed25519` or `ES256`
 //! (P-256) keys stored as JSON Web Keys.
 
 mod httpsig;
@@ -68,8 +68,10 @@ enum Command {
 enum KeyCmd {
     /// Generate a new private key as a JWK.
     Generate {
-        /// The signature algorithm: `EdDSA` (Ed25519) or `ES256` (P-256).
-        #[arg(long, default_value = "EdDSA")]
+        /// The signature algorithm: `Ed25519`, `ES256` (P-256), or `EdDSA`,
+        /// the deprecated name for Ed25519 (RFC 9864), for a key that has to
+        /// match WITs issued under it.
+        #[arg(long, default_value = "Ed25519")]
         alg: String,
         /// Optional 32-byte seed (Base64url) for a reproducible key. For testing
         /// only: a seed on the command line is visible to other processes.
@@ -230,7 +232,9 @@ fn run_key(cmd: KeyCmd) -> Result<()> {
                 seed
             };
             let signing_key = match algorithm {
-                wimsey_jose::Algorithm::EdDsa => SigningKey::from_ed25519_seed(&secret),
+                wimsey_jose::Algorithm::Ed25519 | wimsey_jose::Algorithm::EdDsa => {
+                    SigningKey::from_ed25519_seed(&secret).with_algorithm(algorithm)?
+                }
                 // Not every 32-byte string is a valid P-256 scalar, so a random
                 // one can be refused; a caller-supplied seed can be wrong too.
                 wimsey_jose::Algorithm::Es256 => SigningKey::from_p256_scalar(&secret)

@@ -10,12 +10,14 @@ use crate::error::WitError;
 /// The JOSE `typ` of a Workload Identity Token.
 pub const TYP: &str = "wit+jwt";
 
-/// The signature algorithm this crate prefers.
+/// The signature algorithm this crate prefers, by its fully-specified RFC 9864
+/// identifier.
 ///
 /// Not the only one: a WIT may be signed with `ES256`, which Section 5.1 of the
-/// draft requires general-purpose implementations to support. The algorithm is
-/// taken from the key rather than fixed here.
-pub const ALG: &str = "EdDSA";
+/// draft requires general-purpose implementations to support, and the
+/// deprecated `EdDSA` is still accepted. The algorithm is taken from the key
+/// rather than fixed here.
+pub const ALG: &str = "Ed25519";
 
 /// The maximum accepted size, in bytes, of a compact WIT serialization.
 ///
@@ -157,7 +159,10 @@ pub fn verify(
         | wimsey_jose::JoseError::ForbiddenAlg { found } => WitError::UnsupportedAlg { found },
         other => WitError::from(other),
     })?;
-    if alg != verifying_key.algorithm() {
+    // The issuer's `alg` has no string to agree with, unlike a WPT's: what
+    // matters is that the trust anchor verifies that scheme. So a token signed
+    // under `EdDSA` verifies against an `Ed25519` anchor and vice versa.
+    if !alg.same_signature_as(verifying_key.algorithm()) {
         return Err(WitError::AlgorithmMismatch);
     }
     // This crate understands no critical extensions, so any `crit` is fatal.
@@ -207,8 +212,9 @@ pub fn verify(
 
 #[cfg(test)]
 mod tests {
+    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
     use wimsey_identifier::WorkloadIdentifier;
-    use wimsey_jose::{Jwk, SigningKey};
+    use wimsey_jose::{Algorithm, Jwk, SigningKey};
 
     use super::{issue, verify, Validation};
     use crate::claims::{Confirmation, WitClaims};
@@ -407,6 +413,28 @@ mod tests {
         assert!(matches!(err, Err(WitError::Expired)));
     }
 
+    // The issuer's `alg` is compared by signature scheme: a WIT signed under
+    // the deprecated `EdDSA` verifies against an `Ed25519` trust anchor, and
+    // the reverse, while an ES256 anchor still refuses both.
+    #[test]
+    fn verifies_the_issuer_signature_under_either_ed25519_identifier() {
+        let key = SigningKey::from_ed25519_seed(&[1u8; 32]);
+        let legacy = key.clone().with_algorithm(Algorithm::EdDsa).unwrap();
+        let token = issue(&sample_claims(), None, &legacy).unwrap();
+        assert!(token.starts_with(&URL_SAFE_NO_PAD.encode(r#"{"typ":"wit+jwt","alg":"EdDSA"}"#)));
+
+        let at = Validation::at(1_700_000_000);
+        assert!(verify(&token, &key.verifying_key(), &at).is_ok());
+        let modern = issue(&sample_claims(), None, &key).unwrap();
+        assert!(verify(&modern, &legacy.verifying_key(), &at).is_ok());
+
+        let p256 = SigningKey::from_p256_scalar(&[1u8; 32]).unwrap();
+        assert!(matches!(
+            verify(&token, &p256.verifying_key(), &at),
+            Err(WitError::AlgorithmMismatch)
+        ));
+    }
+
     #[test]
     fn exposes_the_validated_pop_key() {
         let key = SigningKey::from_ed25519_seed(&[1u8; 32]);
@@ -423,7 +451,7 @@ mod tests {
         let key = SigningKey::from_ed25519_seed(&[1u8; 32]);
         let mut claims = sample_claims();
         claims.cnf.jwk = Jwk {
-            alg: Some("EdDSA".to_owned()),
+            alg: Some("Ed25519".to_owned()),
             kty: "OKP".to_owned(),
             crv: "Ed25519".to_owned(),
             x: "not-a-valid-key".to_owned(),
@@ -515,7 +543,7 @@ mod tests {
 
         let key = SigningKey::from_ed25519_seed(&[1u8; 32]);
         // A well-signed token whose header marks an extension critical.
-        let header = URL_SAFE_NO_PAD.encode(r#"{"typ":"wit+jwt","alg":"EdDSA","crit":["exp"]}"#);
+        let header = URL_SAFE_NO_PAD.encode(r#"{"typ":"wit+jwt","alg":"Ed25519","crit":["exp"]}"#);
         let claims = URL_SAFE_NO_PAD.encode(serde_json::to_vec(&sample_claims()).unwrap());
         let signing_input = format!("{header}.{claims}");
         let signature = URL_SAFE_NO_PAD.encode(key.sign(signing_input.as_bytes()));
@@ -547,7 +575,7 @@ mod tests {
             "WIT+JWT",
             "Application/Wit+Jwt",
         ] {
-            let token = token_with_header(&key, &format!(r#"{{"typ":"{typ}","alg":"EdDSA"}}"#));
+            let token = token_with_header(&key, &format!(r#"{{"typ":"{typ}","alg":"Ed25519"}}"#));
             let verified = verify(&token, &key.verifying_key(), &Validation::at(1_700_000_000));
             assert!(verified.is_ok(), "`{typ}` conveys wit+jwt: {verified:?}");
         }
@@ -557,7 +585,7 @@ mod tests {
     fn rejects_a_typ_that_is_not_the_wit_media_type() {
         let key = SigningKey::from_ed25519_seed(&[1u8; 32]);
         for typ in ["jwt", "wpt+jwt", "text/wit+jwt", "application/jwt"] {
-            let token = token_with_header(&key, &format!(r#"{{"typ":"{typ}","alg":"EdDSA"}}"#));
+            let token = token_with_header(&key, &format!(r#"{{"typ":"{typ}","alg":"Ed25519"}}"#));
             let err = verify(&token, &key.verifying_key(), &Validation::at(1_700_000_000));
             assert!(
                 matches!(err, Err(WitError::WrongType { .. })),

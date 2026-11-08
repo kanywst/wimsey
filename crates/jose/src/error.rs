@@ -54,7 +54,7 @@ pub enum JoseError {
         found: String,
     },
     /// The algorithm is legal but this crate cannot produce or verify it.
-    #[error("unsupported algorithm `{found}`, expected `EdDSA` or `ES256`")]
+    #[error("unsupported algorithm `{found}`, expected `Ed25519`, `EdDSA` or `ES256`")]
     UnsupportedAlg {
         /// The `alg` value that was found.
         found: String,

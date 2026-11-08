@@ -38,9 +38,8 @@ silently.
   to be exactly `wit+jwt`, while the step asks that `typ` convey the
   `wit+jwt` media type. It now also accepts `application/wit+jwt`, compared
   case-insensitively, as RFC 7515 Section 4.1.9 requires. Trust-anchor
-  selection stays with the caller, and two new caller-side items (`jti` when a
-  deployment revokes, the fully-specified `Ed25519` algorithm identifier) are
-  recorded in `SPEC-MAP.md`. The rest of -03 is architecture prose,
+  selection stays with the caller, and `jti` when a deployment revokes is
+  recorded in `SPEC-MAP.md` as caller-side. The rest of -03 is architecture prose,
   security considerations and editorial.
 - **`wimsey-mtls` targets `draft-ietf-wimse-mutual-tls-03`** (submitted
   2026-10-23). No code change. The changelog of -03 calls it editorial, but the
@@ -53,6 +52,29 @@ silently.
   crate's, exactly one URI SAN, was already enforced.
 - The `draft-ietf-wimse-workload-identity-practices` pin moves to -08,
   which is deployment guidance with no bearing on the code.
+- **Ed25519 is emitted as `Ed25519`, not `EdDSA`** (RFC 9864), as the
+  `workload-creds` -03 and `http-signature` -08 examples and the `wpt`
+  editors' copy do. Breaking for every crate that signs or names an
+  algorithm:
+  - `wimsey_jose::Algorithm` gains `Ed25519`, the default for Ed25519 keys;
+    `EdDsa` stays, for keys and tokens issued under the deprecated name, so a
+    WIT whose `cnf.jwk.alg` is `Ed25519`, previously refused as
+    `unsupported_confirmation_alg`, now verifies, and one that says `EdDSA`
+    still does.
+  - `SigningKey` and `VerifyingKey` become structs that carry the identifier
+    they were published under (`with_algorithm` relabels between the two
+    Ed25519 names). A key from a JWK keeps its `alg`, which is what keeps the
+    WPT rule intact: the proof's `alg` must string-equal `cnf.jwk.alg`, so an
+    `EdDSA` proof for an `Ed25519` key is refused.
+  - Where only the scheme matters the two names are one: a WIT's issuer
+    signature, `VerifyConfig::accepted_algorithms` in `wimsey-httpsig`, and a
+    WIC (`Algorithm::same_signature_as`).
+  - `wit::ALG`, `wpt::ALG`, `Jwk::from_verifying_key` and the CLI's
+    `key generate --alg` default all say `Ed25519`.
+  - Conformance: the `-eddsa` files are renamed `-ed25519` and their bytes
+    change. The Ed25519 `wit` and `wpt` files gain accepted cases under the
+    deprecated `EdDSA` and a `proof-alg-not-the-cnf-alg` negative with the
+    new `algorithm_mismatch` code.
 
 ### Fixed
 

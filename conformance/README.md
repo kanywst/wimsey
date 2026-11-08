@@ -11,7 +11,7 @@ The third question is the one that matters most and the one a byte-diff of regen
 
 The fourth is its mirror: the first three can all be passed by refusing more than the spec asks. Over-strictness reads as diligence and surfaces only against someone else's signer.
 
-Signing is EdDSA over Ed25519 (RFC 8037) or ES256 (ECDSA P-256), and both are deterministic — ES256 through its RFC 6979 nonce — so the recorded bytes are reproducible. Time is an input (`verify_now`), never a wall clock.
+Signing is Ed25519 (RFC 8037, named `Ed25519` per RFC 9864) or ES256 (ECDSA P-256), and both are deterministic — ES256 through its RFC 6979 nonce — so the recorded bytes are reproducible. Time is an input (`verify_now`), never a wall clock.
 
 ## Layout
 
@@ -19,20 +19,20 @@ Signing is EdDSA over Ed25519 (RFC 8037) or ES256 (ECDSA P-256), and both are de
 conformance/
   manifest.json                    index of every vector
   identifier/parse-basic.json      draft-ietf-wimse-identifier-04
-  wit/issue-eddsa.json             draft-ietf-wimse-workload-creds-03
+  wit/issue-ed25519.json           draft-ietf-wimse-workload-creds-03
   wit/issue-es256.json             draft-ietf-wimse-workload-creds-03
-  wpt/proof-eddsa.json             draft-ietf-wimse-wpt-02
+  wpt/proof-ed25519.json           draft-ietf-wimse-wpt-02
   wpt/proof-es256.json             draft-ietf-wimse-wpt-02
-  httpsig/sign-eddsa.json          draft-ietf-wimse-http-signature-08
+  httpsig/sign-ed25519.json        draft-ietf-wimse-http-signature-08
   httpsig/sign-es256.json          draft-ietf-wimse-http-signature-08
-  mtls/wic-eddsa.json              draft-ietf-wimse-mutual-tls-03
+  mtls/wic-ed25519.json            draft-ietf-wimse-mutual-tls-03
   mtls/wic-es256.json              draft-ietf-wimse-mutual-tls-03
 ```
 
 Every suite has one vector per signature algorithm. `ES256` is not extra credit:
 Section 5.1 of `draft-ietf-wimse-workload-creds` requires it of general-purpose
 implementations, and the draft's own example WIT is signed with it, so passing
-only the `eddsa` half is not passing.
+only the `ed25519` half is not passing.
 
 Start at `manifest.json`. Do not glob the directories — the manifest is the list, and a runner that globs will silently skip a vector whose suite it does not recognise.
 
@@ -56,7 +56,7 @@ Every file, including the manifest, carries a `format` field:
 
 **v7 follows `draft-ietf-wimse-http-signature-08`.** A `CONNECT` covers `@method` and `@authority` in place of `@path` and `@query`, so an `accepted` case may now carry its own `required_components`; and a recipient may answer to several audiences, compared as exact strings, so it may carry `accept_audiences`. A v6 reader would ignore both and verify `connect-covers-authority` against the default component set, failing it for a reason the case is not about, and would run `audience-among-several` against the vector's single audience, passing it without exercising the list.
 
-**v8 gave the `wit` and `wpt` vectors an `accepted` array**, as v3 did for httpsig. Each entry is an input that differs from the positive case and MUST still verify to the recorded claims: today, a token re-signed with `typ` spelled `application/wit+jwt` or in another case, which convey the same media type. The rejections alone could not catch a verifier that compares `typ` as an exact string. A v7 reader skips the new cases and reports a pass having run fewer checks than the file asks for, which is why this is a version bump.
+**v8 gave the `wit` and `wpt` vectors an `accepted` array**, as v3 did for httpsig. Each entry is an input that differs from the positive case and MUST still verify to the recorded claims: today, a token re-signed with `typ` spelled `application/wit+jwt` or in another case, which convey the same media type. The Ed25519 files also carry the deprecated `EdDSA` identifier (RFC 9864) on the accepted side: a WIT signed under it, and a WIT and proof that both name it. The rejections alone could not catch a verifier that compares `typ` as an exact string, or one that dropped `EdDSA` outright. A v7 reader skips the new cases and reports a pass having run fewer checks than the file asks for, which is why this is a version bump.
 
 Reject a file whose `format` you do not recognise rather than guessing at its shape. The version changes when the format changes, not when a vector is added.
 
@@ -100,6 +100,7 @@ Every vector has a `negative` array. Each entry records **only the fields it ove
 | `expired` | The token or signature has expired |
 | `issued_in_future` | `iat` is ahead of the verifier's clock |
 | `issuer_mismatch` | `iss` did not match the expected issuer |
+| `algorithm_mismatch` | The JOSE `alg` did not fit the key: for a WIT, a scheme the trust anchor does not verify; for a WPT, a value that is not string-equal to the bound WIT's `cnf.jwk.alg` |
 | `invalid_key` | A key could not be decoded |
 | `audience_mismatch` | `aud` did not match the expected audience |
 | `wit_binding_mismatch` | `wth` did not match the hash of the presented WIT |
@@ -173,6 +174,8 @@ Note `wimse://example.org/a%2Fb` in `accept`: `%2F` encodes a **reserved** chara
 - Verify the full chain: verify `wit` against `issuer_verifying_key`, take the proof-of-possession key from its `cnf`, then verify `proof` against that key with `audience` and `wit`. Recovering the key from the WIT rather than from the vector is the point — it is what catches a break in the WIT-to-WPT binding.
 - Run every negative case against the proof-of-possession key.
 - Run every `accepted` case through the full chain, as for the positive case: `proof` and `wit` replace the recorded ones when present, the key comes from that WIT's `cnf`, and verification MUST succeed and recover `claims` (or the case's own `claims`, when it carries them).
+
+`Ed25519` and `EdDSA` are one signature scheme under two names, but they are not interchangeable everywhere. A WIT's issuer `alg` has nothing to agree with, so `issuer-alg-eddsa` verifies against the `Ed25519` anchor. A WPT's `alg` must string-equal the WIT's `cnf.jwk.alg`, so `cnf-and-proof-alg-eddsa` verifies while `proof-alg-not-the-cnf-alg`, an `EdDSA` proof for an `Ed25519` key, is rejected as `algorithm_mismatch`.
 
 Note `wit-binding-mismatch`: the substituted WIT is itself perfectly valid and signed by the same issuer for the same key. Only `wth` distinguishes them. An implementation that checks the signature but not the binding will pass everything else and fail here.
 
