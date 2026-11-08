@@ -29,10 +29,10 @@ first entry of its Document History section.
 | `identifier` | -04 | -04 | — |
 | `workload-creds` | -03 | -03 | — |
 | `wpt` | -02 | -03 | Moves the key-management section to `workload-creds`; no normative change for `wimsey-wpt`. Also switches the examples to `Ed25519` (RFC 9864), which `wimsey-wpt` already emits, and spells out the `alg` checks. `verify` already requires it to string-equal `cnf.jwk.alg` and refuses `none` and symmetric algorithms; restricting it further by local policy would be the caller's, since `wimsey-wpt` has no per-trust-domain algorithm list. |
-| `http-signature` | -08 | -08 | — |
+| `http-signature` | -08 | -09 | Lets a client sign with a server-generated `nonce` from `Accept-Signature` (s2s#369). No change for `wimsey-httpsig`: `sign` already takes the nonce from the caller. |
 | `mutual-tls` | -03 | -03 | — |
 
-Checked 2026-09-29 (`http-signature` 2026-10-22; `identifier`, `workload-creds`, `mutual-tls` and `wpt` 2026-11-08), and re-checked by
+Checked 2026-09-29 (`identifier`, `workload-creds`, `wpt`, `http-signature` and `mutual-tls` 2026-11-08), and re-checked by
 `scripts/check-draft-revisions.sh`.
 
 The editors'-copy column is a forecast, not a diff. It described
