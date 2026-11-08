@@ -226,6 +226,13 @@
       "signature": "wimse=:tAIEmOGlMm4okYCqbOCY+U6joPkowvPVTVi4ePUfQ9/nfYueiVHEV9vGJFDa02a9gOZbFmi1LdoG3VEQ+mlkBg==:"
     },
     {
+      "id": "signed-by-another-key",
+      "description": "validly signed, but by a key other than the one in the WIT's `cnf`",
+      "expect": "invalid_signature",
+      "signature_input": "wimse=(\"@method\" \"@path\" \"@query\" \"content-type\" \"content-digest\" \"workload-identity-token\");created=1700000000;expires=1700000300;nonce=\"abcd1111\";tag=\"wimse-workload-to-workload\";wimse-aud=\"https://service.example/transfer\";wimse-sign-response",
+      "signature": "wimse=:XnbSdHbGO/qaaktKGUtl6dPdrZYHSyy7orgwg8987za3QBpWBq9RCMVTDcilrTwzcx39WVHZH38JLo8NcrZLAw==:"
+    },
+    {
       "id": "created-in-future",
       "description": "the signature's `created` is ahead of the verifier's clock",
       "expect": "created_in_future",

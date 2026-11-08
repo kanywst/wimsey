@@ -10,6 +10,12 @@ silently.
 
 ## [Unreleased]
 
+### Added
+
+- Conformance: a `signed-by-another-key` negative in the `wpt` and `httpsig`
+  vectors, a proof validly signed by a key other than the WIT's `cnf`
+  (`invalid_signature`). Suggested in #89.
+
 ### Changed
 
 - **`wimsey-identifier` targets `draft-ietf-wimse-identifier-04`** (published
