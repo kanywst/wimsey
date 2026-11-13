@@ -27,8 +27,8 @@ reviewed, since a stale status misleads more than a missing one.
 - JWK handling; conformance vectors from the draft's non-normative examples.
 - **Gate:** round-trip plus draft example vectors pass; negative tests (bad
   `typ`, missing `cnf`) fail closed.
-- **Status: met.** `EdDSA` and `ES256`. The WIC landed in `wimsey-mtls` rather
-  than here.
+- **Status: met.** `Ed25519` (RFC 9864; the deprecated `EdDSA` is still
+  accepted) and `ES256`. The WIC landed in `wimsey-mtls` rather than here.
 
 ## Phase 2 — WPT core (`wimsey-wpt`)
 
