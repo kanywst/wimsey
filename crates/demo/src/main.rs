@@ -200,6 +200,11 @@ fn proof_token_instead(issuer_key: &SigningKey, pop_key: &SigningKey, wit: &str)
     };
     let proof = wimsey_wpt::issue(&claims, pop_key)?;
 
+    // On the wire the proof is the request's one `Authorization` field, under
+    // the draft's own `WPT` authentication scheme.
+    let authorization = wimsey_wpt::scheme::to_credentials(&proof);
+    println!("   Authorization: WPT {}...", &proof[..24]);
+
     // Service B recovers the key from the WIT it just verified, never from the
     // proof itself — that is what binds the two together.
     let verified_wit = wimsey_wit::verify(
@@ -207,8 +212,9 @@ fn proof_token_instead(issuer_key: &SigningKey, pop_key: &SigningKey, wit: &str)
         &issuer_key.verifying_key(),
         &wimsey_wit::Validation::at(LATER),
     )?;
+    let received = wimsey_wpt::scheme::from_request([authorization.as_str()])?;
     let validation = wimsey_wpt::Validation::new(LATER, SERVICE_B_AUDIENCE, wit);
-    let verified = wimsey_wpt::verify(&proof, &verified_wit.pop_key, &validation)?;
+    let verified = wimsey_wpt::verify(received, &verified_wit.pop_key, &validation)?;
 
     println!(
         "   wth          {} (SHA-256 of the WIT)",
@@ -232,6 +238,15 @@ fn proof_token_instead(issuer_key: &SigningKey, pop_key: &SigningKey, wit: &str)
     let error = wimsey_wpt::verify(&proof, &verified_wit.pop_key, &replayed)
         .expect_err("a proof bound to one WIT must not verify against another");
     println!("   replayed against a different WIT: {error}");
+
+    // A bearer token where the proof belongs is a rejection, not a fallback:
+    // service B answers 401 with the draft's challenge.
+    let error = wimsey_wpt::scheme::from_request(["Bearer not-a-proof"])
+        .expect_err("a bearer token must not stand in for the proof");
+    println!(
+        "   bearer token instead of a proof: {error} -> 401, WWW-Authenticate: {}",
+        wimsey_wpt::scheme::CHALLENGE
+    );
     Ok(())
 }
 

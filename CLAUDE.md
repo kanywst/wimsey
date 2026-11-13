@@ -57,7 +57,8 @@ These are the things that break silently or fail CI in non-obvious ways.
   sequences use **standard** base64. Don't unify these.
 
 - **Every parser is fuzzed.** `fuzz/` carries a target per untrusted-input
-  surface — the identifier, WIT, WPT, `Signature-Input` and DER X.509 — and CI
+  surface — the identifier, JWK, WIT, WPT, the `WPT` `Authorization` credentials,
+  `Signature-Input` and DER X.509 — and CI
   runs each for 30 seconds against a corpus seeded from the conformance vectors
   (`fuzz/seed-corpus.sh`). Adding a parser without a target leaves a hole; the
   targets need nightly, which is why `fuzz/` is excluded from the workspace.

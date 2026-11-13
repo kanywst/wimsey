@@ -38,6 +38,8 @@ jq -r '[.proof] + [.negative[].proof // empty] + [.accepted[]?.proof // empty] |
   "$vectors"/wpt/proof-*.json |
   while IFS= read -r proof; do
     printf '%s' "$proof" | write wpt_verify "wpt-$(printf '%s' "$proof" | shasum | cut -c1-8)"
+    # The same proofs as they travel: `Authorization: WPT <proof>`.
+    printf 'WPT %s' "$proof" | write wpt_scheme "auth-$(printf '%s' "$proof" | shasum | cut -c1-8)"
   done
 
 jq -r '[.signature_input] + [.negative[].signature_input // empty]

@@ -66,4 +66,22 @@ pub enum WptError {
     /// The proof's lifetime (`exp - now`) exceeds the configured maximum.
     #[error("proof lifetime exceeds the configured maximum")]
     LifetimeTooLong,
+    /// The `Authorization` credentials use an authentication scheme other than
+    /// `WPT`, such as `Bearer`.
+    #[error("unexpected authentication scheme `{found}`, expected `WPT`")]
+    WrongScheme {
+        /// The scheme name that was found.
+        found: String,
+    },
+    /// The `Authorization` credentials use the `WPT` scheme but what follows
+    /// is not a single `token68`.
+    #[error("malformed WPT credentials, expected `WPT 1*SP token68`")]
+    MalformedCredentials,
+    /// The request carries no `Authorization` field.
+    #[error("no WPT credentials in the request")]
+    MissingCredentials,
+    /// The request carries more than one `Authorization` field, where RFC 9110
+    /// allows one set of credentials.
+    #[error("more than one Authorization field in the request")]
+    MultipleAuthorizationFields,
 }

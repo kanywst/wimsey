@@ -37,8 +37,10 @@ reviewed, since a stale status misleads more than a missing one.
 - Bind a WPT to a WIT and verify possession.
 - **Gate:** PoP verification passes; replay and expiry negative tests fail
   closed.
-- **Status: met**, at `draft-ietf-wimse-wpt-02` (`tth`/`oth` binding). The `WPT`
-  HTTP authentication scheme itself is the caller's; see `SPEC-MAP.md`.
+- **Status: met**, at `draft-ietf-wimse-wpt-02` (`tth`/`oth` binding, and the
+  `WPT` HTTP authentication scheme: `Authorization` credentials in and out, and
+  the `WWW-Authenticate` challenge). Sending the `401` is the HTTP stack's; see
+  `SPEC-MAP.md`.
 
 ## Phase 3 — Transport bindings
 
