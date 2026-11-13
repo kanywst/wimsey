@@ -67,7 +67,8 @@ pub enum WptError {
     #[error("proof lifetime exceeds the configured maximum")]
     LifetimeTooLong,
     /// The `Authorization` credentials use an authentication scheme other than
-    /// `WPT`, such as `Bearer`.
+    /// `WPT`, such as `Bearer`. Only reported when the scheme looks like one;
+    /// see [`scheme::from_credentials`](crate::scheme::from_credentials).
     #[error("unexpected authentication scheme `{found}`, expected `WPT`")]
     WrongScheme {
         /// The scheme name that was found.

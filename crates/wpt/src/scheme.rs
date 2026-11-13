@@ -20,7 +20,7 @@
 
 use crate::error::WptError;
 
-/// The authentication scheme name the draft registers (§6.3).
+/// The authentication scheme name the draft registers (§4.3).
 ///
 /// Compared case-insensitively when parsing, since RFC 9110 §11.1 makes every
 /// scheme name so; emitted in this spelling.
@@ -32,6 +32,11 @@ pub const SCHEME: &str = "WPT";
 /// The draft defines no authentication parameters for the challenge, so it is
 /// the bare scheme name.
 pub const CHALLENGE: &str = "WPT";
+
+/// The longest `auth-scheme` [`from_credentials`] will name in a
+/// [`WptError::WrongScheme`]; anything longer is reported as malformed
+/// without being echoed. Every registered scheme is far shorter.
+const MAX_SCHEME_LEN: usize = 32;
 
 /// Formats a proof as the `Authorization` field value that carries it:
 /// `WPT <proof>`.
@@ -57,11 +62,16 @@ pub fn to_credentials(proof: &str) -> String {
 /// - [`WptError::WrongScheme`] when the credentials use another scheme, such
 ///   as `Bearer`. The draft gives the WPT sole occupancy of the field (§2.2),
 ///   so a bearer token where the proof should be is a rejection, not a
-///   fallback.
-/// - [`WptError::MalformedCredentials`] when the field is empty, or when the
-///   scheme is `WPT` but what follows is not `1*SP` and a single `token68`:
-///   nothing at all, an `auth-param` list, a tab instead of a space, or a
-///   character outside the `token68` alphabet.
+///   fallback. The scheme is named in the error only when it looks like one:
+///   at most 32 bytes and followed by a space. A proof sent without its
+///   scheme, or glued to it, is all `tchar` and would otherwise be copied
+///   into the error's `Display`, which §3.1.5 asks implementations never to
+///   log.
+/// - [`WptError::MalformedCredentials`] when the field is empty, when the
+///   scheme is `WPT` but what follows is not `1*SP` and a single `token68`
+///   (nothing at all, an `auth-param` list, a tab instead of a space, or a
+///   character outside the `token68` alphabet), or when the scheme is neither
+///   `WPT` nor shaped like a scheme name.
 ///
 /// The returned proof has been checked against the `token68` grammar only.
 /// Hand it to [`verify`](crate::verify), which checks it is a WPT.
@@ -73,6 +83,14 @@ pub fn from_credentials(field_value: &str) -> Result<&str, WptError> {
         return Err(WptError::MalformedCredentials);
     }
     if !scheme.eq_ignore_ascii_case(SCHEME) {
+        // Name the scheme only when it is shaped like one: short, and followed
+        // by the SP that separates it from its credentials. A compact JWS is
+        // all `tchar`, so a proof sent without its scheme, or glued to it,
+        // would otherwise be copied whole into the error's `Display` (§3.1.5:
+        // never log a raw WPT).
+        if scheme.len() > MAX_SCHEME_LEN || !rest.starts_with(' ') {
+            return Err(WptError::MalformedCredentials);
+        }
         return Err(WptError::WrongScheme {
             found: scheme.to_owned(),
         });
@@ -90,7 +108,9 @@ pub fn from_credentials(field_value: &str) -> Result<&str, WptError> {
 ///
 /// Draft §2 requires that there is exactly one `Authorization` field in the
 /// request and that it uses the `WPT` scheme, so `fields` must yield every
-/// `Authorization` field value the request carries, in any order.
+/// `Authorization` field value the request carries, in any order. A field
+/// whose value is not valid UTF-8 must still be yielded (as `""`, say), not
+/// skipped: dropping it would let a second field slip past the count.
 ///
 /// # Errors
 ///
@@ -222,6 +242,20 @@ mod tests {
     }
 
     #[test]
+    fn does_not_echo_a_proof_sent_without_its_scheme() {
+        let (proof, _) = sample_proof();
+        let long_scheme = format!("{} a.b.c", "A".repeat(33));
+        for field in [proof.clone(), format!("WPT{proof}"), long_scheme] {
+            let err = from_credentials(&field).unwrap_err();
+            assert!(matches!(err, WptError::MalformedCredentials), "{err}");
+            assert!(!err.to_string().contains(&proof[..40]), "{err}");
+        }
+        // Right at the limit a scheme is still named.
+        let err = from_credentials(&format!("{} a.b.c", "A".repeat(32))).unwrap_err();
+        assert!(matches!(err, WptError::WrongScheme { ref found } if found.len() == 32));
+    }
+
+    #[test]
     fn refuses_the_scheme_without_credentials() {
         for field in ["WPT", "WPT ", "WPT   ", "", "  "] {
             let err = from_credentials(field).unwrap_err();
@@ -236,6 +270,11 @@ mod tests {
     fn refuses_credentials_that_are_not_a_token68() {
         for field in [
             "WPT\ta.b.c",          // HTAB is not SP
+            "WPT\t a.b.c",         // nor is it a prefix of `1*SP`
+            "WPT/a.b.c",           // `/` ends the scheme without a SP
+            "\u{e9}WPT a.b.c",     // no scheme at all
+            "W\u{e9} a.b.c",       // the scheme ends where ASCII does, with no SP
+            "Bearer",              // a scheme with no credentials and no SP
             "WPT a.b.c extra",     // two tokens
             "WPT a.b.c,WPT d.e.f", // a list where a single credentials belongs
             "WPT realm=\"x\"",     // auth-param instead of token68
@@ -264,6 +303,10 @@ mod tests {
         // to a proof does not get as far as the scheme check.
         let err = from_request(["WPT a.b.c", "Bearer t"]).unwrap_err();
         assert!(matches!(err, WptError::MultipleAuthorizationFields));
+
+        // One field that is not a WPT propagates its own error.
+        let err = from_request(["Bearer t"]).unwrap_err();
+        assert!(matches!(err, WptError::WrongScheme { ref found } if found == "Bearer"));
 
         assert_eq!(from_request(["wpt a.b.c"]).unwrap(), "a.b.c");
     }
