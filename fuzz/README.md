@@ -11,6 +11,7 @@ These targets exist to keep that surface honest. They run under [cargo-fuzz](htt
 | `identifier_parse` | `WorkloadIdentifier::parse`, then every accessor, since they slice the stored string by offsets the parser computed |
 | `wit_verify` | A compact JWS as a WIT: base64url segments, a JOSE header, a claim set |
 | `wpt_verify` | A proof, plus the WIT string it is bound to, plus the audience |
+| `wpt_scheme` | An `Authorization` field value as `WPT` credentials, and a request's worth of such fields |
 | `httpsig_verify` | `Signature-Input` and `Signature`, plus a header name and value that reach the signature base |
 | `wic_parse` | DER X.509, both as a presented certificate and as the trust anchor it is checked against |
 

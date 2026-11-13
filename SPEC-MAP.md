@@ -61,7 +61,7 @@ the pinned drafts.
 | Replay cache for `nonce` | `http-signature` §3 | Left to the caller: `verify` checks that a `nonce` is present but does not remember the ones it has seen. |
 | Generating the `nonce` from a CSPRNG with at least 64 bits of entropy | `http-signature` §3 | Left to the caller: `sign` takes the nonce as a parameter so signing stays deterministic. The `wimsey httpsig sign` subcommand draws 128 bits from the OS when `--nonce` is omitted. |
 | Answering a failure with `400`/`501` and the registered problem types | `http-signature` §3.6 | Left to the caller: the crate is not an HTTP server. It exports the three problem type URIs (`PROBLEM_SIGNATURE_INVALID` and the two `PROBLEM_SIGNED_RESPONSE_*`); every `HttpSigError` on a request maps to `400` with the first, without telling the peer which check failed. |
-| The `WPT` HTTP authentication scheme and its `WWW-Authenticate` challenge | `wpt` §2, §2.1 | Not implemented. `wimsey-wpt` is the token, not its transport: it issues and verifies the proof, and placing it in `Authorization: WPT <proof>` — and answering a rejection with `401` and `WWW-Authenticate: WPT` — is the caller's. The `wpt` CLI subcommand prints the bare proof for the same reason. |
+| Sending the `401` and the `WWW-Authenticate: WPT` challenge on a rejected proof | `wpt` §2.1 | Left to the caller: `wimsey_wpt::scheme` formats the `Authorization: WPT <proof>` credentials, takes the proof back out of a request's one `Authorization` field (refusing a second field or another scheme), and names the challenge (`CHALLENGE`), but the crate is not an HTTP server, so putting the status and the field on the response is the HTTP stack's. The `wpt` CLI subcommand prints the bare proof. |
 
 ## Related specs
 

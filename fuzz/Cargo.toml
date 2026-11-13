@@ -51,6 +51,13 @@ doc = false
 bench = false
 
 [[bin]]
+name = "wpt_scheme"
+path = "fuzz_targets/wpt_scheme.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
 name = "httpsig_verify"
 path = "fuzz_targets/httpsig_verify.rs"
 test = false

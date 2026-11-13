@@ -79,12 +79,15 @@ That is not always wanted. Adding the section to the WPT draft drew a preference
   and `wth` claims and the conditional `tth` and `oth`, under `Ed25519`
   (or the deprecated `EdDSA`) or `ES256`. Verification recomputes `wth` from the WIT actually presented and
   takes the proof-of-possession key from that WIT, and requires the proof's
-  `alg` to be the one that WIT's `cnf` names. Single-use `jti` tracking is left
-  to the caller, as is the `WPT` HTTP authentication scheme that conveys the
-  proof — this is the token, not its transport.
+  `alg` to be the one that WIT's `cnf` names. The `WPT` HTTP authentication
+  scheme is implemented as field syntax: formatting and parsing
+  `Authorization: WPT <proof>`, refusing a second `Authorization` field or
+  another scheme, and the `WWW-Authenticate: WPT` challenge value; sending
+  the `401` is the HTTP stack's. Single-use `jti` tracking is left to the
+  caller.
 * License: Apache 2.0
 * Contact: [kanywst on GitHub](https://github.com/kanywst)
-* Last updated: 08-Sep-2026
+* Last updated: 13-Nov-2026
 ```
 
 ### `draft-ietf-wimse-mutual-tls`

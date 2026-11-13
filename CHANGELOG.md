@@ -10,6 +10,19 @@ silently.
 
 ## [Unreleased]
 
+### Added
+
+- `wimsey-wpt`: the `WPT` HTTP authentication scheme (`draft-ietf-wimse-wpt-02`
+  §2), as a `scheme` module. `to_credentials` formats the `Authorization`
+  field value (`WPT <proof>`); `from_credentials` takes the proof back out of
+  one, accepting exactly `WPT 1*SP token68` with the scheme name in any case
+  and refusing another scheme (`WrongScheme`) or anything that is not a single
+  `token68` (`MalformedCredentials`); `from_request` adds the draft's "exactly
+  one `Authorization` field" rule (`MissingCredentials`,
+  `MultipleAuthorizationFields`); `CHALLENGE` is the `WWW-Authenticate` value
+  for a `401`. The demo carries its proof through it, and `fuzz/` gains a
+  `wpt_scheme` target.
+
 ## [0.10.0] - 2026-11-08
 
 A breaking release. `draft-ietf-wimse-identifier` -04 refuses an identifier

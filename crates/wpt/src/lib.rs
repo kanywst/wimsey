@@ -17,10 +17,12 @@
 //! the `Authorization` header field precisely so a bearer token cannot be
 //! mistaken for the calling workload's credential.
 //!
-//! This crate is the token, not its transport. Draft -02 conveys a WPT with the
-//! `WPT` HTTP authentication scheme (`Authorization: WPT <proof>`) and answers a
-//! rejection with `401` and a `WWW-Authenticate: WPT` challenge; wiring that
-//! into a server is the caller's job.
+//! Draft -02 conveys a WPT with the `WPT` HTTP authentication scheme
+//! (`Authorization: WPT <proof>`) and answers a rejection with `401` and a
+//! `WWW-Authenticate: WPT` challenge. The [`scheme`] module is that field
+//! syntax: it formats the credentials, extracts the proof from the one
+//! `Authorization` field a request may carry, and names the challenge. Reading
+//! the fields out of a request and sending the `401` are the HTTP stack's job.
 //!
 //! The proof is signed with whatever algorithm the bound WIT's `cnf` JWK names
 //! — `Ed25519`, `ES256` or the deprecated `EdDSA` — and verification requires
@@ -45,13 +47,20 @@
 //!
 //! let proof = issue(&claims, &pop_key).unwrap();
 //!
+//! // On the wire: `Authorization: WPT <proof>`.
+//! let authorization = wimsey_wpt::scheme::to_credentials(&proof);
+//!
+//! // The recipient takes the proof back out of the request's one
+//! // `Authorization` field, then verifies it against the WIT it carries.
+//! let received = wimsey_wpt::scheme::from_request([authorization.as_str()]).unwrap();
 //! let validation = Validation::new(1_700_000_000, "https://workload.example.com/path", wit);
-//! let verified = verify(&proof, &pop_key.verifying_key(), &validation).unwrap();
+//! let verified = verify(received, &pop_key.verifying_key(), &validation).unwrap();
 //! assert_eq!(verified.claims.aud, "https://workload.example.com/path");
 //! ```
 
 mod claims;
 mod error;
+pub mod scheme;
 mod token;
 
 pub use claims::WptClaims;
